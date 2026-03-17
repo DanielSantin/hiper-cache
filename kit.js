@@ -103,52 +103,45 @@ function inserirViaCache($input, produto) {
 }
 
 // ── SETAR QUANTIDADE ───────────────────────────────────────────────────
-function setarQuantidade($inputQtd, valor) {
+function setarQuantidade($inputQtd, valor, valorBruto = null) {
   const nativeInput = $inputQtd[0];
   if (!nativeInput) return;
 
-  // 1. Setter nativo (necessário para frameworks que usam Object.defineProperty)
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-  setter ? setter.call(nativeInput, valor) : (nativeInput.value = valor);
+  const valorAtual = nativeInput.value;
+  const campoAceitaDecimal = valorAtual.includes(',') || valorAtual.includes('.');
 
-  // 2. Eventos nativos com bubbles
+  let valorStr;
+  if (campoAceitaDecimal) {
+    valorStr = valor.toFixed(2).replace('.', ',');
+  } else {
+    valorStr = String(Math.ceil(valor));
+  }
+
+  // Ancora o hint no próprio input via data attribute, sem depender de name/id
+  let $hint = $inputQtd.data('$hint');
+  const bruto = (valorBruto ?? valor).toFixed(2).replace('.', ',');
+
+  if (!$hint || !$.contains(document, $hint[0])) {
+    $hint = $('<span style="display:block;font-size:10px;color:#999;text-align:right;margin-top:1px;pointer-events:none"></span>');
+    $inputQtd.after($hint);
+    $inputQtd.data('$hint', $hint);
+  }
+  $hint.text(`≈ ${bruto}`);
+
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  setter ? setter.call(nativeInput, valorStr) : (nativeInput.value = valorStr);
+
   nativeInput.dispatchEvent(new Event('input',  { bubbles: true }));
   nativeInput.dispatchEvent(new Event('change', { bubbles: true }));
   nativeInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-
-  // 3. jQuery trigger (para listeners jQuery diretos)
   $inputQtd.trigger('input').trigger('change').trigger('keyup');
-
-  // 4. Angular: notifica o $scope se existir
-  try {
-    const scope = angular.element(nativeInput).scope();
-    if (scope) {
-      scope.$apply(function() {
-        // tenta setar via ng-model diretamente
-        const ngModel = $inputQtd.controller
-          ? $inputQtd.controller('ngModel')
-          : angular.element(nativeInput).data('$ngModelController');
-        
-        if (ngModel) {
-          ngModel.$setViewValue(String(valor));
-          ngModel.$render();
-        }
-      });
-    }
-  } catch(e) {
-    // Angular não disponível ou erro de scope, ignora
-  }
-
-  // 5. Blur/focus para forçar validação de campos que só atualizam ao sair
   nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
   nativeInput.dispatchEvent(new Event('focus', { bubbles: true }));
 }
 
 // ── RECALCULAR TUDO ────────────────────────────────────────────────────
-// Agrupa por código, soma quantidades de todos os kits ativos, aplica nas linhas
 function recalcularTudo() {
-  // Monta mapa codigo → quantidade total
-  const totais = new Map(); // codigo → { qtd, linhas: [$linha, ...] }
+  const totais = new Map();
 
   kitsAtivos.forEach((estado, nomeKit) => {
     const A = num(estado.A);
@@ -156,36 +149,36 @@ function recalcularTudo() {
     const formulas = FORMULAS_GESSO[nomeKit] ?? {};
 
     estado.linhas.forEach(({ codigo, $linha }) => {
-      if (!$.contains(document, $linha[0])) return; // linha deletada → ignora
+      if (!$.contains(document, $linha[0])) return;
 
       const fn = formulas[codigo];
       const qtd = fn ? fn(A, P) : 0;
 
-      if (!totais.has(codigo)) {
-        totais.set(codigo, { qtd: 0, linhas: [] });
-      }
+      if (!totais.has(codigo)) totais.set(codigo, { qtd: 0, linhas: [] });
       const entry = totais.get(codigo);
       entry.qtd += qtd;
       entry.linhas.push($linha);
     });
   });
 
-  // Aplica nos inputs
   totais.forEach(({ qtd, linhas }) => {
-    // Se o mesmo código aparece em múltiplos kits, aplica a soma na primeira
-    // linha viva e zera as repetidas (ou divide — aqui somamos na primeira)
     const linhasVivas = linhas.filter(l => $.contains(document, l[0]));
     if (!linhasVivas.length) return;
 
-    // Primeira linha recebe a soma total
-    const $qtd = linhasVivas[0].find(".quantidade-produto input, input.quantidade-unitaria, input[ng-model*='quantidade']").first();
-    if ($qtd.length) setarQuantidade($qtd, Math.ceil(qtd));
+    const valorFinal = Math.round(qtd * 100) / 100;
 
-    // Linhas extras do mesmo código (de kits diferentes) recebem 0 ou podem ser ignoradas
-    // — como itens repetidos são inseridos juntos, setar a mesma qtd nas outras
+    // Primeira linha recebe o total — passa qtd bruta pro hint
+    const $qtd = linhasVivas[0].find(
+      ".quantidade-produto input, input.quantidade-unitaria, input[ng-model*='quantidade']"
+    ).first();
+    if ($qtd.length) setarQuantidade($qtd, valorFinal, qtd);
+
+    // Linhas extras recebem 0, sem hint
     for (let i = 1; i < linhasVivas.length; i++) {
-      const $qtdExtra = linhasVivas[i].find(".quantidade-produto input, input.quantidade-unitaria, input[ng-model*='quantidade']").first();
-      if ($qtdExtra.length) setarQuantidade($qtdExtra, 0);
+      const $qtdExtra = linhasVivas[i].find(
+        ".quantidade-produto input, input.quantidade-unitaria, input[ng-model*='quantidade']"
+      ).first();
+      if ($qtdExtra.length) setarQuantidade($qtdExtra, 0, 0);
     }
   });
 }
@@ -217,7 +210,6 @@ function removerKit(nomeKit) {
 
 // ── APLICAR KIT ────────────────────────────────────────────────────────
 async function aplicarKitGesso(nomeKit) {
-  // Toggle: se já está ativo, remove
   if (kitsAtivos.has(nomeKit)) {
     removerKit(nomeKit);
     return;
@@ -233,27 +225,48 @@ async function aplicarKitGesso(nomeKit) {
   const produtos = codigos.map(c => buscarNaMaster(c));
   if (produtos.some(p => !p)) { console.error('[HiperCache] ❌ Produtos faltando.'); return; }
 
-  for (let i = 0; i < codigos.length; i++) $(".btn-adicionar-mais-produtos").click();
+  // Monta mapa de código → $linha já existente nos kits ativos
+  const linhasExistentes = new Map();
+  kitsAtivos.forEach((estado) => {
+    estado.linhas.forEach(({ codigo, $linha }) => {
+      if ($.contains(document, $linha[0])) linhasExistentes.set(codigo, $linha);
+    });
+  });
 
-  const inicio = Date.now();
-  while (Date.now() - inicio < 3000) {
-    if ($(".linha-produto:not(.default)").length >= codigos.length) break;
-    await delay(50);
+  // Descobre quais códigos precisam de linha nova
+  const codigosNovos = codigos.filter(c => !linhasExistentes.has(c));
+
+  // Clica só o necessário
+  for (let i = 0; i < codigosNovos.length; i++) $(".btn-adicionar-mais-produtos").click();
+
+  if (codigosNovos.length > 0) {
+    const inicio = Date.now();
+    while (Date.now() - inicio < 3000) {
+      if ($(".linha-produto:not(.default)").length >= codigosNovos.length) break;
+      await delay(50);
+    }
   }
 
   const todasLinhas = $(".linha-produto:not(.default)").toArray();
-  const linhasAlvo  = todasLinhas.slice(-codigos.length);
+  const linhasNovas = todasLinhas.slice(-codigosNovos.length);
 
-  await Promise.all(linhasAlvo.map((linha, i) => {
+  // Insere produto só nas linhas novas
+  await Promise.all(linhasNovas.map((linha, i) => {
     const $input = $(linha).find("input.produto");
-    if ($input.length) inserirViaCache($input, produtos[i]);
+    if ($input.length) inserirViaCache($input, produtos[codigos.indexOf(codigosNovos[i])]);
   }));
 
-  // Salva estado
-  kitsAtivos.set(nomeKit, {
-    A: 0, P: 0,
-    linhas: linhasAlvo.map((linha, i) => ({ codigo: codigos[i], $linha: $(linha) }))
+  // Monta o estado do kit: reaproveitando linhas existentes + novas
+  let novasIdx = 0;
+  const linhasDoKit = codigos.map((codigo, i) => {
+    if (linhasExistentes.has(codigo)) {
+      return { codigo, $linha: linhasExistentes.get(codigo) };
+    } else {
+      return { codigo, $linha: $(linhasNovas[novasIdx++]) };
+    }
   });
+
+  kitsAtivos.set(nomeKit, { A: 0, P: 0, linhas: linhasDoKit });
 
   atualizarBotaoKit(nomeKit, true);
   console.log(`[HiperCache] ✅ Kit "${nomeKit}" ativo`);
