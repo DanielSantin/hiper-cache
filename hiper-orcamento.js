@@ -952,13 +952,15 @@ function injetarBotaoOrcamento() {
   btn.id        = 'hiper-btn-orcamento';
   btn.type      = 'button';
   btn.className = 'btn btn-lg no-margin-bottom btn-block-xs';
-  btn.style.cssText = 'background:#1a7a1a;color:#fff;border:none;margin-top:4px;';
-  btn.innerHTML = '📄 Gerar Orçamento';
+  btn.style.cssText = 'background:rgba(207, 124, 255, 0.3);color:rgb(200, 200, 200);border:1px solid #ccc;margin-top:4px;font-size:12px;opacity:0.75;';
+  btn.innerHTML = '📄 Orçamento';
+  btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; btn.style.borderColor = '#1a7a1a'; btn.style.color = '#1a7a1a'; });
+  btn.addEventListener('mouseleave', () => { btn.style.opacity = '0.75'; btn.style.borderColor = '#ccc'; btn.style.color = '#555'; });
   btn.addEventListener('click', abrirOrcamento);
 
-  // Insere antes do primeiro botão existente para ficar no topo da lista
-  const primeiro = barra.querySelector('button');
-  if (primeiro) barra.insertBefore(btn, primeiro);
+  // Insere após o botão "Gerar Pedido"
+  const ultimo = barra.querySelector('button.btn-gerar-pedido');
+  if (ultimo) ultimo.after(btn);
   else barra.appendChild(btn);
 
   console.info('[HiperCache] Botão de orçamento injetado.');
