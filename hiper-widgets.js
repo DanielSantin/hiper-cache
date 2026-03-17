@@ -44,11 +44,24 @@ function injetarWidget() {
 
   async function zerarDesconto(di) {
     const atual = parseMoeda(di.value);
-    if (isNaN(atual) || atual === 0) return; // já está zerado, não precisa esperar
+    if (isNaN(atual) || atual === 0) return;
 
     di.value = '0,00';
-    ['input','change','blur'].forEach(e => dispararEvento(di, e));
-    await new Promise(r => setTimeout(r, 300));
+    ['input', 'change', 'blur'].forEach(e => dispararEvento(di, e));
+
+    // Aguarda o sistema processar de fato o zero
+    await new Promise(resolve => {
+      const MAX_TENTATIVAS = 20; // ~1 segundo no total
+      let tentativas = 0;
+      const checar = setInterval(() => {
+        const valorAtual = parseMoeda(getDescontoInput()?.value);
+        tentativas++;
+        if (valorAtual === 0 || isNaN(valorAtual) || tentativas >= MAX_TENTATIVAS) {
+          clearInterval(checar);
+          resolve();
+        }
+      }, 50);
+    });
   }
 
   async function aplicar() {
@@ -65,7 +78,7 @@ function injetarWidget() {
     if (vd > vt)               { msg.style.color='#c00'; msg.textContent='Valor maior que o total bruto.'; return; }
 
     const desc = vt - vd;
-    const ds   = desc.toFixed(2).replace('.', ',');
+    const ds   = desc.toFixed(6).replace('.', ',');
     di.value   = ds;
     ['input','change','blur'].forEach(e => dispararEvento(di, e));
 
@@ -76,23 +89,16 @@ function injetarWidget() {
   btn.addEventListener('click', aplicar);
   inp.addEventListener('keydown', e => { if (e.key==='Enter') aplicar(); });
 
-  // Checkbox desconto PIX 4,77%
-  const pixRow = document.createElement('label');
-  pixRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;cursor:pointer;color:#0d6b0d;font-weight:600;';
-  pixRow.innerHTML = '<input type="checkbox" id="hiper-chk-pix" style="width:15px;height:15px;cursor:pointer;"> 💸 Desconto PIX 4,77%';
-  w.appendChild(pixRow);
+  // Botão desconto PIX 4,77%
+  const pixBtn = document.createElement('button');
+  pixBtn.id = 'hiper-btn-pix';
+  pixBtn.textContent = '💸 Desconto PIX 4,77%';
+  pixBtn.style.cssText = 'margin-top:6px;padding:3px 10px;background:#0d6b0d;color:#fff;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;';
+  w.appendChild(pixBtn);
 
-  document.getElementById('hiper-chk-pix').addEventListener('change', async function() {
+  pixBtn.addEventListener('click', async function() {
     const di = getDescontoInput();
     if (!di) return;
-
-    if (!this.checked) {
-      di.value = '0,00';
-      ['input','change','blur'].forEach(e => dispararEvento(di, e));
-      const msgEl = document.getElementById('hiper-vf-msg');
-      if (msgEl) msgEl.textContent = '';
-      return;
-    }
 
     await zerarDesconto(di);
 
@@ -100,14 +106,11 @@ function injetarWidget() {
     if (isNaN(vt) || vt <= 0) return;
 
     const desc = vt * 0.0477;
-    di.value   = desc.toFixed(2).replace('.', ',');
+    di.value   = desc.toFixed(6).replace('.', ',');
     ['input','change','blur'].forEach(e => dispararEvento(di, e));
 
-    const msgEl = document.getElementById('hiper-vf-msg');
-    if (msgEl) {
-      msgEl.style.color = '#1a7a1a';
-      msgEl.textContent = `PIX: -R$ ${desc.toFixed(2).replace('.',',')} (4,77%)`;
-    }
+    msg.style.color = '#1a7a1a';
+    msg.textContent = `PIX: -R$ ${desc.toFixed(2).replace('.',',')} (4,77%)`;
   });
 
   console.info('[HiperCache] Widget "Valor Final" injetado.');
