@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Hiper Cache - Produtos",
+  "version": "1.2",
+  "description": "Cache local para o endpoint de produtos do Hiper, eliminando fetches repetidos.",
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://tagdrywall.hiper.com.br/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://tagdrywall.hiper.com.br/*"
+      ],
+      "js": [
+        "interceptor.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "hiper-cache.js",
+        "hiper-custos-padrao.js",
+        "hiper-widgets.js",
+        "hiper-orcamento.js",
+        "kit.js"
+      ],
+      "matches": [
+        "https://tagdrywall.hiper.com.br/*"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Hiper Cache"
+  }
+}
