@@ -64,35 +64,50 @@ async function aplicarKitGesso(nomeKit) {
   const codigos = KITS_GESSO[nomeKit];
   if (!codigos) { console.error(`[HiperCache] Kit inexistente: ${nomeKit}`); return; }
 
-  // Aguarda master (até 10s)
+  // Aguarda master
   let t = 0;
   while (!window.__hiperMaster?.length && t++ < 100) await delay(100);
   if (!window.__hiperMaster?.length) { console.error('[HiperCache] ❌ Master não disponível.'); return; }
 
+  // Resolve todos os produtos antes de tocar no DOM
+  const produtos = codigos.map(codigo => {
+    const p = buscarNaMaster(codigo);
+    if (!p) console.error(`[HiperCache] ❌ "${codigo}" não encontrado no master.`);
+    return p;
+  });
+
+  if (produtos.some(p => !p)) {
+    console.error('[HiperCache] ❌ Produtos faltando, kit abortado.');
+    return;
+  }
+
   console.log(`[HiperCache] ▶ Aplicando kit "${nomeKit}" (${codigos.length} produtos)`);
 
-  for (const codigo of codigos) {
+  // Clica N vezes seguidas sem esperar
+  for (let i = 0; i < codigos.length; i++) {
     $(".btn-adicionar-mais-produtos").click();
-    await delay(300);
-
-    const $linha = $(".linha-produto:not(.default)").last();
-    const $input = $linha.find("input.produto"); // ← Select2 v3
-
-    if (!$input.length) {
-      console.error(`[HiperCache] ❌ input.produto não encontrado para "${codigo}"`);
-      break;
-    }
-
-    const produto = buscarNaMaster(codigo);
-    if (!produto) {
-      console.error(`[HiperCache] ❌ "${codigo}" não encontrado no master.`);
-      $linha.find(".btn-excluir-linha").click();
-      break;
-    }
-
-    inserirViaCache($input, produto);
-    await delay(200);
   }
+
+  // Aguarda todas as linhas aparecerem no DOM
+  const inicio = Date.now();
+  while (Date.now() - inicio < 3000) {
+    const linhas = $(".linha-produto:not(.default)");
+    if (linhas.length >= codigos.length) break;
+    await delay(50);
+  }
+
+  // Pega as últimas N linhas e insere tudo em paralelo
+  const todasLinhas = $(".linha-produto:not(.default)").toArray();
+  const linhasAlvo  = todasLinhas.slice(-codigos.length);
+
+  await Promise.all(linhasAlvo.map((linha, i) => {
+    const $input = $(linha).find("input.produto");
+    if (!$input.length) {
+      console.error(`[HiperCache] ❌ input.produto não encontrado na linha ${i}`);
+      return;
+    }
+    inserirViaCache($input, produtos[i]);
+  }));
 
   console.log(`[HiperCache] ✅ Kit "${nomeKit}" finalizado`);
 }
