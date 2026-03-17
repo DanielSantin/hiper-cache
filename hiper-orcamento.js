@@ -312,8 +312,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
         <th style="width:50px">QUANT</th>
         <th style="width:32px">UND</th>
         <th>DESCRIÇÃO</th>
-        <th style="width:66px">VL UNIT.</th>
-        <th style="width:66px">VL TOTAL</th>
+        <th style="width:88px">VL UNIT.</th>
+        <th style="width:88px">VL TOTAL</th>
       </tr>
     </thead>
     <tbody id="tblBody">${linhasItens}${linhasVazias}</tbody>
