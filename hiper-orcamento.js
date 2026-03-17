@@ -185,7 +185,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .trow .tlabel{padding:4px 8px;font-size:9pt;display:flex;align-items:center}
 .trow .ttag{font-weight:bold;font-size:9.5pt;background:#e8e8e8;border-left:1px solid #000;
             display:flex;align-items:center;justify-content:center;padding:2px 4px;text-align:center}
-.trow .ttag.pix{background:#b8e4b8}
+.trow .ttag.pix{background:transparent}
+.trow .ttag.cartao { background: transparent; }
 .trow .ttag select{border:none;background:transparent;font-size:9pt;font-weight:bold;
                    font-family:Arial;cursor:pointer;text-align:center;width:100%;-webkit-appearance:auto}
 .trow .tval{border-left:1px solid #000;display:flex;align-items:center;justify-content:flex-end;padding:2px 8px;
@@ -330,7 +331,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   </div>
   <div class="trow">
     <div class="tlabel"></div>
-    <div class="ttag" style="background:#fff8e6;font-size:9pt;font-weight:bold">Desconto</div>
+    <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold">Desconto</div>
     <div class="tval">
       <span class="val-prefix">R$</span>
       <input class="val-inp" type="number" id="iDescC" value="0" min="0" step="0.01"
@@ -340,7 +341,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   </div>
   <div class="trow">
     <div class="tlabel" id="lblC">Valor Total – Parcelado em até ${parcelas}x no Cartão de Crédito</div>
-    <div class="ttag">
+    <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold">
       <select id="select-parcelas-input" style="...">
           ${[1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
               `<option value="${n}" ${n === parcelas ? 'selected' : ''}>
@@ -733,7 +734,7 @@ async function copiarImagem() {
 
   const page    = document.querySelector('.page');
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'background:#fff;display:inline-block;width:' + page.offsetWidth + 'px';
+  wrapper.style.cssText = 'background:transparent;display:inline-block;width:' + page.offsetWidth + 'px';
 
   const clone = page.cloneNode(true);
   clone.style.padding = '0';

@@ -51,13 +51,20 @@ window.addEventListener('message', (ev) => {
   }
 
   // Cache de produtos carregado do storage → popula memCache
+// No handler de HIPER_CACHE_ALL, só dispara preload se realmente precisar
   if (ev.data?.type === 'HIPER_CACHE_ALL') {
     const entries = ev.data.entries || {};
     for (const [k, v] of Object.entries(entries)) memCache[k] = v;
     if (memCache[MASTER_KEY]) {
       preloadDone = true;
-      window.__hiperMaster = memCache[MASTER_KEY].data; // ← ADD
-      console.info(`[HiperCache] ✅ Master restaurado: ${memCache[MASTER_KEY].data.length} produtos (do storage).`);
+      window.__hiperMaster = memCache[MASTER_KEY].data;
+      console.info(`[HiperCache] ✅ Master restaurado: ${window.__hiperMaster.length} produtos.`);
+
+      // Só revalida se estiver perto de expirar — não força fetch desnecessário
+      if (getMasterAge() > REVAL_MS) revalidateInBackground();
+    } else {
+      // Storage vazio — inicia preload agora
+      if (!preloading) preloadDataset();
     }
   }
 
@@ -136,6 +143,43 @@ function filtrarLocal(filtro) {
 }
 
 // ── Pré-carregamento inteligente ──────────────────────────────────────────────
+function reconfigurarSelect2sExistentes() {
+  if (typeof $ === 'undefined') return;
+  if (!window.__hiperMaster?.length) return;
+
+  let count = 0;
+  $('input.produto.select2-offscreen').each(function() {
+    const s2 = $(this).data('select2');
+    if (!s2) return;
+
+    s2.opts.query = function(query) {
+      const termos = normalizar(query.term || '').split(/\s+/).filter(Boolean);
+      const results = termos.length === 0
+        ? window.__hiperMaster
+        : window.__hiperMaster.filter(p => {
+            const nome = normalizar(p.Nome || p.text || '');
+            return termos.every(t => nome.includes(t));
+          });
+      query.callback({ results: results });
+    };
+
+    s2.opts.quietMillis = 0;
+    delete s2.opts.ajax;
+    count++;
+  });
+
+  console.info(`[HiperCache] ✅ ${count} select(s) reconfigurados.`);
+}
+
+function iniciarObserverSelect2() {
+  new MutationObserver(() => {
+    if (!window.__hiperMaster?.length) return;
+    if (!location.hash.includes('pedido-venda')) return;
+    reconfigurarSelect2sExistentes();
+  }).observe(document.body || document.documentElement, { childList: true, subtree: true });
+}
+
+iniciarObserverSelect2();
 
 async function preloadDataset() {
   if (preloading) return;
@@ -166,6 +210,8 @@ async function preloadDataset() {
   dataset.sort((a, b) => (a.Nome || '').localeCompare(b.Nome || '', 'pt-BR'));
   setCached(MASTER_KEY, dataset);
   window.__hiperMaster = dataset; // ← ADD
+
+  reconfigurarSelect2sExistentes();
 
   preloadDone = true;
   preloading  = false;
