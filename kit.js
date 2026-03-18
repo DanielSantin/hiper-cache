@@ -446,11 +446,14 @@ function injetarPainelKits() {
     <div id="hiper-linhas-kits">${linhasHTML}</div>
   `;
 
-  const anchor =
-    document.getElementById("hiper-btn-orcamento")?.parentElement ||
-    document.querySelector(".barra-botoes-pedido");
+// No kit.js, altere a função de injeção para:
+    var anchor = document.getElementById('hiper-btn-orcamento')?.parentElement || 
+                 document.querySelector('.aba-esquerda .parte-4 > div');
 
-  if (anchor) anchor.appendChild(container);
+    if (!anchor) return; // Sai silenciosamente se ainda não houver onde injetar
+
+  // Adiciona ao DOM ANTES de buscar elementos internos
+  anchor.appendChild(container);
 
   const linhasKits = document.getElementById("hiper-linhas-kits");
   if (!linhasKits) {
