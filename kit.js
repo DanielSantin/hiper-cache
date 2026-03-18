@@ -320,6 +320,16 @@ async function aplicarKitGesso(nomeKit) {
   const codigos = KITS_GESSO[nomeKit];
   if (!codigos) return;
 
+  $(".linha-produto:not(.default)").each(function() {
+  const $linha = $(this);
+  const textoChosen = $linha.find(".select2-chosen").text().trim();
+  if (textoChosen === "Nome, código de barras, código do produto ou referência interna") {
+      $linha.find(".btn-remover-linha, .btn-excluir-linha, [ng-click*='remover'], [ng-click*='excluir']")
+          .first()
+          .click();
+  }
+  });
+
   let t = 0;
   while (!window.__hiperMaster?.length && t++ < 100) await delay(100);
   if (!window.__hiperMaster?.length) { console.error('[HiperCache] ❌ Master não disponível.'); return; }
@@ -351,10 +361,13 @@ async function aplicarKitGesso(nomeKit) {
   const todasLinhas = $(".linha-produto:not(.default)").toArray();
   const linhasNovas = todasLinhas.slice(-codigosNovos.length);
 
-  await Promise.all(linhasNovas.map((linha, i) => {
-    const $input = $(linha).find("input.produto");
-    if ($input.length) inserirViaCache($input, produtos[codigos.indexOf(codigosNovos[i])]);
-  }));
+    for (let i = 0; i < linhasNovas.length; i++) {
+    const $input = $(linhasNovas[i]).find("input.produto");
+        if ($input.length) {
+            inserirViaCache($input, produtos[codigos.indexOf(codigosNovos[i])]);
+            await delay(150); // dá tempo pro sistema processar cada produto
+        }
+    }
 
   let novasIdx = 0;
   const linhasDoKit = codigos.map((codigo) => {
