@@ -6,15 +6,19 @@
 // Quando a quantidade bruta ultrapassa `limite`, troca para o próximo.
 // `tamanho` é o fator de divisão (1 = unitário, 1000 = caixa c/ 1000).
 const GRUPOS_VARIACAO = {
-  parafuso: [
-    { codigo: "3021", tamanho: 1,    limite: 700      },
-    { codigo: "3032", tamanho: 1000, limite: Infinity },
-  ],
-  // Exemplo futuro:
-  // massa: [
-  //   { codigo: "XXXX", tamanho: 10, limite: 30       },
-  //   { codigo: "YYYY", tamanho: 25, limite: Infinity },
-  // ],
+    parafuso: [
+        { codigo: "3021", tamanho: 1,    limite: 700      },
+        { codigo: "3032", tamanho: 1000, limite: Infinity },
+    ],
+    massa: [
+        { codigo: "3089", tamanho: 6,  limite: 6        },
+        { codigo: "3090", tamanho: 14, limite: 14        },
+        { codigo: "3113", tamanho: 25, limite: Infinity  },
+    ],
+    fita: [
+        { codigo: "3132", tamanho: 45, limite: 45      }, // até 45m bruto → 1 rolo de 45m
+        { codigo: "3014", tamanho: 90, limite: Infinity }, // acima de 45m bruto → rolos de 90m
+    ],
 };
 
 // Índice reverso: código → nome do grupo (ex: "3021" → "parafuso")
@@ -29,10 +33,10 @@ for (const [nomeGrupo, niveis] of Object.entries(GRUPOS_VARIACAO)) {
 // Cada kit lista apenas o código BASE do grupo (o menor, ex: "3021").
 // A troca automática é feita pelo GRUPOS_VARIACAO em tempo de cálculo.
 const KITS_GESSO = {
-  aramado:     ["3076","3113","3019","3023","3014","3132","3035","3037","3010","3006","3021","3058","3020"],
-  estruturado: ["3073","3113","3018","3017","3029","3022","3014","3132","3021","3006","3010","3058","3020"],
-  paredes:     ["3073","3113","3008","3007","3021","3058","3020","3014","3132"],
-  cortineiro:  ["3073","3113","3021","3014","3132","3009"],
+  aramado:     ["3076","3089","3019","3023","3132","3035","3037","3010","3006","3021","3058","3020"],
+  estruturado: ["3073","3089","3018","3017","3029","3022","3132","3021","3006","3010","3058","3020"],
+  paredes:     ["3073","3089","3008","3007","3021","3058","3020","3132"],
+  cortineiro:  ["3073","3089","3021","3132","3009"],
 };
 
 // ── 3. FÓRMULAS — sempre calculam a quantidade BRUTA (unidades) ────────
@@ -41,11 +45,10 @@ const KITS_GESSO = {
 const FORMULAS_GESSO = {
   aramado: {
     "3076": (A, P) => A / 1.2,
-    "3113": (A, P) => A * 0.45 / 25,
+    "3089": (A, P) => A * 0.45,
     "3019": (A, P) => A / 1.2,
     "3023": (A, P) => A / 20,
-    "3014": (A, P) => A * 2.6 / 90,
-    "3132": (A, P) => A * 2.6 / 45,
+    "3132": (A, P) => A * 2.6,
     "3035": (A, P) => A * 0.03,
     "3037": (A, P) => A / 30,
     "3010": (A, P) => P / 3,
@@ -56,13 +59,12 @@ const FORMULAS_GESSO = {
   },
   estruturado: {
     "3073": (A, P) => A / 2.88,
-    "3113": (A, P) => A * 0.45 / 25,
+    "3089": (A, P) => A * 0.45,
     "3018": (A, P) => A * 1.68 / 3,
     "3017": (A, P) => A * 1.4,
     "3029": (A, P) => A * 0.3,
     "3022": (A, P) => A * 0.06,
-    "3014": (A, P) => A * 1.5 / 90,
-    "3132": (A, P) => A * 1.5 / 45,
+    "3132": (A, P) => A * 1.5,
     "3021": (A, P) => (A / 2.88) * 35 + (P / 3) * 11,   // bruto
     "3006": (A, P) => P / 3,
     "3010": (A, P) => P / 3,
@@ -71,21 +73,19 @@ const FORMULAS_GESSO = {
   },
   paredes: {
     "3073": (A, P) => (A / 2.88) * 2,
-    "3113": (A, P) => A * 0.9 / 25,
+    "3089": (A, P) => A * 0.9,
     "3008": (A, P) => A * 2.11 / 3,
     "3007": (A, P) => A * 0.7 / 3,
     "3021": (A, P) => (A / 2.88 * 2) * 35,              // bruto
     "3058": (A, P) => (A * 0.7 / 3) * 11,
     "3020": (A, P) => (A * 0.7 / 3) * 11,
-    "3014": (A, P) => A * 3 / 90,
-    "3132": (A, P) => A * 3 / 45,
+    "3132": (A, P) => A * 3,
   },
   cortineiro: {
     "3073": (ML, _, cant) => ML * 0.4 / 2.88,
-    "3113": (ML, _, cant) => ML * 0.45 / 25,
+    "3089": (ML, _, cant) => ML * 0.45,
     "3021": (ML, _, cant) => ML * 29,                    // bruto
-    "3014": (ML, _, cant) => ML * 1.5 / 90,
-    "3132": (ML, _, cant) => ML * 1.5 / 45,
+    "3132": (ML, _, cant) => ML * 1.5,
     "3009": (ML, _, cant) => ML * cant / 3,
   },
 };
