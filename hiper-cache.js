@@ -27,31 +27,25 @@ window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
 window.postMessage({ type: 'HIPER_CUSTO_LOAD_ALL' }, '*');
 
 window.addEventListener('message', (ev) => {
-  // Aceita mensagens da própria janela OU da janela de orçamento (blob:) via opener
   const fromSelf   = ev.source === window;
-  const fromOpened = ev.data?.type === 'HIPER_CUSTO_SAVE'; // blob envia para window.opener
+  const fromOpened = ev.data?.type === 'HIPER_CUSTO_SAVE';
 
   if (!fromSelf && !fromOpened) return;
 
-  // Custos carregados do storage → disponibiliza globalmente
   if (ev.data?.type === 'HIPER_CUSTO_LOADED') {
     window.__hiperCustos = ev.data.custos;
     console.info('[HiperCache] ✅ Custos carregados do storage:', Object.keys(ev.data.custos).length, 'itens');
   }
 
-  // HIPER_CUSTO_SYNC: confirmação do interceptor.js após salvar no storage
   if (ev.data?.type === 'HIPER_CUSTO_SYNC') {
     window.__hiperCustos = window.__hiperCustos || {};
     window.__hiperCustos[ev.data.id] = ev.data.val;
   }
 
-  // HIPER_VENDEDOR_LOAD: página de orçamento pede dados do vendedor salvo
   if (ev.data?.type === 'HIPER_VENDEDOR_LOAD') {
-    window.postMessage({ type: 'HIPER_VENDEDOR_LOAD' }, '*'); // relay to interceptor
+    window.postMessage({ type: 'HIPER_VENDEDOR_LOAD' }, '*');
   }
 
-  // Cache de produtos carregado do storage → popula memCache
-// No handler de HIPER_CACHE_ALL, só dispara preload se realmente precisar
   if (ev.data?.type === 'HIPER_CACHE_ALL') {
     const entries = ev.data.entries || {};
     for (const [k, v] of Object.entries(entries)) memCache[k] = v;
@@ -59,11 +53,8 @@ window.addEventListener('message', (ev) => {
       preloadDone = true;
       window.__hiperMaster = memCache[MASTER_KEY].data;
       console.info(`[HiperCache] ✅ Master restaurado: ${window.__hiperMaster.length} produtos.`);
-
-      // Só revalida se estiver perto de expirar — não força fetch desnecessário
       if (getMasterAge() > REVAL_MS) revalidateInBackground();
     } else {
-      // Storage vazio — inicia preload agora
       if (!preloading) preloadDataset();
     }
   }
@@ -76,8 +67,6 @@ window.addEventListener('message', (ev) => {
 });
 
 // ── BroadcastChannel: atualiza __hiperCustos em memória ─────────────────────
-// O interceptor.js (content script) já escuta este canal e salva no storage.
-// Aqui apenas mantemos __hiperCustos sincronizado para uso imediato na página.
 try {
   const bc = new BroadcastChannel('hiper_custo_channel');
   bc.onmessage = (ev) => {
@@ -87,7 +76,6 @@ try {
       window.__hiperCustos[msg.id] = msg.val;
     }
     if (msg?.type === 'HIPER_VENDEDOR_SAVE') {
-      // Repassa ao interceptor.js para salvar no storage
       window.postMessage({ ...msg, _fromBC: true }, '*');
     }
   };
@@ -132,17 +120,14 @@ function filtrarLocal(filtro) {
   const master = getCachedMaster();
   if (!master) return null;
   if (!filtro.trim()) return master;
-
-  // Divide em palavras e exige que TODAS estejam no nome
   const termos = normalizar(filtro).split(/\s+/).filter(Boolean);
-
   return master.filter(item => {
     const nome = normalizar(item.Nome || item.text || '');
     return termos.every(t => nome.includes(t));
   });
 }
 
-// ── Pré-carregamento inteligente ──────────────────────────────────────────────
+// ── Pré-carregamento ──────────────────────────────────────────────────────────
 function reconfigurarSelect2sExistentes() {
   if (typeof $ === 'undefined') return;
   if (!window.__hiperMaster?.length) return;
@@ -209,7 +194,7 @@ async function preloadDataset() {
 
   dataset.sort((a, b) => (a.Nome || '').localeCompare(b.Nome || '', 'pt-BR'));
   setCached(MASTER_KEY, dataset);
-  window.__hiperMaster = dataset; // ← ADD
+  window.__hiperMaster = dataset;
 
   reconfigurarSelect2sExistentes();
 
@@ -338,79 +323,53 @@ function HiperXHR() {
   return proxy;
 }
 
-(function () {
+// ── Intercepta respostas de get-dados-produto-pedido ─────────────────────────
+// ATENÇÃO: NÃO toca no localStorage diretamente — apenas mantém __hiperMaster
+// em memória para enriquecer o dataset sem corromper o formato do MASTER_KEY.
+(function() {
+  function processarResposta(json) {
+    // A resposta de get-dados-produto-pedido tem formato diferente do master.
+    // Apenas garantimos que o produto esteja no __hiperMaster em memória,
+    // sem sobrescrever o cache persistido (que usa formato { data, ts }).
+    if (!json?.dados?.length) return;
+    const produto = json.dados[0];
+    if (!produto) return;
 
-const MASTER_KEY = "hc:master";
+    window.__hiperMaster = window.__hiperMaster || [];
+    const uid = produto.idProduto ?? produto.id ?? produto.Codigo;
+    if (uid == null) return;
 
-function salvarProdutoNoCache(produtoId, dados) {
-
-  const MASTER_KEY = "hc:master";
-  const cache = JSON.parse(localStorage.getItem(MASTER_KEY) || "{}");
-
-  const codigo = window.__ultimoCodigoBuscado;
-
-  if (!codigo) return;
-
-  cache["codigo:" + codigo] = {
-    timestamp: Date.now(),
-    results: [{
-      id: produtoId,
-      text: codigo,
-      codigo: codigo
-    }]
-  };
-
-  localStorage.setItem(MASTER_KEY, JSON.stringify(cache));
-
-  console.log("[HiperCache] 💾 Produto cacheado:", codigo);
-}
-
-function processarResposta(json) {
-  if (!json?.dados?.length) return;
-
-  const produto = json.dados[0];
-  salvarProdutoNoCache(produto.id, produto);
-}
-
-//
-// INTERCEPTA FETCH
-//
-const originalFetch = window.fetch;
-
-window.fetch = async function (...args) {
-
-  const response = await originalFetch.apply(this, args);
-
-  if (typeof args[0] === "string" && args[0].includes("get-dados-produto-pedido")) {
-
-    response.clone().json().then(processarResposta).catch(() => {});
+    const jaExiste = window.__hiperMaster.some(p =>
+      (p.idProduto ?? p.id ?? p.Codigo) === uid
+    );
+    if (!jaExiste) {
+      window.__hiperMaster.push(produto);
+      console.debug('[HiperCache] Produto adicionado ao master em memória:', uid);
+    }
   }
 
-  return response;
-};
-
-//
-// INTERCEPTA XHR
-//
-const originalOpen = XMLHttpRequest.prototype.open;
-
-XMLHttpRequest.prototype.open = function (method, url) {
-
-  this.addEventListener("load", function () {
-
-    if (url.includes("get-dados-produto-pedido")) {
-
-      try {
-        const json = JSON.parse(this.responseText);
-        processarResposta(json);
-      } catch (e) {}
+  // Intercepta fetch para get-dados-produto-pedido
+  // Nota: _fetch já está definido acima (o fetch original antes da nossa interceptação)
+  const fetchAntes = window.fetch;
+  window.fetch = async function(...args) {
+    const response = await fetchAntes.apply(this, args);
+    const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url ?? '');
+    if (url.includes('get-dados-produto-pedido')) {
+      response.clone().json().then(processarResposta).catch(() => {});
     }
+    return response;
+  };
 
-  });
-
-  return originalOpen.apply(this, arguments);
-};
-
+  // Intercepta XHR para get-dados-produto-pedido
+  const _open = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url) {
+    this.addEventListener('load', function() {
+      if ((url || '').includes('get-dados-produto-pedido')) {
+        try { processarResposta(JSON.parse(this.responseText)); } catch(e) {}
+      }
+    });
+    return _open.apply(this, arguments);
+  };
 })();
 
 HiperXHR.prototype = _XHR.prototype;
