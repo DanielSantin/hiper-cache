@@ -33,7 +33,9 @@
         "hiper-custos-padrao.js",
         "hiper-widgets.js",
         "hiper-orcamento.js",
-        "kit.js"
+        "kit.js",
+        "hiper-orcamento-resumido.js",
+        "hiper-logo.js"
       ],
       "matches": [
         "https://tagdrywall.hiper.com.br/*"

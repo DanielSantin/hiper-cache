@@ -508,3 +508,5 @@ if (document.readyState === "loading") {
 
 window.aplicarKitGesso = aplicarKitGesso;
 window.recalcularTudo  = recalcularTudo;
+window.kitsAtivos = kitsAtivos;
+window.FORMULAS_GESSO = FORMULAS_GESSO;

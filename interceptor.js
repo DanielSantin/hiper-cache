@@ -9,8 +9,7 @@ async function safeStorage(fn) {
 }
 
 // ── Carrega os módulos da página em sequência ─────────────────────────────────
-const MODULES = ['hiper-cache.js', 'hiper-custos-padrao.js', 'hiper-widgets.js', 'hiper-orcamento.js', 'kit.js'];
-
+const MODULES = ['hiper-logo.js','hiper-cache.js', 'hiper-custos-padrao.js', 'hiper-widgets.js', 'hiper-orcamento.js', 'kit.js', 'hiper-orcamento-resumido.js'];
 function loadNextModule(modules, index) {
   if (index >= modules.length) return;
   const s = document.createElement('script');

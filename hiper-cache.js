@@ -232,12 +232,40 @@ function interceptUrl(url, onHit, onMiss) {
   return true;
 }
 
+// ── Enriquece __hiperMaster com produto individual (get-dados-produto-pedido) ─
+// Não toca no cache persistido — apenas garante que o produto esteja em memória.
+function processarRespostaProduto(json) {
+  if (!json?.dados?.length) return;
+  const produto = json.dados[0];
+  if (!produto) return;
+  window.__hiperMaster = window.__hiperMaster || [];
+  const uid = produto.idProduto ?? produto.id ?? produto.Codigo;
+  if (uid == null) return;
+  const jaExiste = window.__hiperMaster.some(p =>
+    (p.idProduto ?? p.id ?? p.Codigo) === uid
+  );
+  if (!jaExiste) {
+    window.__hiperMaster.push(produto);
+    console.debug('[HiperCache] Produto adicionado ao master em memória:', uid);
+  }
+}
+
 // ── Interceptação do fetch ────────────────────────────────────────────────────
+// _fetch = fetch original. Um único wrapper cobre GetSelect2ParaPedido
+// E get-dados-produto-pedido — sem segundo wrapper, sem loop.
 
 const _fetch = window.fetch;
 window.fetch = async function (input, init) {
   const url = (typeof input === 'string') ? input : (input?.url ?? '');
 
+  // Enriquecimento de produto individual — usa _fetch diretamente
+  if (url.includes('get-dados-produto-pedido')) {
+    const response = await _fetch.apply(window, [input, init]);
+    response.clone().json().then(processarRespostaProduto).catch(() => {});
+    return response;
+  }
+
+  // Cache de lista (GetSelect2ParaPedido)
   return new Promise((resolve, reject) => {
     let handled = false;
 
@@ -252,7 +280,7 @@ window.fetch = async function (input, init) {
       (saveKey) => {
         handled = true;
         _fetch.apply(window, [input, init])
-          .then(r => { r.clone().json().then(j => setCached(saveKey, j)).catch(()=>{}); resolve(r); })
+          .then(r => { r.clone().json().then(j => setCached(saveKey, j)).catch(() => {}); resolve(r); })
           .catch(reject);
       }
     );
@@ -285,6 +313,17 @@ function HiperXHR() {
   }
 
   function sendHandler(body) {
+    // Enriquecimento de produto individual via XHR
+    if (_url.includes('get-dados-produto-pedido')) {
+      real.addEventListener('load', function() {
+        if (real.status === 200) {
+          try { processarRespostaProduto(JSON.parse(real.responseText)); } catch(e) {}
+        }
+      });
+      real.send(body);
+      return;
+    }
+
     let handled = false;
 
     interceptUrl(_url,
@@ -322,55 +361,6 @@ function HiperXHR() {
 
   return proxy;
 }
-
-// ── Intercepta respostas de get-dados-produto-pedido ─────────────────────────
-// ATENÇÃO: NÃO toca no localStorage diretamente — apenas mantém __hiperMaster
-// em memória para enriquecer o dataset sem corromper o formato do MASTER_KEY.
-(function() {
-  function processarResposta(json) {
-    // A resposta de get-dados-produto-pedido tem formato diferente do master.
-    // Apenas garantimos que o produto esteja no __hiperMaster em memória,
-    // sem sobrescrever o cache persistido (que usa formato { data, ts }).
-    if (!json?.dados?.length) return;
-    const produto = json.dados[0];
-    if (!produto) return;
-
-    window.__hiperMaster = window.__hiperMaster || [];
-    const uid = produto.idProduto ?? produto.id ?? produto.Codigo;
-    if (uid == null) return;
-
-    const jaExiste = window.__hiperMaster.some(p =>
-      (p.idProduto ?? p.id ?? p.Codigo) === uid
-    );
-    if (!jaExiste) {
-      window.__hiperMaster.push(produto);
-      console.debug('[HiperCache] Produto adicionado ao master em memória:', uid);
-    }
-  }
-
-  // Intercepta fetch para get-dados-produto-pedido
-  // Nota: _fetch já está definido acima (o fetch original antes da nossa interceptação)
-  const fetchAntes = window.fetch;
-  window.fetch = async function(...args) {
-    const response = await fetchAntes.apply(this, args);
-    const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url ?? '');
-    if (url.includes('get-dados-produto-pedido')) {
-      response.clone().json().then(processarResposta).catch(() => {});
-    }
-    return response;
-  };
-
-  // Intercepta XHR para get-dados-produto-pedido
-  const _open = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url) {
-    this.addEventListener('load', function() {
-      if ((url || '').includes('get-dados-produto-pedido')) {
-        try { processarResposta(JSON.parse(this.responseText)); } catch(e) {}
-      }
-    });
-    return _open.apply(this, arguments);
-  };
-})();
 
 HiperXHR.prototype = _XHR.prototype;
 Object.setPrototypeOf(HiperXHR, _XHR);
