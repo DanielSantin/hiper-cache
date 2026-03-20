@@ -1,367 +1,170 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// hiper-cache.js — Cache de produtos (fetch + XHR) e bridge de custos
-// ═══════════════════════════════════════════════════════════════════════════════
+(function() {
+    const TARGET_PATH = '/produtos/GetSelect2ParaPedido';
+    const MASTER_KEY  = 'hc:master';
+    const MIN_ITEMS_THRESHOLD = 100;
 
-const TARGET_PATH = '/produtos/GetSelect2ParaPedido';
-const TTL_MS      = 60 * 60 * 1000; // 1h
-const REVAL_MS    = 10 * 60 * 1000; // revalida em background após 10min
-const MASTER_KEY  = 'hc:master';
+    const NATIVE_FETCH = window.fetch.bind(window);
+    const NATIVE_XHR_SEND = window.XMLHttpRequest.prototype.send;
+    const NATIVE_XHR_OPEN = window.XMLHttpRequest.prototype.open;
 
-const PRELOAD_TERMS = [
-  "alçapão","arame","arremate","bucha","cantoneira","chapa","cola",
-  "fita","forro","gesso","lixa","manta","massa","metalon","painel",
-  "parafuso","perfil","pino","piso","placa","rodapé","suporte",
-  "junção","conector","sisal","cordão","portal","pendural","vidro",
-  "roda","alcool","eletrodo","broca","cimento","multichapisco",
-  "seladora","tinta","textura","presilha","kit","rebite","regulador",
-  "prego","fincapino","aumark","hgesso","xgesso"
-];
+    const PRELOAD_TERMS = ["alçapão","arame","arremate","bucha","cantoneira","chapa","cola","fita","forro","gesso","lixa","manta","massa","metalon","painel","parafuso","perfil","pino","piso","placa","rodapé","suporte","junção","conector","sisal","cordão","portal","pendural","vidro","roda","alcool","eletrodo","broca","cimento","multichapisco","seladora","tinta","textura","presilha","kit","rebite","regulador","prego","fincapino","aumark","hgesso","xgesso"];
 
-// ── Cache em memória ──────────────────────────────────────────────────────────
-const memCache  = {};
-let preloadDone = false;
-let preloading  = false;
+    let memMaster = [];
+    let preloading = false;
 
-// Solicita todos os dados do storage ao iniciar
-window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
-window.postMessage({ type: 'HIPER_CUSTO_LOAD_ALL' }, '*');
-
-window.addEventListener('message', (ev) => {
-  const fromSelf   = ev.source === window;
-  const fromOpened = ev.data?.type === 'HIPER_CUSTO_SAVE';
-
-  if (!fromSelf && !fromOpened) return;
-
-  if (ev.data?.type === 'HIPER_CUSTO_LOADED') {
-    window.__hiperCustos = ev.data.custos;
-    console.info('[HiperCache] ✅ Custos carregados do storage:', Object.keys(ev.data.custos).length, 'itens');
-  }
-
-  if (ev.data?.type === 'HIPER_CUSTO_SYNC') {
-    window.__hiperCustos = window.__hiperCustos || {};
-    window.__hiperCustos[ev.data.id] = ev.data.val;
-  }
-
-  if (ev.data?.type === 'HIPER_VENDEDOR_LOAD') {
-    window.postMessage({ type: 'HIPER_VENDEDOR_LOAD' }, '*');
-  }
-
-  if (ev.data?.type === 'HIPER_CACHE_ALL') {
-    const entries = ev.data.entries || {};
-    for (const [k, v] of Object.entries(entries)) memCache[k] = v;
-    if (memCache[MASTER_KEY]) {
-      preloadDone = true;
-      window.__hiperMaster = memCache[MASTER_KEY].data;
-      console.info(`[HiperCache] ✅ Master restaurado: ${window.__hiperMaster.length} produtos.`);
-      if (getMasterAge() > REVAL_MS) revalidateInBackground();
-    } else {
-      if (!preloading) preloadDataset();
+    // Normalização corrigida (remove acentos e caracteres especiais comuns em busca)
+    function normalizar(s) { 
+        return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ''); 
     }
-  }
 
-  if (ev.data?.type === 'HIPER_CACHE_CLEAR_ACK') {
-    for (const k of Object.keys(memCache)) delete memCache[k];
-    preloadDone = false;
-    console.info('[HiperCache] Cache limpo.');
-  }
-});
+    // ── Tunagem do Select2 (Motor Instantâneo) ────────────────────────────────
+    function reconfigurarSelect2sExistentes() {
+        if (typeof $ === 'undefined') return;
+        if (!window.__hiperMaster || window.__hiperMaster.length < MIN_ITEMS_THRESHOLD) return;
 
-// ── BroadcastChannel: atualiza __hiperCustos em memória ─────────────────────
-try {
-  const bc = new BroadcastChannel('hiper_custo_channel');
-  bc.onmessage = (ev) => {
-    const msg = ev.data;
-    if (msg?.type === 'HIPER_CUSTO_SAVE') {
-      window.__hiperCustos = window.__hiperCustos || {};
-      window.__hiperCustos[msg.id] = msg.val;
+        $('input.produto.select2-offscreen').each(function() {
+            const s2 = $(this).data('select2');
+            if (!s2 || !s2.opts.ajax) return; 
+
+            s2.opts.query = function(query) {
+                const term = query.term || '';
+                const termos = normalizar(term).split(/\s+/).filter(Boolean);
+                const results = termos.length === 0
+                    ? window.__hiperMaster
+                    : window.__hiperMaster.filter(p => {
+                        const nome = normalizar(p.Nome || p.text || '');
+                        return termos.every(t => nome.includes(t));
+                    });
+                query.callback({ results: results });
+            };
+
+            s2.opts.quietMillis = 0;
+            delete s2.opts.ajax; 
+            console.debug(`[HiperCache] Select2 otimizado.`);
+        });
     }
-    if (msg?.type === 'HIPER_VENDEDOR_SAVE') {
-      window.postMessage({ ...msg, _fromBC: true }, '*');
+
+    // ── Preload ───────────────────────────────────────────────────────────────
+    async function executarPreload() {
+        if (preloading) return;
+        preloading = true;
+        try {
+            const ts = Date.now();
+            const promises = PRELOAD_TERMS.map(t => 
+                NATIVE_FETCH(`${location.origin}${TARGET_PATH}?Filtro=${encodeURIComponent(t)}&_=${ts}`)
+                .then(r => r.ok ? r.json() : [])
+                .catch(() => [])
+            );
+            const resultados = await Promise.all(promises);
+            const unico = new Map();
+            for (const lista of resultados) {
+                if (!Array.isArray(lista)) continue;
+                lista.forEach(item => {
+                    const id = item.idProduto ?? item.id ?? item.Codigo;
+                    if (id && !unico.has(id)) {
+                        item.text = item.Nome; 
+                        unico.set(id, item);
+                    }
+                });
+            }
+            if (unico.size >= MIN_ITEMS_THRESHOLD) {
+                memMaster = Array.from(unico.values()).sort((a, b) => (a.Nome || '').localeCompare(b.Nome || '', 'pt-BR'));
+                window.__hiperMaster = memMaster;
+                window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
+                reconfigurarSelect2sExistentes();
+            }
+        } finally { preloading = false; }
     }
-  };
-} catch(e) {
-  console.warn('[HiperCache] BroadcastChannel não disponível:', e);
-}
 
-// ── Utilitários ───────────────────────────────────────────────────────────────
-
-function isTarget(url) {
-  try   { return new URL(url, location.origin).pathname.startsWith(TARGET_PATH); }
-  catch { return url.includes(TARGET_PATH); }
-}
-
-function getFiltro(url) {
-  try   { return new URL(url, location.origin).searchParams.get('Filtro') ?? ''; }
-  catch { return ''; }
-}
-
-function getMasterAge() {
-  const e = memCache[MASTER_KEY];
-  return e ? Date.now() - e.ts : Infinity;
-}
-
-function getCachedMaster() {
-  const e = memCache[MASTER_KEY];
-  if (!e) return null;
-  if (Date.now() - e.ts > TTL_MS) { delete memCache[MASTER_KEY]; return null; }
-  return e.data;
-}
-
-function setCached(key, data) {
-  memCache[key] = { data, ts: Date.now() };
-  window.postMessage({ type: 'HIPER_CACHE_SET', key, data, ts: Date.now() }, '*');
-}
-
-function normalizar(s) {
-  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-
-function filtrarLocal(filtro) {
-  const master = getCachedMaster();
-  if (!master) return null;
-  if (!filtro.trim()) return master;
-  const termos = normalizar(filtro).split(/\s+/).filter(Boolean);
-  return master.filter(item => {
-    const nome = normalizar(item.Nome || item.text || '');
-    return termos.every(t => nome.includes(t));
-  });
-}
-
-// ── Pré-carregamento ──────────────────────────────────────────────────────────
-function reconfigurarSelect2sExistentes() {
-  if (typeof $ === 'undefined') return;
-  if (!window.__hiperMaster?.length) return;
-
-  let count = 0;
-  $('input.produto.select2-offscreen').each(function() {
-    const s2 = $(this).data('select2');
-    if (!s2) return;
-
-    s2.opts.query = function(query) {
-      const termos = normalizar(query.term || '').split(/\s+/).filter(Boolean);
-      const results = termos.length === 0
-        ? window.__hiperMaster
-        : window.__hiperMaster.filter(p => {
-            const nome = normalizar(p.Nome || p.text || '');
-            return termos.every(t => nome.includes(t));
-          });
-      query.callback({ results: results });
+    // ── Interceptadores de Rede ───────────────────────────────────────────────
+    window.fetch = async function(input, init) {
+        const url = (typeof input === 'string') ? input : (input?.url ?? '');
+        if (url.includes(TARGET_PATH) && memMaster.length < MIN_ITEMS_THRESHOLD && !preloading) {
+            executarPreload();
+        }
+        return NATIVE_FETCH(input, init);
     };
 
-    s2.opts.quietMillis = 0;
-    delete s2.opts.ajax;
-    count++;
-  });
+    // ── Interceptador XHR (Versão Blindada contra 'apply' undefined) ──────────
+    const originalXHR = window.XMLHttpRequest;
+    window.XMLHttpRequest = function() {
+        const xhr = new originalXHR();
+        let _url = '';
 
-  console.info(`[HiperCache] ✅ ${count} select(s) reconfigurados.`);
-}
-
-function iniciarObserverSelect2() {
-  new MutationObserver(() => {
-    if (!window.__hiperMaster?.length) return;
-    if (!location.hash.includes('pedido-venda')) return;
-    reconfigurarSelect2sExistentes();
-  }).observe(document.body || document.documentElement, { childList: true, subtree: true });
-}
-
-iniciarObserverSelect2();
-
-async function preloadDataset() {
-  if (preloading) return;
-  preloading = true;
-  const ts = Date.now();
-  console.info(`[HiperCache] 🚀 Pré-carregando dataset com ${PRELOAD_TERMS.length} termos...`);
-
-  const requests = PRELOAD_TERMS.map(termo =>
-    _fetch(`${location.origin}${TARGET_PATH}?Filtro=${encodeURIComponent(termo)}&Expansao=&_=${ts}`)
-      .then(r => r.ok ? r.json() : [])
-      .catch(() => [])
-  );
-
-  const results = await Promise.all(requests);
-  const seen    = new Set();
-  const dataset = [];
-
-  for (const page of results) {
-    if (!Array.isArray(page)) continue;
-    for (const item of page) {
-      const uid = item.idProduto ?? item.id ?? item.Codigo;
-      if (uid != null && seen.has(uid)) continue;
-      if (uid != null) seen.add(uid);
-      dataset.push(item);
-    }
-  }
-
-  dataset.sort((a, b) => (a.Nome || '').localeCompare(b.Nome || '', 'pt-BR'));
-  setCached(MASTER_KEY, dataset);
-  window.__hiperMaster = dataset;
-
-  reconfigurarSelect2sExistentes();
-
-  preloadDone = true;
-  preloading  = false;
-
-  console.info(`[HiperCache] ✅ Dataset pronto: ${dataset.length} produtos únicos.`);
-}
-
-async function revalidateInBackground() {
-  if (preloading) return;
-  console.debug('[HiperCache] 🔄 Revalidando em background...');
-  preloadDone = false;
-  await preloadDataset();
-}
-
-// ── Lógica central de interceptação ──────────────────────────────────────────
-
-function interceptUrl(url, onHit, onMiss) {
-  if (!isTarget(url)) return false;
-  const filtro = getFiltro(url);
-
-  if (preloadDone) {
-    const resultado = filtrarLocal(filtro);
-    if (resultado !== null) {
-      console.debug(`[HiperCache] LOCAL "${filtro}" → ${resultado.length} itens`);
-      if (getMasterAge() > REVAL_MS) revalidateInBackground();
-      onHit(resultado);
-      return true;
-    }
-  }
-
-  if (!preloading) preloadDataset();
-  onMiss('hc:tmp:' + filtro);
-  return true;
-}
-
-// ── Enriquece __hiperMaster com produto individual (get-dados-produto-pedido) ─
-// Não toca no cache persistido — apenas garante que o produto esteja em memória.
-function processarRespostaProduto(json) {
-  if (!json?.dados?.length) return;
-  const produto = json.dados[0];
-  if (!produto) return;
-  window.__hiperMaster = window.__hiperMaster || [];
-  const uid = produto.idProduto ?? produto.id ?? produto.Codigo;
-  if (uid == null) return;
-  const jaExiste = window.__hiperMaster.some(p =>
-    (p.idProduto ?? p.id ?? p.Codigo) === uid
-  );
-  if (!jaExiste) {
-    window.__hiperMaster.push(produto);
-    console.debug('[HiperCache] Produto adicionado ao master em memória:', uid);
-  }
-}
-
-// ── Interceptação do fetch ────────────────────────────────────────────────────
-// _fetch = fetch original. Um único wrapper cobre GetSelect2ParaPedido
-// E get-dados-produto-pedido — sem segundo wrapper, sem loop.
-
-const _fetch = window.fetch;
-window.fetch = async function (input, init) {
-  const url = (typeof input === 'string') ? input : (input?.url ?? '');
-
-  // Enriquecimento de produto individual — usa _fetch diretamente
-  if (url.includes('get-dados-produto-pedido')) {
-    const response = await _fetch.apply(window, [input, init]);
-    response.clone().json().then(processarRespostaProduto).catch(() => {});
-    return response;
-  }
-
-  // Cache de lista (GetSelect2ParaPedido)
-  return new Promise((resolve, reject) => {
-    let handled = false;
-
-    interceptUrl(url,
-      (data) => {
-        handled = true;
-        resolve(new Response(JSON.stringify(data), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        }));
-      },
-      (saveKey) => {
-        handled = true;
-        _fetch.apply(window, [input, init])
-          .then(r => { r.clone().json().then(j => setCached(saveKey, j)).catch(() => {}); resolve(r); })
-          .catch(reject);
-      }
-    );
-
-    if (!handled) _fetch.apply(window, [input, init]).then(resolve).catch(reject);
-  });
-};
-
-// ── Interceptação do XMLHttpRequest ──────────────────────────────────────────
-
-const _XHR = window.XMLHttpRequest;
-
-function HiperXHR() {
-  const real = new _XHR();
-  let _url = '', _resolved = false, _saveKey = '';
-
-  const proxy = new Proxy(real, {
-    get(t, prop) {
-      if (prop === 'open') return openHandler;
-      if (prop === 'send') return sendHandler;
-      const v = t[prop];
-      return typeof v === 'function' ? v.bind(t) : v;
-    },
-    set(t, prop, val) { t[prop] = val; return true; },
-  });
-
-  function openHandler(method, url, async, user, pwd) {
-    _url = url ?? '';
-    return real.open(method, url, async !== false, user, pwd);
-  }
-
-  function sendHandler(body) {
-    // Enriquecimento de produto individual via XHR
-    if (_url.includes('get-dados-produto-pedido')) {
-      real.addEventListener('load', function() {
-        if (real.status === 200) {
-          try { processarRespostaProduto(JSON.parse(real.responseText)); } catch(e) {}
+        // Só redefine se as funções nativas existirem
+        if (typeof NATIVE_XHR_OPEN === 'function') {
+            xhr.open = function(m, u) {
+                _url = u;
+                return NATIVE_XHR_OPEN.apply(this, arguments);
+            };
         }
-      });
-      real.send(body);
-      return;
-    }
 
-    let handled = false;
+        if (typeof NATIVE_XHR_SEND === 'function') {
+            xhr.send = function(b) {
+                if (_url && _url.includes(TARGET_PATH) && memMaster.length >= MIN_ITEMS_THRESHOLD) {
+                    try {
+                        Object.defineProperty(this, 'readyState', { get: () => 4, configurable: true });
+                        Object.defineProperty(this, 'status', { get: () => 200, configurable: true });
+                        Object.defineProperty(this, 'responseText', { get: () => JSON.stringify(memMaster), configurable: true });
+                        this.dispatchEvent(new Event('load'));
+                        return;
+                    } catch (e) {
+                        console.warn("[HiperCache] Erro ao simular resposta, usando rede.");
+                    }
+                }
+                return NATIVE_XHR_SEND.apply(this, arguments);
+            };
+        }
+        return xhr;
+    };
 
-    interceptUrl(_url,
-      (data) => {
-        handled = _resolved = true;
-        setTimeout(() => {
-          const txt = JSON.stringify(data);
-          try {
-            Object.defineProperty(real, 'readyState',   { get: () => 4,    configurable: true });
-            Object.defineProperty(real, 'status',       { get: () => 200,  configurable: true });
-            Object.defineProperty(real, 'statusText',   { get: () => 'OK', configurable: true });
-            Object.defineProperty(real, 'responseText', { get: () => txt,  configurable: true });
-            Object.defineProperty(real, 'response',     { get: () => txt,  configurable: true });
-          } catch {}
-          if (typeof real.onreadystatechange === 'function') real.onreadystatechange();
-          if (typeof real.onload === 'function') real.onload(new ProgressEvent('load'));
-          real.dispatchEvent(new ProgressEvent('readystatechange'));
-          real.dispatchEvent(new ProgressEvent('load'));
-          real.dispatchEvent(new ProgressEvent('loadend'));
-        }, 0);
-      },
-      (saveKey) => {
-        handled = true; _saveKey = saveKey;
-        real.addEventListener('load', () => {
-          if (real.status === 200 && !_resolved) {
-            try { setCached(_saveKey, JSON.parse(real.responseText)); } catch {}
-          }
-        });
-        real.send(body);
-      }
-    );
+  // ── Inicialização e Ponte de Custos (Restaurada) ──────────────────────────
+    window.addEventListener('message', (ev) => {
+        if (ev.source !== window) return;
 
-    if (!handled) real.send(body);
-  }
+        // 1. Escuta carregamento inicial do Cache e de Custos
+        if (ev.data?.type === 'HIPER_CACHE_ALL') {
+            const master = ev.data.entries?.[MASTER_KEY]?.data;
+            if (master && master.length >= MIN_ITEMS_THRESHOLD) {
+                memMaster = master;
+                window.__hiperMaster = memMaster;
+                reconfigurarSelect2sExistentes();
+            } else { executarPreload(); }
+        }
 
-  return proxy;
-}
+        if (ev.data?.type === 'HIPER_CUSTO_LOADED') {
+            window.__hiperCustos = ev.data.custos;
+            console.info(`[HiperCache] ✅ ${Object.keys(ev.data.custos).length} custos carregados.`);
+        }
 
-HiperXHR.prototype = _XHR.prototype;
-Object.setPrototypeOf(HiperXHR, _XHR);
-window.XMLHttpRequest = HiperXHR;
+        // 2. ESSA É A PARTE QUE FALTAVA: Salvar custos no banco da extensão
+        if (ev.data?.type === 'HIPER_CUSTO_SET') {
+            const { id, val } = ev.data;
+            if (id) {
+                window.__hiperCustos = window.__hiperCustos || {};
+                window.__hiperCustos[id] = val;
+                // Repassa para o engine salvar no IndexedDB/LocalStorage
+                window.postMessage({ type: 'HIPER_CACHE_SET', key: `hc:custo:${id}`, data: val, ts: Date.now() }, '*');
+            }
+        }
+    });
+
+    // Pede para carregar tudo o que já existe
+    window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
+    window.postMessage({ type: 'HIPER_CUSTO_LOAD_ALL' }, '*');
+
+    // Correção do erro de observe: Espera o body estar disponível
+    const iniciarObserver = () => {
+        if (document.body) {
+            new MutationObserver(() => {
+                if (location.hash.includes('pedido-venda')) reconfigurarSelect2sExistentes();
+            }).observe(document.body, { childList: true, subtree: true });
+        } else {
+            setTimeout(iniciarObserver, 100);
+        }
+    };
+    iniciarObserver();
+
+    window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
+    setTimeout(() => { if (memMaster.length < MIN_ITEMS_THRESHOLD) executarPreload(); }, 3000);
+})();
