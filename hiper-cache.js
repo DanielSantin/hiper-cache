@@ -1,170 +1,130 @@
 (function() {
     const TARGET_PATH = '/produtos/GetSelect2ParaPedido';
     const MASTER_KEY  = 'hc:master';
-    const MIN_ITEMS_THRESHOLD = 100;
+    const VERSAO_CUSTOS = "2026-03"; // Mude aqui para forçar atualização em todos
 
+    const CUSTOS_PADRAO = {
+        "3073": 60.26, "3076": 25.93, "3006": 11.27, "3007": 12.89, "3008": 15.12,
+        "3010": 11.20, "3014": 12.16, "3017": 0.92, "3018": 9.48, "3019": 0.24,
+        "3020": 0.02, "3021": 0.02, "3022": 10.36, "3023": 14.61, "3029": 0.69,
+        "3032": 21.85, "3035": 9.79, "3037": 39.74, "3058": 0.02, "3113": 72.59, "3132": 6.21
+    };
+
+    const REAL_XML_HTTP = window.XMLHttpRequest;
     const NATIVE_FETCH = window.fetch.bind(window);
-    const NATIVE_XHR_SEND = window.XMLHttpRequest.prototype.send;
-    const NATIVE_XHR_OPEN = window.XMLHttpRequest.prototype.open;
-
-    const PRELOAD_TERMS = ["alçapão","arame","arremate","bucha","cantoneira","chapa","cola","fita","forro","gesso","lixa","manta","massa","metalon","painel","parafuso","perfil","pino","piso","placa","rodapé","suporte","junção","conector","sisal","cordão","portal","pendural","vidro","roda","alcool","eletrodo","broca","cimento","multichapisco","seladora","tinta","textura","presilha","kit","rebite","regulador","prego","fincapino","aumark","hgesso","xgesso"];
 
     let memMaster = [];
-    let preloading = false;
+    window.__hiperCustos = {};
+    let inicializado = false;
 
-    // Normalização corrigida (remove acentos e caracteres especiais comuns em busca)
     function normalizar(s) { 
         return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ''); 
     }
 
-    // ── Tunagem do Select2 (Motor Instantâneo) ────────────────────────────────
-    function reconfigurarSelect2sExistentes() {
-        if (typeof $ === 'undefined') return;
-        if (!window.__hiperMaster || window.__hiperMaster.length < MIN_ITEMS_THRESHOLD) return;
-
-        $('input.produto.select2-offscreen').each(function() {
-            const s2 = $(this).data('select2');
-            if (!s2 || !s2.opts.ajax) return; 
-
-            s2.opts.query = function(query) {
-                const term = query.term || '';
-                const termos = normalizar(term).split(/\s+/).filter(Boolean);
-                const results = termos.length === 0
-                    ? window.__hiperMaster
-                    : window.__hiperMaster.filter(p => {
-                        const nome = normalizar(p.Nome || p.text || '');
-                        return termos.every(t => nome.includes(t));
-                    });
-                query.callback({ results: results });
-            };
-
-            s2.opts.quietMillis = 0;
-            delete s2.opts.ajax; 
-            console.debug(`[HiperCache] Select2 otimizado.`);
-        });
+    // ── 1. Lógica de Custos (Integrada) ──────────────────────────────────────
+    function aplicarCustosPadrao() {
+        const salva = localStorage.getItem('hc_versao_custos');
+        if (salva !== VERSAO_CUSTOS) {
+            console.log(`[HiperCache] Nova versão ${VERSAO_CUSTOS}. Atualizando base...`);
+            Object.entries(CUSTOS_PADRAO).forEach(([id, val]) => {
+                window.__hiperCustos[id] = val;
+                window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: val, ts: Date.now() }, '*');
+            });
+            localStorage.setItem('hc_versao_custos', VERSAO_CUSTOS);
+        }
     }
 
-    // ── Preload ───────────────────────────────────────────────────────────────
-    async function executarPreload() {
-        if (preloading) return;
-        preloading = true;
-        try {
-            const ts = Date.now();
-            const promises = PRELOAD_TERMS.map(t => 
-                NATIVE_FETCH(`${location.origin}${TARGET_PATH}?Filtro=${encodeURIComponent(t)}&_=${ts}`)
-                .then(r => r.ok ? r.json() : [])
-                .catch(() => [])
-            );
-            const resultados = await Promise.all(promises);
-            const unico = new Map();
-            for (const lista of resultados) {
-                if (!Array.isArray(lista)) continue;
-                lista.forEach(item => {
-                    const id = item.idProduto ?? item.id ?? item.Codigo;
-                    if (id && !unico.has(id)) {
-                        item.text = item.Nome; 
-                        unico.set(id, item);
-                    }
-                });
-            }
-            if (unico.size >= MIN_ITEMS_THRESHOLD) {
-                memMaster = Array.from(unico.values()).sort((a, b) => (a.Nome || '').localeCompare(b.Nome || '', 'pt-BR'));
-                window.__hiperMaster = memMaster;
-                window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
-                reconfigurarSelect2sExistentes();
-            }
-        } finally { preloading = false; }
-    }
-
-    // ── Interceptadores de Rede ───────────────────────────────────────────────
-    window.fetch = async function(input, init) {
-        const url = (typeof input === 'string') ? input : (input?.url ?? '');
-        if (url.includes(TARGET_PATH) && memMaster.length < MIN_ITEMS_THRESHOLD && !preloading) {
-            executarPreload();
-        }
-        return NATIVE_FETCH(input, init);
-    };
-
-    // ── Interceptador XHR (Versão Blindada contra 'apply' undefined) ──────────
-    const originalXHR = window.XMLHttpRequest;
-    window.XMLHttpRequest = function() {
-        const xhr = new originalXHR();
-        let _url = '';
-
-        // Só redefine se as funções nativas existirem
-        if (typeof NATIVE_XHR_OPEN === 'function') {
-            xhr.open = function(m, u) {
-                _url = u;
-                return NATIVE_XHR_OPEN.apply(this, arguments);
-            };
-        }
-
-        if (typeof NATIVE_XHR_SEND === 'function') {
-            xhr.send = function(b) {
-                if (_url && _url.includes(TARGET_PATH) && memMaster.length >= MIN_ITEMS_THRESHOLD) {
-                    try {
-                        Object.defineProperty(this, 'readyState', { get: () => 4, configurable: true });
-                        Object.defineProperty(this, 'status', { get: () => 200, configurable: true });
-                        Object.defineProperty(this, 'responseText', { get: () => JSON.stringify(memMaster), configurable: true });
-                        this.dispatchEvent(new Event('load'));
-                        return;
-                    } catch (e) {
-                        console.warn("[HiperCache] Erro ao simular resposta, usando rede.");
-                    }
-                }
-                return NATIVE_XHR_SEND.apply(this, arguments);
-            };
-        }
-        return xhr;
-    };
-
-  // ── Inicialização e Ponte de Custos (Restaurada) ──────────────────────────
     window.addEventListener('message', (ev) => {
         if (ev.source !== window) return;
 
-        // 1. Escuta carregamento inicial do Cache e de Custos
-        if (ev.data?.type === 'HIPER_CACHE_ALL') {
-            const master = ev.data.entries?.[MASTER_KEY]?.data;
-            if (master && master.length >= MIN_ITEMS_THRESHOLD) {
-                memMaster = master;
+        msg = ev.data;
+        // A) Quando o banco de dados da extensão responde
+        if (msg?.type === 'HIPER_CACHE_ALL') {
+            const entries = ev.data.entries || {};
+            
+            // Produtos
+            if (entries[MASTER_KEY]?.data) {
+                memMaster = entries[MASTER_KEY].data;
                 window.__hiperMaster = memMaster;
-                reconfigurarSelect2sExistentes();
-            } else { executarPreload(); }
+            }
+
+            // Custos (Lê o que está no banco físico)
+            Object.keys(entries).forEach(key => {
+                if (key.includes('custo:')) {
+                    const id = key.split(':').pop();
+                    window.__hiperCustos[id] = entries[key].data;
+                }
+            });
+
+            // Se for a primeira carga, verifica se precisa injetar os padrões
+            if (!inicializado) {
+                aplicarCustosPadrao();
+                inicializado = true;
+                console.info(`[HiperCache] ✅ Pronto: ${Object.keys(window.__hiperCustos).length} custos ativos.`);
+            }
+
+            // Avisa o hiper-orcamento.js que os dados estão prontos
+            window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
         }
 
-        if (ev.data?.type === 'HIPER_CUSTO_LOADED') {
-            window.__hiperCustos = ev.data.custos;
-            console.info(`[HiperCache] ✅ ${Object.keys(ev.data.custos).length} custos carregados.`);
-        }
-
-        // 2. ESSA É A PARTE QUE FALTAVA: Salvar custos no banco da extensão
-        if (ev.data?.type === 'HIPER_CUSTO_SET') {
-            const { id, val } = ev.data;
+        // B) Quando o Orçamento salva um custo novo
+        if (msg?.type === 'HIPER_CUSTO_SET') {
+            const { id, val } = msg;
             if (id) {
-                window.__hiperCustos = window.__hiperCustos || {};
                 window.__hiperCustos[id] = val;
-                // Repassa para o engine salvar no IndexedDB/LocalStorage
-                window.postMessage({ type: 'HIPER_CACHE_SET', key: `hc:custo:${id}`, data: val, ts: Date.now() }, '*');
+                window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: val, ts: Date.now() }, '*');
+            }
+        }
+
+        // C) Quando o botão "Gerar Orçamento" pede os dados
+        if (msg?.type === 'HIPER_CUSTO_EXPORT_REQ') {
+            window.postMessage({ type: 'HIPER_CUSTO_EXPORT_DATA', custos: window.__hiperCustos }, '*');
+        }
+
+        if (msg?.type === 'HIPER_CUSTO_SYNC') {
+            const { id, val } = msg;
+            if (id != null) {
+                window.__hiperCustos[id] = val;
+                console.log('[HiperCache] 🔄 Custo sincronizado em memória — id:', id, '| val:', val);
             }
         }
     });
 
-    // Pede para carregar tudo o que já existe
-    window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
-    window.postMessage({ type: 'HIPER_CUSTO_LOAD_ALL' }, '*');
-
-    // Correção do erro de observe: Espera o body estar disponível
-    const iniciarObserver = () => {
-        if (document.body) {
-            new MutationObserver(() => {
-                if (location.hash.includes('pedido-venda')) reconfigurarSelect2sExistentes();
-            }).observe(document.body, { childList: true, subtree: true });
-        } else {
-            setTimeout(iniciarObserver, 100);
+    // ── 2. Interceptadores de Rede (Busca Instantânea) ───────────────────────
+    window.fetch = async function(input, init) {
+        const url = (typeof input === 'string') ? input : (input?.url ?? '');
+        if (url.includes(TARGET_PATH) && memMaster.length > 0) {
+            try {
+                const term = new URL(url, location.origin).searchParams.get('Filtro') || '';
+                const res = normalizar(term).split(/\s+/).filter(Boolean).reduce((acc, t) => acc.filter(p => normalizar(p.Nome||p.text).includes(t)), memMaster);
+                return new Response(JSON.stringify(res), { status: 200, headers: {'Content-Type':'application/json'} });
+            } catch(e) {}
         }
+        return NATIVE_FETCH(input, init);
     };
-    iniciarObserver();
 
+    window.XMLHttpRequest = function() {
+        const xhr = new REAL_XML_HTTP();
+        let _url = '';
+        const origOpen = xhr.open;
+        xhr.open = function() { _url = arguments[1]; return origOpen.apply(this, arguments); };
+        const origSend = xhr.send;
+        xhr.send = function() {
+            if (_url && _url.includes(TARGET_PATH) && memMaster.length > 0) {
+                const term = new URL(_url, location.origin).searchParams.get('Filtro') || '';
+                const res = normalizar(term).split(/\s+/).filter(Boolean).reduce((acc, t) => acc.filter(p => normalizar(p.Nome||p.text).includes(t)), memMaster);
+                Object.defineProperty(this, 'readyState', { get: () => 4, configurable: true });
+                Object.defineProperty(this, 'status', { get: () => 200, configurable: true });
+                Object.defineProperty(this, 'responseText', { get: () => JSON.stringify(res), configurable: true });
+                this.dispatchEvent(new Event('load'));
+                return;
+            }
+            return origSend.apply(this, arguments);
+        };
+        return xhr;
+    };
+
+    // ── 3. Inicialização ─────────────────────────────────────────────────────
     window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
-    setTimeout(() => { if (memMaster.length < MIN_ITEMS_THRESHOLD) executarPreload(); }, 3000);
+
 })();

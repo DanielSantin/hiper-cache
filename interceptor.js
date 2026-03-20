@@ -9,7 +9,7 @@ async function safeStorage(fn) {
 }
 
 // ── Carrega os módulos da página em sequência ─────────────────────────────────
-const MODULES = ['hiper-logo.js','hiper-cache.js', 'hiper-custos-padrao.js', 'hiper-widgets.js', 'hiper-orcamento.js', 'kit.js', 'hiper-orcamento-resumido.js'];
+const MODULES = ['hiper-logo.js','hiper-cache.js', 'hiper-widgets.js', 'hiper-orcamento.js', 'kit.js', 'hiper-orcamento-resumido.js'];
 function loadNextModule(modules, index) {
   if (index >= modules.length) return;
   const s = document.createElement('script');
@@ -40,9 +40,11 @@ try {
     if (msg.type === 'HIPER_CUSTO_SAVE') {
       console.log('[Interceptor] 📡 BC recebeu custo — id:', msg.id, '| val:', msg.val);
       await safeStorage(async () => {
-        const key = 'custo:' + msg.id;
-        await chrome.storage.local.set({ [key]: { val: msg.val, nome: msg.nome } });
-        console.log('[Interceptor] ✅ Custo salvo — chave:', key);
+      const key = 'custo:' + msg.id;
+      await chrome.storage.local.set({ 
+        [key]: { data: msg.val, ts: Date.now() } 
+      });
+      console.log('[Interceptor] ✅ Custo salvo — chave:', key);
       });
       // Notifica a página principal (para atualizar __hiperCustos em memória)
       window.postMessage({ type: 'HIPER_CUSTO_SYNC', id: msg.id, val: msg.val }, '*');

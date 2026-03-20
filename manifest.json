@@ -30,7 +30,6 @@
     {
       "resources": [
         "hiper-cache.js",
-        "hiper-custos-padrao.js",
         "hiper-widgets.js",
         "hiper-orcamento.js",
         "kit.js",

@@ -488,9 +488,17 @@ function primeiroNomeCliente() {
 }
 
 // ── Custos ────────────────────────────────────────────────────────────────────
+function debounce(fn, delay=500){
+  let t;
+  return (...args)=>{
+    clearTimeout(t);
+    t = setTimeout(()=>fn(...args), delay);
+  };
+}
+
 document.querySelectorAll('.custo-inp').forEach(inp=>{
-  inp.addEventListener('change', ()=>salvarCusto(inp));
-  inp.addEventListener('blur',   ()=>salvarCusto(inp));
+  const salvarDebounced = debounce(()=>salvarCusto(inp), 500);
+  inp.addEventListener('input', salvarDebounced);
 });
 
 function salvarCusto(inp) {
