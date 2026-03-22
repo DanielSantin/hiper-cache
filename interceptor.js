@@ -9,13 +9,27 @@ async function safeStorage(fn) {
 }
 
 // ── Carrega os módulos da página em sequência ─────────────────────────────────
-const MODULES = ['hiper-logo.js','hiper-cache.js', 'hiper-widgets.js', 'hiper-orcamento.js', 'kit.js', 'hiper-orcamento-resumido.js'];
+const MODULES = [
+  { src: 'hiper-logo.js' },
+  { src: 'hiper-cache.js' },
+  { src: 'hiper-widgets.js' },
+  { src: 'hiper-orcamento.js' },
+  { src: 'kit.js' },
+  { src: 'resumido-dados.js' },
+  // Carrega o runtime como TEXTO e salva em window antes de executar o gerador
+  { src: 'resumido-runtime.js' },
+  { src: 'resumido-gerador.js' },
+];
+
 function loadNextModule(modules, index) {
   if (index >= modules.length) return;
+  const mod = modules[index];
+  const url = chrome.runtime.getURL(mod.src);
+  const next = () => loadNextModule(modules, index + 1);
   const s = document.createElement('script');
-  s.src = chrome.runtime.getURL(modules[index]);
-  s.onload  = () => { s.remove(); loadNextModule(modules, index + 1); };
-  s.onerror = () => console.error('[HiperCache] Falha ao carregar:', modules[index]);
+  s.src = url;
+  s.onload  = () => { s.remove(); next(); };
+  s.onerror = () => console.error('[HiperCache] Falha ao carregar:', mod.src);
   (document.head || document.documentElement).appendChild(s);
 }
 

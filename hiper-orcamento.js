@@ -285,6 +285,11 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
   <button class="btn-copy" id="btnCopy" onclick="copiarImagem()">📋 Copiar para WhatsApp</button>
   <button class="btn-pdf" id="btnPdf" onclick="baixarPdf()">⬇️ Baixar PDF</button>
+  <button id="btnResumido"
+    onclick="if(window.__gerarResumidoDaAba){window.__gerarResumidoDaAba();} else if(window.abrirOrcamentoResumido){window.abrirOrcamentoResumido();}"
+    style="padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#1a5c8a">
+    📝 Resumido
+  </button>
   <div class="pdf-badge" id="pdfBadge">✅ PDF baixado</div>
 </div>
 
