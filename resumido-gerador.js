@@ -95,7 +95,10 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
       '<td style="text-align:center;border:1px solid #000;padding:5px 6px;vertical-align:middle">' + unid + '</td>' +
       '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
         '<div style="font-weight:bold;margin-bottom:3px">' + kit.nomeLabel + '</div>' +
-        '<div style="font-size:8.5pt;color:#222;line-height:1.5">' + texto + '</div>' +
+        '<div contenteditable="true" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+        'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
+        'onblur="this.style.background=\'\';this.style.outline=\'none\'" ' +
+        'class="no-print-border">' + texto + '</div>' +
         '<div style="margin-top:5px;font-size:8pt;color:#555;display:flex;gap:12px;flex-wrap:wrap">' +
           '<span>Cart\u00e3o: <strong id="lm2c-' + i + '">R$ ' + fmtN(vlM2C) + '/' + unid + '</strong></span>' +
           '<span>\u00c0 vista: <strong id="lm2v-' + i + '">R$ ' + fmtN(vlM2C * PIX) + '/' + unid + '</strong></span>' +
