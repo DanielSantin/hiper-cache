@@ -1,6 +1,7 @@
 (function() {
     const TARGET_PATH = '/produtos/GetSelect2ParaPedido';
     const MASTER_KEY  = 'hc:master';
+    const MIN_ITEMS_THRESHOLD = 100;
     const VERSAO_CUSTOS = "2026-03"; // Mude aqui para forçar atualização em todos
 
     const CUSTOS_PADRAO = {
@@ -10,18 +11,80 @@
         "3032": 21.85, "3035": 9.79, "3037": 39.74, "3058": 0.02, "3113": 72.59, "3132": 6.21
     };
 
+    const PRELOAD_TERMS = ["alçapão","arame","arremate","bucha","cantoneira","chapa","cola","fita","forro","gesso","lixa","manta","massa","metalon","painel","parafuso","perfil","pino","piso","placa","rodapé","suporte","junção","conector","sisal","cordão","portal","pendural","vidro","roda","alcool","eletrodo","broca","cimento","multichapisco","seladora","tinta","textura","presilha","kit","rebite","regulador","prego","fincapino","aumark","hgesso","xgesso"];
+
     const REAL_XML_HTTP = window.XMLHttpRequest;
     const NATIVE_FETCH = window.fetch.bind(window);
 
     let memMaster = [];
-    window.__hiperCustos = {};
+    let preloading = false;
     let inicializado = false;
+    window.__hiperCustos = {};
 
     function normalizar(s) { 
         return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ''); 
     }
 
-    // ── 1. Lógica de Custos (Integrada) ──────────────────────────────────────
+    // ── 1. Tunagem do Select2 (Motor Instantâneo) ─────────────────────────────
+    function reconfigurarSelect2sExistentes() {
+        if (typeof $ === 'undefined') return;
+        if (!window.__hiperMaster || window.__hiperMaster.length < MIN_ITEMS_THRESHOLD) return;
+
+        $('input.produto.select2-offscreen').each(function() {
+            const s2 = $(this).data('select2');
+            if (!s2 || !s2.opts.ajax) return;
+
+            s2.opts.query = function(query) {
+                const term = query.term || '';
+                const termos = normalizar(term).split(/\s+/).filter(Boolean);
+                const results = termos.length === 0
+                    ? window.__hiperMaster
+                    : window.__hiperMaster.filter(p => {
+                        const nome = normalizar(p.Nome || p.text || '');
+                        return termos.every(t => nome.includes(t));
+                    });
+                query.callback({ results: results });
+            };
+
+            s2.opts.quietMillis = 0;
+            delete s2.opts.ajax;
+            console.debug(`[HiperCache] Select2 otimizado.`);
+        });
+    }
+
+    // ── 2. Preload ────────────────────────────────────────────────────────────
+    async function executarPreload() {
+        if (preloading) return;
+        preloading = true;
+        try {
+            const ts = Date.now();
+            const promises = PRELOAD_TERMS.map(t =>
+                NATIVE_FETCH(`${location.origin}${TARGET_PATH}?Filtro=${encodeURIComponent(t)}&_=${ts}`)
+                .then(r => r.ok ? r.json() : [])
+                .catch(() => [])
+            );
+            const resultados = await Promise.all(promises);
+            const unico = new Map();
+            for (const lista of resultados) {
+                if (!Array.isArray(lista)) continue;
+                lista.forEach(item => {
+                    const id = item.idProduto ?? item.id ?? item.Codigo;
+                    if (id && !unico.has(id)) {
+                        item.text = item.Nome;
+                        unico.set(id, item);
+                    }
+                });
+            }
+            if (unico.size >= MIN_ITEMS_THRESHOLD) {
+                memMaster = Array.from(unico.values()).sort((a, b) => (a.Nome || '').localeCompare(b.Nome || '', 'pt-BR'));
+                window.__hiperMaster = memMaster;
+                window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
+                reconfigurarSelect2sExistentes();
+            }
+        } finally { preloading = false; }
+    }
+
+    // ── 3. Lógica de Custos ───────────────────────────────────────────────────
     function aplicarCustosPadrao() {
         const salva = localStorage.getItem('hc_versao_custos');
         if (salva !== VERSAO_CUSTOS) {
@@ -34,21 +97,76 @@
         }
     }
 
+    // ── 4. Interceptadores de Rede ────────────────────────────────────────────
+    window.fetch = async function(input, init) {
+        const url = (typeof input === 'string') ? input : (input?.url ?? '');
+        if (url.includes(TARGET_PATH)) {
+            if (memMaster.length > 0) {
+                try {
+                    const term = new URL(url, location.origin).searchParams.get('Filtro') || '';
+                    const res = normalizar(term).split(/\s+/).filter(Boolean)
+                        .reduce((acc, t) => acc.filter(p => normalizar(p.Nome || p.text).includes(t)), memMaster);
+                    return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                } catch(e) {}
+            } else if (!preloading) {
+                // Cache ainda vazio: dispara preload e deixa a requisição passar normalmente
+                executarPreload();
+            }
+        }
+        return NATIVE_FETCH(input, init);
+    };
+
+    window.XMLHttpRequest = function() {
+        const xhr = new REAL_XML_HTTP();
+        let _url = '';
+
+        const origOpen = xhr.open;
+        xhr.open = function() {
+            _url = arguments[1];
+            return origOpen.apply(this, arguments);
+        };
+
+        const origSend = xhr.send;
+        xhr.send = function() {
+            if (_url && _url.includes(TARGET_PATH) && memMaster.length > 0) {
+                try {
+                    const term = new URL(_url, location.origin).searchParams.get('Filtro') || '';
+                    const res = normalizar(term).split(/\s+/).filter(Boolean)
+                        .reduce((acc, t) => acc.filter(p => normalizar(p.Nome || p.text).includes(t)), memMaster);
+                    Object.defineProperty(this, 'readyState', { get: () => 4, configurable: true });
+                    Object.defineProperty(this, 'status', { get: () => 200, configurable: true });
+                    Object.defineProperty(this, 'responseText', { get: () => JSON.stringify(res), configurable: true });
+                    this.dispatchEvent(new Event('load'));
+                    return;
+                } catch (e) {
+                    console.warn("[HiperCache] Erro ao simular resposta, usando rede.");
+                }
+            }
+            return origSend.apply(this, arguments);
+        };
+
+        return xhr;
+    };
+
+    // ── 5. Listener de Mensagens ──────────────────────────────────────────────
     window.addEventListener('message', (ev) => {
         if (ev.source !== window) return;
+        const msg = ev.data;
 
-        msg = ev.data;
-        // A) Quando o banco de dados da extensão responde
+        // A) Banco de dados da extensão responde com tudo
         if (msg?.type === 'HIPER_CACHE_ALL') {
-            const entries = ev.data.entries || {};
-            
+            const entries = msg.entries || {};
+
             // Produtos
-            if (entries[MASTER_KEY]?.data) {
+            if (entries[MASTER_KEY]?.data?.length >= MIN_ITEMS_THRESHOLD) {
                 memMaster = entries[MASTER_KEY].data;
                 window.__hiperMaster = memMaster;
+                reconfigurarSelect2sExistentes();
+            } else {
+                executarPreload();
             }
 
-            // Custos (Lê o que está no banco físico)
+            // Custos (lê o que está no banco físico)
             Object.keys(entries).forEach(key => {
                 if (key.includes('custo:')) {
                     const id = key.split(':').pop();
@@ -56,7 +174,7 @@
                 }
             });
 
-            // Se for a primeira carga, verifica se precisa injetar os padrões
+            // Na primeira carga, verifica se precisa injetar os padrões
             if (!inicializado) {
                 aplicarCustosPadrao();
                 inicializado = true;
@@ -67,7 +185,7 @@
             window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
         }
 
-        // B) Quando o Orçamento salva um custo novo
+        // B) Orçamento salva um custo novo
         if (msg?.type === 'HIPER_CUSTO_SET') {
             const { id, val } = msg;
             if (id) {
@@ -76,11 +194,12 @@
             }
         }
 
-        // C) Quando o botão "Gerar Orçamento" pede os dados
+        // C) Botão "Gerar Orçamento" pede os dados
         if (msg?.type === 'HIPER_CUSTO_EXPORT_REQ') {
             window.postMessage({ type: 'HIPER_CUSTO_EXPORT_DATA', custos: window.__hiperCustos }, '*');
         }
 
+        // D) Sincronização de custo em memória
         if (msg?.type === 'HIPER_CUSTO_SYNC') {
             const { id, val } = msg;
             if (id != null) {
@@ -90,41 +209,23 @@
         }
     });
 
-    // ── 2. Interceptadores de Rede (Busca Instantânea) ───────────────────────
-    window.fetch = async function(input, init) {
-        const url = (typeof input === 'string') ? input : (input?.url ?? '');
-        if (url.includes(TARGET_PATH) && memMaster.length > 0) {
-            try {
-                const term = new URL(url, location.origin).searchParams.get('Filtro') || '';
-                const res = normalizar(term).split(/\s+/).filter(Boolean).reduce((acc, t) => acc.filter(p => normalizar(p.Nome||p.text).includes(t)), memMaster);
-                return new Response(JSON.stringify(res), { status: 200, headers: {'Content-Type':'application/json'} });
-            } catch(e) {}
-        }
-        return NATIVE_FETCH(input, init);
-    };
-
-    window.XMLHttpRequest = function() {
-        const xhr = new REAL_XML_HTTP();
-        let _url = '';
-        const origOpen = xhr.open;
-        xhr.open = function() { _url = arguments[1]; return origOpen.apply(this, arguments); };
-        const origSend = xhr.send;
-        xhr.send = function() {
-            if (_url && _url.includes(TARGET_PATH) && memMaster.length > 0) {
-                const term = new URL(_url, location.origin).searchParams.get('Filtro') || '';
-                const res = normalizar(term).split(/\s+/).filter(Boolean).reduce((acc, t) => acc.filter(p => normalizar(p.Nome||p.text).includes(t)), memMaster);
-                Object.defineProperty(this, 'readyState', { get: () => 4, configurable: true });
-                Object.defineProperty(this, 'status', { get: () => 200, configurable: true });
-                Object.defineProperty(this, 'responseText', { get: () => JSON.stringify(res), configurable: true });
-                this.dispatchEvent(new Event('load'));
-                return;
-            }
-            return origSend.apply(this, arguments);
-        };
-        return xhr;
-    };
-
-    // ── 3. Inicialização ─────────────────────────────────────────────────────
+    // ── 6. Inicialização ──────────────────────────────────────────────────────
     window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
+    window.postMessage({ type: 'HIPER_CUSTO_LOAD_ALL' }, '*');
+
+    // MutationObserver: re-otimiza Select2 ao navegar para pedido-venda
+    const iniciarObserver = () => {
+        if (document.body) {
+            new MutationObserver(() => {
+                if (location.hash.includes('pedido-venda')) reconfigurarSelect2sExistentes();
+            }).observe(document.body, { childList: true, subtree: true });
+        } else {
+            setTimeout(iniciarObserver, 100);
+        }
+    };
+    iniciarObserver();
+
+    // Fallback: se após 3s o cache ainda estiver vazio, força o preload
+    setTimeout(() => { if (memMaster.length < MIN_ITEMS_THRESHOLD) executarPreload(); }, 3000);
 
 })();

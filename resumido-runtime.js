@@ -5,16 +5,13 @@ window.RESUMIDO_RUNTIME_SRC = `// ═══════════════�
 //
 // ATENÇÃO: Este arquivo NÃO é carregado diretamente pelo browser como <script>.
 // Ele é lido em tempo de build (por resumido-gerador.js) e embutido como string
-// dentro do HTML do orçamento. Por isso:
+// dentro do HTML do orçamento.
 //
-//  • Não use template literals (backticks) — eles complicam a serialização.
-//  • Não use </script> em nenhum comentário ou string.
 //  • Funções aqui dependem de _KI, _PIX, _SOMA_PESO, _NR injetados pelo gerador.
+//  • Variáveis MO: _MO_IMPOSTO, _MO_LUCRO, _MO_ATIVA, _MO_AGRUPAR
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/* globals _KI, _PIX, _SOMA_PESO, _NR */
-
-// ── Helpers básicos ───────────────────────────────────────────────────────────
+/* globals _KI, _PIX, _SOMA_PESO, _NR, _MO_IMPOSTO, _MO_LUCRO, _MO_ATIVA, _MO_AGRUPAR */
 
 function el(id) { return document.getElementById(id); }
 
@@ -31,12 +28,37 @@ function getFrete() {
   return el('chkE') && el('chkE').checked ? numEl('iE') : 0;
 }
 
-// ── Atualização de labels ─────────────────────────────────────────────────────
+// ── Cálculo MO: venda = custo / (1 - imposto/100 - lucro/100) ────────────────
+function calcVendaMo(custoBase, impostoNF, lucroMeta) {
+  var div = 1 - impostoNF / 100 - lucroMeta / 100;
+  if (div <= 0) return 0;
+  return custoBase / div;
+}
+
+function getMoBase(i) {
+  return numEl('mobase-' + i) || 0;
+}
+
+function atualizarLabelMo(i) {
+  var base  = getMoBase(i);
+  var imp   = numEl('cfgImposto');
+  var lucro = numEl('cfgLucro');
+  if (!imp)   imp   = _MO_IMPOSTO;
+  if (!lucro) lucro = _MO_LUCRO;
+  var venda = calcVendaMo(base, imp, lucro);
+  var lbl = el('mo-venda-' + i);
+  if (lbl) lbl.textContent = 'Venda: R$ ' + fN(venda);
+}
+
+function getUnid(i) {
+  var e2 = el('und-' + i);
+  return e2 ? (e2.textContent || e2.innerText || 'm\u00b2').trim() : 'm\u00b2';
+}
 
 function atualizarLblParc() {
   var p = parseInt((el('selParcelas') && el('selParcelas').value) || '3');
   if (el('lblParc')) {
-    el('lblParc').textContent = 'Valor Total \\u2013 Parcelado em at\\u00e9 ' + p + 'x no Cart\\u00e3o de Cr\\u00e9dito';
+    el('lblParc').textContent = 'Valor Total \u2013 Parcelado em at\u00e9 ' + p + 'x no Cart\u00e3o de Cr\u00e9dito';
   }
 }
 
@@ -52,7 +74,7 @@ function atualizarDescricoes() {
     var area  = numEl('area-' + i);
     var tcKit = numEl('totc-' + i);
     var m2c   = area > 0 ? tcKit / area : 0;
-    var unid  = kit.nome === 'cortineiro' ? 'ml' : 'm\\u00b2';
+    var unid  = getUnid(i);
     var c2 = el('lm2c-' + i);
     var v2 = el('lm2v-' + i);
     if (c2) c2.textContent = 'R$ ' + fN(m2c) + '/' + unid;
@@ -61,60 +83,240 @@ function atualizarDescricoes() {
 }
 
 function atualizarTotaisGlobais() {
-  var s = 0;
-  _KI.forEach(function(_, i) { s += numEl('totc-' + i); });
-  var tc = s + getFrete();
-  var tv = tc * _PIX;
-  var fr = getFrete();
-  if (el('valC')) { el('valC').value = tc.toFixed(2); }
-  if (el('valV')) { el('valV').value = tv.toFixed(2); }
-  if (el('valC-p')) el('valC-p').textContent = fN(tc);
-  if (el('valV-p')) el('valV-p').textContent = fN(tv);
-  if (el('rowE'))   el('rowE').style.display = (el('chkE') && el('chkE').checked) ? 'flex' : 'none';
-  if (el('valEntrega')) el('valEntrega').textContent = 'R$ ' + fN(fr);
-  atualizarLblParc();
+  atualizarTotaisGlobaisComMo();
+  atualizarDescricoes();
 }
 
-// ── Handlers de edição na tabela ─────────────────────────────────────────────
-
-// Usuário mudou ÁREA → recalcula R$/m² mantendo o total do kit fixo
 function onArea(i) {
   var area  = numEl('area-' + i);
   var tcKit = numEl('totc-' + i);
-  if (area > 0 && el('m2c-' + i)) {
-    el('m2c-' + i).value = (tcKit / area).toFixed(2);
-  }
+  if (area > 0 && el('m2c-' + i)) el('m2c-' + i).value = (tcKit / area).toFixed(2);
+  if (_MO_ATIVA && !_MO_AGRUPAR) atualizarLinhaMoDesagrupada(i);
   atualizarDescricoes();
   atualizarTotaisGlobais();
 }
 
-// Usuário mudou R$/m² → recalcula total do kit (área fica fixa)
 function onM2(i) {
   var area  = numEl('area-' + i);
   var m2c   = numEl('m2c-' + i);
-  var tcKit = area * m2c;
-  if (el('totc-' + i)) el('totc-' + i).value = tcKit.toFixed(2);
+  if (el('totc-' + i)) el('totc-' + i).value = (area * m2c).toFixed(2);
   atualizarDescricoes();
   atualizarTotaisGlobais();
 }
 
-// Usuário mudou TOTAL do kit → recalcula R$/m² (área fica fixa)
 function onTotKit(i) {
   var area  = numEl('area-' + i);
   var tcKit = numEl('totc-' + i);
-  if (area > 0 && el('m2c-' + i)) {
-    el('m2c-' + i).value = (tcKit / area).toFixed(2);
-  }
+  if (area > 0 && el('m2c-' + i)) el('m2c-' + i).value = (tcKit / area).toFixed(2);
   atualizarDescricoes();
   atualizarTotaisGlobais();
 }
 
-// ── Handlers dos totais globais ───────────────────────────────────────────────
+// ── Handlers MO ──────────────────────────────────────────────────────────────
 
-// Usuário mudou o TOTAL CARTÃO global → distribui pelos kits com pesos
+function onMoBase(i) {
+  atualizarLabelMo(i);
+  if (_MO_ATIVA && !_MO_AGRUPAR) atualizarLinhaMoDesagrupada(i);
+}
+
+function onMoM2(i) {
+  var area  = numEl('area-' + i);
+  var m2    = numEl('mo-m2c-' + i);
+  if (el('mo-totc-' + i)) el('mo-totc-' + i).value = (area * m2).toFixed(2);
+  var imp   = numEl('cfgImposto') || _MO_IMPOSTO;
+  var lucro = numEl('cfgLucro')   || _MO_LUCRO;
+  var fator = 1 - imp / 100 - lucro / 100;
+  if (el('mobase-' + i)) el('mobase-' + i).value = Math.max(0, m2 * fator).toFixed(2);
+  atualizarLabelMo(i);
+  // Atualiza labels R$/m² na linha MO desagrupada
+  var unid = getUnid(i);
+  if (el('mo-lm2c-' + i)) el('mo-lm2c-' + i).textContent = 'R$ ' + fN(m2) + '/' + unid;
+  if (el('mo-lm2v-' + i)) el('mo-lm2v-' + i).textContent = 'R$ ' + fN(m2 * _PIX) + '/' + unid;
+  atualizarTotaisGlobaisComMo();
+}
+
+function onMoTotc(i) {
+  var area  = numEl('area-' + i);
+  var tot   = numEl('mo-totc-' + i);
+  var m2    = area > 0 ? tot / area : 0;
+  if (el('mo-m2c-' + i)) el('mo-m2c-' + i).value = m2.toFixed(2);
+  var imp   = numEl('cfgImposto') || _MO_IMPOSTO;
+  var lucro = numEl('cfgLucro')   || _MO_LUCRO;
+  var fator = 1 - imp / 100 - lucro / 100;
+  if (el('mobase-' + i)) el('mobase-' + i).value = Math.max(0, m2 * fator).toFixed(2);
+  atualizarLabelMo(i);
+  // Atualiza labels R$/m² na linha MO desagrupada
+  var unid = getUnid(i);
+  if (el('mo-lm2c-' + i)) el('mo-lm2c-' + i).textContent = 'R$ ' + fN(m2) + '/' + unid;
+  if (el('mo-lm2v-' + i)) el('mo-lm2v-' + i).textContent = 'R$ ' + fN(m2 * _PIX) + '/' + unid;
+  atualizarTotaisGlobaisComMo();
+}
+
+function atualizarLinhaMoDesagrupada(i) {
+  var area  = numEl('area-' + i);
+  var base  = getMoBase(i);
+  var imp   = numEl('cfgImposto') || _MO_IMPOSTO;
+  var lucro = numEl('cfgLucro')   || _MO_LUCRO;
+  var venda = calcVendaMo(base, imp, lucro);
+  if (el('mo-m2c-'  + i)) el('mo-m2c-'  + i).value = venda.toFixed(2);
+  if (el('mo-totc-' + i)) el('mo-totc-' + i).value = (area * venda).toFixed(2);
+}
+
+function onCfgMO() {
+  _MO_IMPOSTO = numEl('cfgImposto') || 13.53;
+  _MO_LUCRO   = numEl('cfgLucro')   || 20;
+  _KI.forEach(function(_, i) {
+    atualizarLabelMo(i);
+    if (_MO_ATIVA && !_MO_AGRUPAR) atualizarLinhaMoDesagrupada(i);
+  });
+}
+
+function onToggleMO() {
+  _MO_ATIVA = !!(el('chkMO') && el('chkMO').checked);
+  aplicarMO();
+}
+
+function onToggleAgrupar() {
+  _MO_AGRUPAR = !!(el('chkAgrupar') && el('chkAgrupar').checked);
+  aplicarMO();
+}
+
+function aplicarMO() {
+  var tbody = el('tblBody');
+  if (!tbody) return;
+  // Remove linhas MO extras
+  var extras = tbody.querySelectorAll('.row-mo');
+  extras.forEach(function(r) { r.parentNode.removeChild(r); });
+
+  // Captura snapshot das linhas de kit ANTES do loop para que inserções
+  // de .row-mo não deslocarem os índices nas iterações seguintes.
+  var linhasSnapshot = tbody.querySelectorAll('tr:not(.row-mo)');
+
+  _KI.forEach(function(kit, i) {
+    var imp   = numEl('cfgImposto') || _MO_IMPOSTO;
+    var lucro = numEl('cfgLucro')   || _MO_LUCRO;
+    var base  = getMoBase(i);
+    var venda = calcVendaMo(base, imp, lucro);
+    var area  = numEl('area-' + i);
+    var tot   = area * venda;
+    var unid  = getUnid(i);
+    var nomeEl2 = el('nomeLabel-' + i);
+    var descEl  = el('desc-' + i);
+
+    if (_MO_ATIVA) {
+      if (_MO_AGRUPAR) {
+        // Agrupado: muda texto e soma MO ao total do kit
+        if (nomeEl2) nomeEl2.textContent = 'Fornecimento e instalação \u2013 ' + kit.nomeLabel;
+        if (descEl) {
+          if (descEl.dataset.textoOrig === undefined) descEl.dataset.textoOrig = descEl.innerHTML;
+          descEl.innerHTML = descEl.dataset.textoOrig.replace(/^Fornecimento de /i, 'Fornecimento e instalação de ');
+        }
+        // Soma MO ao total do kit e atualiza R$/m²
+        var trcEl = el('totc-' + i);
+        // Salva total original de material (sem MO) para poder desfazer
+        if (trcEl && trcEl.dataset.totalMat === undefined) trcEl.dataset.totalMat = (numEl('totc-' + i)).toFixed(2);
+        var totalComMo = parseFloat(trcEl.dataset.totalMat) + tot;
+        if (trcEl) trcEl.value = totalComMo.toFixed(2);
+        if (area > 0 && el('m2c-' + i)) el('m2c-' + i).value = (totalComMo / area).toFixed(2);
+      } else {
+        // Desagrupado: linha principal volta ao total apenas de material
+        if (nomeEl2) nomeEl2.textContent = kit.nomeLabel;
+        if (descEl && descEl.dataset.textoOrig !== undefined) descEl.innerHTML = descEl.dataset.textoOrig;
+        // Restaura total de material (sem MO)
+        var trcEl2 = el('totc-' + i);
+        if (trcEl2 && trcEl2.dataset.totalMat !== undefined) {
+          trcEl2.value = trcEl2.dataset.totalMat;
+          if (area > 0 && el('m2c-' + i)) el('m2c-' + i).value = (parseFloat(trcEl2.dataset.totalMat) / area).toFixed(2);
+        }
+        // Insere linha MO extra usando o snapshot capturado antes do loop
+        if (linhasSnapshot[i]) {
+          var tipoNome = kit.nomeLabel;
+          var moDescTexto = 'Serviço de instalação (Mão de obra especializada) de ' + tipoNome +
+            ' \u2013 com nota fiscal de prestação de serviços = Conferindo Garantia.';
+          var tr2 = document.createElement('tr');
+          tr2.className = 'row-mo';
+          tr2.innerHTML =
+            '<td style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;color:#7a3a00">' + (i + 1) + '</td>' +
+            '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
+              '<span style="font-size:9pt;font-weight:bold;color:#7a3a00">' + fN(area) + '</span>' +
+            '</td>' +
+            '<td style="text-align:center;border:1px solid #000;padding:3px 4px;font-size:9pt;font-weight:bold;color:#7a3a00">' + unid + '</td>' +
+            '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
+              '<div style="font-weight:bold;margin-bottom:3px;color:#7a3a00" contenteditable="true" ' +
+                'onfocus="this.style.background=\\'#fff3cd\\'" onblur="this.style.background=\\'\\'">Instala\u00e7\u00e3o \u2013 ' + tipoNome + '</div>' +
+              '<div contenteditable="true" style="font-size:8.5pt;color:#a05000;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+                'onfocus="this.style.background=\\'#fff3cd\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
+                'onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">' + moDescTexto + '</div>' +
+              '<div style="margin-top:5px;font-size:8pt;color:#555;display:flex;gap:12px;flex-wrap:wrap">' +
+                '<span>Cart\u00e3o: <strong id="mo-lm2c-' + i + '">R$ ' + fN(venda) + '/' + unid + '</strong></span>' +
+                '<span>\u00c0 vista: <strong id="mo-lm2v-' + i + '">R$ ' + fN(venda * _PIX) + '/' + unid + '</strong></span>' +
+              '</div>' +
+            '</td>' +
+            '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
+              '<input id="mo-m2c-' + i + '" type="number" min="0" step="0.01" value="' + venda.toFixed(2) + '"' +
+              ' style="width:70px;border:none;background:#fff8f0;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#7a3a00"' +
+              ' oninput="onMoM2(' + i + ')">' +
+            '</td>' +
+            '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
+              '<input id="mo-totc-' + i + '" type="number" min="0" step="0.01" value="' + tot.toFixed(2) + '"' +
+              ' style="width:74px;border:none;background:#fff8f0;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#7a3a00"' +
+              ' oninput="onMoTotc(' + i + ')">' +
+            '</td>' +
+            '<td class="col-mo-base no-print" style="border:1px solid #000;padding:3px 6px;background:#fff8f0;text-align:center">' +
+              '<span style="font-size:8pt;color:#aaa">\u2014</span>' +
+            '</td>';
+          linhasSnapshot[i].parentNode.insertBefore(tr2, linhasSnapshot[i].nextSibling);
+        }
+      }
+    } else {
+      // MO desativada: restaura tudo ao original
+      if (nomeEl2) nomeEl2.textContent = kit.nomeLabel;
+      if (descEl && descEl.dataset.textoOrig !== undefined) descEl.innerHTML = descEl.dataset.textoOrig;
+      // Restaura total de material (sem MO)
+      var trcEl3 = el('totc-' + i);
+      if (trcEl3 && trcEl3.dataset.totalMat !== undefined) {
+        trcEl3.value = trcEl3.dataset.totalMat;
+        delete trcEl3.dataset.totalMat;
+        if (area > 0 && el('m2c-' + i)) el('m2c-' + i).value = (parseFloat(trcEl3.value) / area).toFixed(2);
+      }
+    }
+  });
+  // Recalcula totais globais após qualquer mudança de MO
+  atualizarTotaisGlobaisComMo();
+}
+
+// ── Totais globais (inclui linhas MO desagrupadas) ────────────────────────────
+
+function atualizarTotaisGlobaisComMo() {
+  var s = 0;
+  _KI.forEach(function(_, i) { s += numEl('totc-' + i); });
+  // Soma linhas MO desagrupadas
+  _KI.forEach(function(_, i) {
+    var moTot = el('mo-totc-' + i);
+    if (moTot) s += parseFloat(moTot.value) || 0;
+  });
+  // Soma linhas personalizadas
+  var customs = document.querySelectorAll('.row-custom');
+  customs.forEach(function(r) {
+    var totEl = r.querySelector('.custom-totc');
+    if (totEl) s += parseFloat(totEl.value) || 0;
+  });
+  var tc = s + getFrete();
+  var tv = tc * _PIX;
+  if (el('valC')) el('valC').value = tc.toFixed(2);
+  if (el('valV')) el('valV').value = tv.toFixed(2);
+  if (el('valC-p')) el('valC-p').textContent = fN(tc);
+  if (el('valV-p')) el('valV-p').textContent = fN(tv);
+  if (el('rowE')) el('rowE').style.display = (el('chkE') && el('chkE').checked) ? 'flex' : 'none';
+  if (el('valEntrega')) el('valEntrega').textContent = 'R$ ' + fN(getFrete());
+  atualizarLblParc();
+}
+
+// ── Totais globais ────────────────────────────────────────────────────────────
+
 function onValC() {
-  var novoTc = numEl('valC');
-  var fr     = getFrete();
+  var novoTc   = numEl('valC');
+  var fr       = getFrete();
   var paraKits = Math.max(0, novoTc - fr);
   _KI.forEach(function(kit, i) {
     var peso  = kit.custoRelativo / _SOMA_PESO;
@@ -132,14 +334,13 @@ function onValC() {
   atualizarLblParc();
 }
 
-// Usuário mudou o TOTAL À VISTA → converte para cartão e redistribui
 function onValV() {
   var novoTv = numEl('valV');
   var novoTc = novoTv / _PIX;
   if (el('valC'))   el('valC').value   = novoTc.toFixed(2);
   if (el('valC-p')) el('valC-p').textContent = fN(novoTc);
   if (el('valV-p')) el('valV-p').textContent = fN(novoTv);
-  var fr = getFrete();
+  var fr       = getFrete();
   var paraKits = Math.max(0, novoTc - fr);
   _KI.forEach(function(kit, i) {
     var peso  = kit.custoRelativo / _SOMA_PESO;
@@ -153,26 +354,90 @@ function onValV() {
   atualizarLblParc();
 }
 
-// Entrega ou seletor de parcelas mudou → recalcula totais globais mantendo os kits
 function recalcTotais() {
-  var totalItens = _KI.reduce(function(acc, _, i) { return acc + numEl('totc-' + i); }, 0);
-  var novoTc     = totalItens + getFrete();
-  if (el('valC')) el('valC').value = novoTc.toFixed(2);
-  if (el('valV')) el('valV').value = (novoTc * _PIX).toFixed(2);
-  if (el('rowE')) el('rowE').style.display = (el('chkE') && el('chkE').checked) ? 'flex' : 'none';
-  if (el('valEntrega')) el('valEntrega').textContent = 'R$ ' + fN(getFrete());
+  atualizarTotaisGlobaisComMo();
   sincronizarLabelsPrint();
   atualizarLblParc();
 }
 
-// ── Congelar select no clone (para PDF/imagem) ────────────────────────────────
-// FIX: usa atributo data-val para evitar aspas aninhadas no querySelector
+// ── Linhas personalizadas ─────────────────────────────────────────────────────
+var _customCount = 0;
+
+function adicionarLinhaCustom() {
+  var tbody = el('tblBody');
+  if (!tbody) return;
+  var idx = _customCount++;
+  var tr = document.createElement('tr');
+  tr.className = 'row-custom';
+  tr.dataset.customIdx = idx;
+  tr.innerHTML =
+    '<td style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;color:#1a5c8a"></td>' +
+    '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
+      '<input type="number" min="0" step="0.01" value="0" class="custom-area"' +
+      ' style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+      ' oninput="onCustomArea(this)" title="Editar área">' +
+    '</td>' +
+    '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
+      '<span contenteditable="true" style="font-size:9pt;font-weight:bold;outline:none;cursor:text;display:inline-block;min-width:20px;border-radius:2px;padding:1px 2px"' +
+      ' onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'"' +
+      ' onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">m\u00b2</span>' +
+    '</td>' +
+    '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
+      '<div contenteditable="true" style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px;color:#1a3a6a"' +
+      ' onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'"' +
+      ' onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">T\u00edtulo do item</div>' +
+      '<div contenteditable="true" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px"' +
+      ' onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'"' +
+      ' onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">Descri\u00e7\u00e3o do item</div>' +
+    '</td>' +
+    '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
+      '<input type="number" min="0" step="0.01" value="0" class="custom-m2c"' +
+      ' style="width:70px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+      ' oninput="onCustomM2(this)" title="Editar R$/m\u00b2">' +
+    '</td>' +
+    '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
+      '<input type="number" min="0" step="0.01" value="0" class="custom-totc"' +
+      ' style="width:74px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+      ' oninput="atualizarTotaisGlobaisComMo()" title="Editar total">' +
+    '</td>' +
+    '<td class="col-mo-base no-print" style="border:1px solid #000;padding:3px 6px;text-align:center">' +
+      '<button onclick="removerLinhaCustom(this)" style="border:none;background:#e55;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">\u2715</button>' +
+    '</td>';
+  tbody.appendChild(tr);
+  atualizarTotaisGlobaisComMo();
+}
+
+function removerLinhaCustom(btn) {
+  var tr = btn.closest('tr');
+  if (tr) { tr.parentNode.removeChild(tr); atualizarTotaisGlobaisComMo(); }
+}
+
+function onCustomArea(inp) {
+  var tr   = inp.closest('tr');
+  var area = parseFloat(inp.value) || 0;
+  var m2El = tr.querySelector('.custom-m2c');
+  var totEl = tr.querySelector('.custom-totc');
+  var m2   = parseFloat(m2El && m2El.value) || 0;
+  if (totEl) totEl.value = (area * m2).toFixed(2);
+  atualizarTotaisGlobaisComMo();
+}
+
+function onCustomM2(inp) {
+  var tr   = inp.closest('tr');
+  var m2   = parseFloat(inp.value) || 0;
+  var areaEl = tr.querySelector('.custom-area');
+  var totEl  = tr.querySelector('.custom-totc');
+  var area = parseFloat(areaEl && areaEl.value) || 0;
+  if (totEl) totEl.value = (area * m2).toFixed(2);
+  atualizarTotaisGlobaisComMo();
+}
+
+// ── Clone helpers ─────────────────────────────────────────────────────────────
 function congelarSelectEmClone(clone) {
   var selectOriginal = document.querySelector('.page select');
   var selectNoClone  = clone.querySelector('select');
   if (!selectOriginal || !selectNoClone) return;
-  var val = selectOriginal.value;
-  // Itera as options em vez de usar querySelector com atributo interpolado
+  var val     = selectOriginal.value;
   var options = selectNoClone.querySelectorAll('option');
   for (var i = 0; i < options.length; i++) {
     if (options[i].value === val) {
@@ -183,12 +448,12 @@ function congelarSelectEmClone(clone) {
   }
 }
 
-// ── Copiar imagem para clipboard ──────────────────────────────────────────────
+// ── Copiar imagem ─────────────────────────────────────────────────────────────
 async function copiarImagem() {
   var btn = el('btnCopy');
   btn.disabled = true;
   btn.textContent = '\\u23F3 Gerando imagem...';
-  var MARGEM = 24;
+  var MARGEM  = 24;
   var ocultar = document.querySelectorAll('.no-print');
   ocultar.forEach(function(e) { e.dataset.prevDisplay = e.style.display; e.style.display = 'none'; });
   var page    = document.querySelector('.page');
@@ -228,7 +493,7 @@ async function copiarImagem() {
         }, 3000);
       } catch (clipErr) {
         var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
+        var a   = document.createElement('a');
         a.href = url; a.download = 'resumido.png';
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(function() { URL.revokeObjectURL(url); }, 5000);
@@ -269,20 +534,20 @@ async function baixarPdf() {
   document.body.appendChild(wrapper);
   await new Promise(function(r) { setTimeout(r, 150); });
   try {
-    var SCALE = 2;
+    var SCALE  = 2;
     var canvas = await html2canvas(wrapper, {
       scale: SCALE, useCORS: true, backgroundColor: '#ffffff', logging: false,
       width: wrapper.offsetWidth, height: wrapper.offsetHeight, windowWidth: wrapper.offsetWidth,
     });
     document.body.removeChild(wrapper);
     ocultar.forEach(function(e) { e.style.display = e.dataset.prevDisplay || ''; });
-    var jsPDF  = window.jspdf.jsPDF;
-    var iW     = (canvas.width  / SCALE) / M2P;
-    var iH     = (canvas.height / SCALE) / M2P;
-    var r      = (A4W - MG * 2) / iW;
-    var fW     = iW * r, fH = iH * r;
-    var pH     = fH <= (A4H - MG * 2) ? A4H : fH + MG * 2;
-    var pdf    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [A4W, pH] });
+    var jsPDF = window.jspdf.jsPDF;
+    var iW    = (canvas.width  / SCALE) / M2P;
+    var iH    = (canvas.height / SCALE) / M2P;
+    var r     = (A4W - MG * 2) / iW;
+    var fW    = iW * r, fH = iH * r;
+    var pH    = fH <= (A4H - MG * 2) ? A4H : fH + MG * 2;
+    var pdf   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [A4W, pH] });
     pdf.addImage(canvas.toDataURL('image/png', 1.0), 'PNG', MG, MG, fW, fH, undefined, 'FAST');
     pdf.save('resumido-' + _NR + '-' + new Date().toISOString().slice(0, 10) + '.pdf');
     _pdfOK = true;

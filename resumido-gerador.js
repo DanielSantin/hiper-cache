@@ -45,7 +45,10 @@ function _resumido_css() {
     '.rodape .entrega{color:#c00;font-weight:bold;font-size:9pt;margin-top:3px}',
     '.panel{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;background:#f4f8ff;border:1px solid #b3d4f5}',
     '.panel h4{font-size:12px;font-weight:bold;color:#1a3a6a;margin-bottom:8px}',
-    '.prow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}',
+    '.panel-mo{background:#fff8f0;border-color:#f5c080}',
+    '.panel-mo h4{color:#7a3a00}',
+    '.prow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}',
+    '.prow:last-child{margin-bottom:0}',
     '.prow label{display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;white-space:nowrap}',
     '.prow input[type=number]{padding:3px 6px;border:1px solid #aaa;border-radius:4px;font-size:12px}',
     '.prow input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:#1a73e8}',
@@ -60,12 +63,21 @@ function _resumido_css() {
     '.pdf-badge{display:none;align-items:center;gap:6px;padding:4px 12px;background:#d4edda;border:1px solid #6dbf8a;border-radius:20px;font-size:12px;font-weight:bold;color:#1a5c1a}',
     '.pdf-badge.visible{display:flex}',
     '.resumido-tag{display:inline-block;background:#1a5c8a;color:#fff;font-size:8pt;font-weight:bold;padding:2px 6px;border-radius:3px;vertical-align:middle;margin-left:6px}',
+    /* MO column - hidden when printing */
+    '.col-mo-base{background:#fff8f0}',
+    '.mo-inp{width:62px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#7a3a00;cursor:text}',
+    '.mo-inp:focus{outline:1px solid #e8510a;background:#fff3e0;border-radius:2px;padding:0 2px}',
+    '.mo-tag{font-size:7.5pt;color:#e8510a;font-weight:bold;white-space:nowrap}',
+    '.tbl-mo-header{background:#ffe4b5!important}',
+    '.row-mo{background:#fff8f0}',
     '@media print{',
     '  .no-print{display:none!important}',
     '  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}',
     '  .page{max-width:210mm;padding:4mm 6mm}',
     '  .val-inp,.val-prefix{display:none!important}',
     '  .val-print{display:inline!important}',
+    '  .col-mo-base{display:none!important}',
+    '  .tbl-mo-header{display:none!important}',
     '}',
   ].join('\n');
 }
@@ -82,26 +94,34 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
     var area  = kit.A;
     var unid  = kit.nome === 'cortineiro' ? 'ml' : 'm\u00b2';
     var vlM2C = area > 0 ? tcKit / area : 0;
+    var moBase = kit.moBase !== undefined ? kit.moBase : 30;
     var texto = (RESUMIDO_TEXTOS[kit.nome] || {})[varianteTabica] || '';
 
-    return '<tr>' +
+    // Linha principal (material ou agrupado)
+    var tr = '<tr>' +
       '<td style="text-align:center;border:1px solid #000;padding:5px 6px;vertical-align:middle">' + (i + 1) + '</td>' +
       '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
         '<input id="area-' + i + '" type="number" min="0" step="0.01" value="' + area.toFixed(2) + '"' +
-        ' style="width:60px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+        ' style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
         ' oninput="onArea(' + i + ')" title="Editar \u00e1rea">' +
-        '<span style="font-size:8pt;color:#555"> ' + unid + '</span>' +
       '</td>' +
-      '<td style="text-align:center;border:1px solid #000;padding:5px 6px;vertical-align:middle">' + unid + '</td>' +
+      '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
+        '<span id="und-' + i + '" contenteditable="true" style="font-size:9pt;font-weight:bold;outline:none;cursor:text;display:inline-block;min-width:20px;border-radius:2px;padding:1px 2px"' +
+        ' onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'"' +
+        ' onblur="this.style.background=\'\';this.style.outline=\'none\'">' + unid + '</span>' +
+      '</td>' +
       '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
-        '<div style="font-weight:bold;margin-bottom:3px">' + kit.nomeLabel + '</div>' +
-        '<div contenteditable="true" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+        '<div contenteditable="true" id="nomeLabel-' + i + '" ' +
+        'style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+        'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
+        'onblur="this.style.background=\'\';this.style.outline=\'none\'">' + kit.nomeLabel + '</div>' +
+        '<div contenteditable="true" id="desc-' + i + '" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
         'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
         'onblur="this.style.background=\'\';this.style.outline=\'none\'" ' +
         'class="no-print-border">' + texto + '</div>' +
         '<div style="margin-top:5px;font-size:8pt;color:#555;display:flex;gap:12px;flex-wrap:wrap">' +
-          '<span>Cart\u00e3o: <strong id="lm2c-' + i + '">R$ ' + fmtN(vlM2C) + '/' + unid + '</strong></span>' +
-          '<span>\u00c0 vista: <strong id="lm2v-' + i + '">R$ ' + fmtN(vlM2C * PIX) + '/' + unid + '</strong></span>' +
+          '<span>Cart\u00e3o: <strong id="lm2c-' + i + '">R$ ' + fmtN(vlM2C) + '/<span class="lund-' + i + '">' + unid + '</span></strong></span>' +
+          '<span>\u00c0 vista: <strong id="lm2v-' + i + '">R$ ' + fmtN(vlM2C * PIX) + '/<span class="lund-' + i + '">' + unid + '</span></strong></span>' +
         '</div>' +
       '</td>' +
       '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
@@ -114,7 +134,15 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
         ' style="width:74px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
         ' oninput="onTotKit(' + i + ')" title="Editar total">' +
       '</td>' +
+      // Coluna MO Base (oculta na impressão)
+      '<td class="col-mo-base no-print" style="text-align:right;border:1px solid #000;padding:3px 6px;vertical-align:middle;min-width:90px">' +
+        '<input id="mobase-' + i + '" class="mo-inp" type="number" min="0" step="0.01" value="' + moBase.toFixed(2) + '"' +
+        ' oninput="onMoBase(' + i + ')" title="Custo base MO">' +
+        '<div class="mo-tag" id="mo-venda-' + i + '">Venda: R$ ' + fmtN(_calcVendaMo(moBase, 13.53, 20)) + '</div>' +
+      '</td>' +
       '</tr>';
+
+    return tr;
   }).join('');
 
   var vazias = Math.max(0, 4 - kitsInfo.length);
@@ -127,9 +155,19 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
       '<td style="border:1px solid #000"></td>' +
       '<td style="border:1px solid #000"></td>' +
       '<td style="border:1px solid #000"></td>' +
+      '<td class="col-mo-base no-print" style="border:1px solid #000"></td>' +
       '</tr>';
   }
   return linhas + linhasVazias;
+}
+
+// Fórmula: venda = custoBase / (1 - imposto% - lucro%)
+// Lucro = venda - custo - imposto*venda  =>  lucro% de venda = 1 - custo/venda - imposto%
+// Para lucroMeta% e impostoNF%: venda = custo / (1 - imposto/100 - lucroMeta/100)
+function _calcVendaMo(custoBase, impostoNF, lucroMeta) {
+  var div = 1 - impostoNF / 100 - lucroMeta / 100;
+  if (div <= 0) return 0;
+  return custoBase / div;
 }
 
 // ── Monta o bloco <script> embutido no HTML gerado ────────────────────────────
@@ -153,6 +191,11 @@ function _resumido_montarScript(kitsInfo, numeroOrcamento) {
     'var _KI        = ' + JSON.stringify(kitsInfo) + ';',
     'var _SOMA_PESO = ' + JSON.stringify(somaPeso) + ';',
     'var _pdfOK     = false;',
+    '// MO config (editável no painel)',
+    'var _MO_IMPOSTO = 13.53;  // % NF serviço',
+    'var _MO_LUCRO   = 20;     // % lucro desejado',
+    'var _MO_ATIVA   = false;  // checkbox incluir MO',
+    'var _MO_AGRUPAR = true;   // agrupar mat+MO na mesma linha',
     '',
     'window.addEventListener("beforeunload", function(e) {',
     '  if (_pdfOK) return;',
@@ -208,6 +251,31 @@ function resumido_gerarHtml(payload, opcoes) {
   var S = '<' + 'script';
   var E = '</' + 'script>';
 
+  // Painel de entrega + painel de MO
+  var panelEntrega = '<div class="panel no-print">\n' +
+    '<h4>\u2699\uFE0F Op\u00e7\u00f5es \u2014 <strong style="color:#1a5c1a">' + numeroOrcamento + '</strong> <span class="resumido-tag">RESUMIDO</span></h4>\n' +
+    '<div class="prow"><label>\n' +
+    '<input type="checkbox" id="chkE" onchange="recalcTotais()"' + (frete > 0 ? ' checked' : '') + '>\n' +
+    'Entrega R$ <input type="number" id="iE" value="' + (frete > 0 ? frete : 30) + '" min="0" step="0.01" style="width:72px" oninput="recalcTotais()">\n' +
+    '</label></div>\n</div>\n';
+
+  var panelMO = '<div class="panel panel-mo no-print">\n' +
+    '<h4>\uD83D\uDEE0\uFE0F M\u00e3o de Obra \u2014 configura\u00e7\u00e3o de servi\u00e7o</h4>\n' +
+    '<div class="prow">\n' +
+    '<label><input type="checkbox" id="chkMO" onchange="onToggleMO()"> Incluir m\u00e3o de obra</label>\n' +
+    '<label><input type="checkbox" id="chkAgrupar" checked onchange="onToggleAgrupar()"> Agrupar (mat. + MO juntos)</label>\n' +
+    '</div>\n' +
+    '<div class="prow">\n' +
+    '<label>Imposto NF servi\u00e7o: <input type="number" id="cfgImposto" value="13.53" min="0" max="100" step="0.01" style="width:64px" oninput="onCfgMO()"> %</label>\n' +
+    '<label>Lucro servi\u00e7o: <input type="number" id="cfgLucro" value="20" min="0" max="100" step="0.01" style="width:56px" oninput="onCfgMO()"> %</label>\n' +
+    '<span style="font-size:11px;color:#888">\u2192 Custo base configur\u00e1vel por item na coluna laranja (oculta na impress\u00e3o)</span>\n' +
+    '</div>\n' +
+    '<div class="prow">\n' +
+    '<button onclick="adicionarLinhaCustom()" style="padding:5px 14px;border:none;border-radius:5px;background:#1a5c8a;color:#fff;font-size:12px;font-weight:bold;cursor:pointer">+ Adicionar linha</button>\n' +
+    '<span style="font-size:11px;color:#888">Adiciona um item edit\u00e1vel em branco na tabela</span>\n' +
+    '</div>\n' +
+    '</div>\n';
+
   return '<!DOCTYPE html>\n' +
     '<html lang="pt-BR">\n' +
     '<head>\n' +
@@ -226,13 +294,8 @@ function resumido_gerarHtml(payload, opcoes) {
     '<div class="pdf-badge" id="pdfBadge">\u2705 PDF baixado</div>\n' +
     '</div>\n' +
 
-    '<div class="panel no-print">\n' +
-    '<h4>\u2699\uFE0F Op\u00e7\u00f5es \u2014 <strong style="color:#1a5c1a">' + numeroOrcamento + '</strong> <span class="resumido-tag">RESUMIDO</span></h4>\n' +
-    '<div class="prow"><label>\n' +
-    '<input type="checkbox" id="chkE" onchange="recalcTotais()"' + (frete > 0 ? ' checked' : '') + '>\n' +
-    'Entrega R$ <input type="number" id="iE" value="' + (frete > 0 ? frete : 30) + '" min="0" step="0.01" style="width:72px" oninput="recalcTotais()">\n' +
-    '</label></div>\n</div>\n' +
-
+    panelEntrega +
+    panelMO +
     avisoHtml + '\n' +
 
     '<div class="header">\n' +
@@ -247,11 +310,12 @@ function resumido_gerarHtml(payload, opcoes) {
 
     '<table class="tbl"><thead><tr>\n' +
     '<th style="width:28px">ITEM</th>\n' +
-    '<th style="width:80px">\u00c1REA</th>\n' +
-    '<th style="width:32px">UND</th>\n' +
+    '<th style="width:76px">\u00c1REA</th>\n' +
+    '<th style="width:36px">UND</th>\n' +
     '<th>DESCRI\u00c7\u00c3O</th>\n' +
     '<th style="width:84px">R$/M\u00b2</th>\n' +
     '<th style="width:90px">VL TOTAL</th>\n' +
+    '<th class="col-mo-base tbl-mo-header no-print" style="width:96px">\uD83D\uDEE0\uFE0F CUSTO BASE MO</th>\n' +
     '</tr></thead>\n' +
     '<tbody id="tblBody">' + corpoTabela + '</tbody>\n' +
     '</table>\n' +
@@ -373,6 +437,7 @@ function abrirOrcamentoResumido() {
       A: k.A, P: k.P, cant: k.cant,
       custoRelativo: custoPorKit[k.nome],
       totalCartao: (custoPorKit[k.nome] / somaC) * totalCartaoBase,
+      moBase: (typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30,
     };
   });
   var clienteEl = document.getElementById('iCliente');
@@ -425,6 +490,7 @@ function abrirOrcamentoResumido() {
           A: k.A, P: k.P, cant: k.cant,
           custoRelativo: custoPorKit[k.nome],
           totalCartao: (custoPorKit[k.nome] / somaC) * totalBase,
+          moBase: (typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30,
         };
       });
       var clienteEl = document.getElementById('iCliente');

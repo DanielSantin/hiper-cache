@@ -35,6 +35,14 @@ const RESUMIDO_NOMES = {
 const COD_TABICA_BRANCA  = '3006';
 const COD_TABICA_NATURAL = '3010';
 
+// Custo base de mão de obra por tipo de kit (R$/m² ou R$/ml)
+const RESUMIDO_MO_BASE = {
+  estruturado: 30,
+  aramado:     30,
+  paredes:     25,
+  cortineiro:  25,
+};
+
 // Detecta qual variante de tabica está no orçamento: branca | natural | misto
 function resumido_detectarTabica(itens) {
   const temB = itens.some(it => it.idProduto === COD_TABICA_BRANCA);
