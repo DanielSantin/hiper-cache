@@ -302,7 +302,7 @@ function resumido_gerarHtml(payload, opcoes) {
     '<div class="header-logo"><div class="tag-txt">TAG</div><div class="orc-num">' + numeroOrcamento + '</div></div>\n' +
     '<div class="hdr-emp">\n' +
     '<div class="nome">Com\u00e9rcio e Serv. Gesso Acartonado Ltda</div>\n' +
-    '<div class="sub">Or\u00e7amento gerado em ' + dataHoje + ' <span class="resumido-tag">RESUMIDO</span></div>\n' +
+    '<div class="sub">Or\u00e7amento gerado em ' + dataHoje + ' </div>\n' +
     clienteDiv + '\n' + vendedorDiv + '\n' +
     '</div>\n' +
     '<div class="hdr-trevo"><img src="' + LOGO + '" width="64" height="64" style="object-fit:contain" alt="Trevo"></div>\n' +

@@ -717,22 +717,31 @@ async function copiarImagem() {
   const btn = el('btnCopy');
   btn.disabled = true;
   btn.textContent = '⏳ Gerando imagem...';
-  const MARGEM = 24;
+  const MARGEM = 2;
+  const A4_MM_W = 210, MARGIN_MM = 8;
+  const MM_TO_PX = 3.7795275591;
+  const A4_PX_W  = Math.round(A4_MM_W * MM_TO_PX);
   const ocultar = document.querySelectorAll('.no-print, .margem-box');
   ocultar.forEach(e => { e.dataset.prevDisplay = e.style.display; e.style.display = 'none'; });
   const page    = document.querySelector('.page');
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'background:transparent;display:inline-block;width:' + page.offsetWidth + 'px';
+  wrapper.style.cssText = [
+    'position:fixed','top:0','left:-9999px','background:#fff',
+    'width:'+A4_PX_W+'px',
+    'padding:'+Math.round(MARGIN_MM*MM_TO_PX)+'px',
+    'box-sizing:border-box',
+  ].join(';');
   const clone = page.cloneNode(true);
-  clone.style.padding = '0';
+  clone.style.cssText = 'width:100%;max-width:none;padding:0;margin:0';
   clone.querySelectorAll('.no-print, .margem-box').forEach(e => e.remove());
   congelarSelectEmClone(clone);
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
+  await new Promise(r => setTimeout(r, 150));
   try {
     const inner = await html2canvas(wrapper, {
       scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
-      width: wrapper.offsetWidth, height: wrapper.offsetHeight,
+      width: wrapper.offsetWidth, height: wrapper.offsetHeight, windowWidth: wrapper.offsetWidth,
     });
     document.body.removeChild(wrapper);
     ocultar.forEach(e => { e.style.display = e.dataset.prevDisplay || ''; });
