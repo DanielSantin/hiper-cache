@@ -2,7 +2,7 @@
     const TARGET_PATH = '/produtos/GetSelect2ParaPedido';
     const MASTER_KEY  = 'hc:master';
     const MIN_ITEMS_THRESHOLD = 100;
-    const VERSAO_CUSTOS = "2026-03"; // Mude aqui para forçar atualização em todos
+    const VERSAO_CUSTOS = "2026-02"; 
 
     const CUSTOS_PADRAO = {
         "3073": 60.26, "3076": 25.93, "3006": 11.27, "3007": 12.89, "3008": 15.12,

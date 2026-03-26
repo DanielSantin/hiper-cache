@@ -181,6 +181,20 @@ function onToggleAgrupar() {
   aplicarMO();
 }
 
+// ── Renumeração sequencial de todas as linhas visíveis ────────────────────────
+function renumerarLinhas() {
+  var tbody = el('tblBody');
+  if (!tbody) return;
+  var num = 1;
+  var linhas = tbody.querySelectorAll('tr');
+  for (var li = 0; li < linhas.length; li++) {
+    var tr = linhas[li];
+    if (!tr.className) continue; // pula linhas vazias de preenchimento
+    var tdNum = tr.querySelector('.td-num');
+    if (tdNum) tdNum.textContent = num++;
+  }
+}
+
 function aplicarMO() {
   var tbody = el('tblBody');
   if (!tbody) return;
@@ -236,33 +250,34 @@ function aplicarMO() {
           var tr2 = document.createElement('tr');
           tr2.className = 'row-mo';
           tr2.innerHTML =
-            '<td style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;color:#7a3a00">' + (i + 1) + '</td>' +
-            '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
-              '<span style="font-size:9pt;font-weight:bold;color:#7a3a00">' + fN(area) + '</span>' +
+            '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;vertical-align:middle">' + (i + 1) + '</td>' +
+            '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
+              '<span style="font-size:9pt;font-weight:bold">' + fN(area) + '</span>' +
             '</td>' +
-            '<td style="text-align:center;border:1px solid #000;padding:3px 4px;font-size:9pt;font-weight:bold;color:#7a3a00">' + unid + '</td>' +
+            '<td style="text-align:center;border:1px solid #000;padding:3px 4px;font-size:9pt;font-weight:bold;vertical-align:middle">' + unid + '</td>' +
             '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
-              '<div style="font-weight:bold;margin-bottom:3px;color:#7a3a00" contenteditable="true" ' +
-                'onfocus="this.style.background=\\'#fff3cd\\'" onblur="this.style.background=\\'\\'">Instala\u00e7\u00e3o \u2013 ' + tipoNome + '</div>' +
-              '<div contenteditable="true" style="font-size:8.5pt;color:#a05000;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
-                'onfocus="this.style.background=\\'#fff3cd\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
+              '<div contenteditable="true" style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+                'onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
+                'onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">Instala\u00e7\u00e3o \u2013 ' + tipoNome + '</div>' +
+              '<div contenteditable="true" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+                'onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
                 'onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">' + moDescTexto + '</div>' +
               '<div style="margin-top:5px;font-size:8pt;color:#555;display:flex;gap:12px;flex-wrap:wrap">' +
                 '<span>Cart\u00e3o: <strong id="mo-lm2c-' + i + '">R$ ' + fN(venda) + '/' + unid + '</strong></span>' +
                 '<span>\u00c0 vista: <strong id="mo-lm2v-' + i + '">R$ ' + fN(venda * _PIX) + '/' + unid + '</strong></span>' +
               '</div>' +
             '</td>' +
-            '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
+            '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
               '<input id="mo-m2c-' + i + '" type="number" min="0" step="0.01" value="' + venda.toFixed(2) + '"' +
-              ' style="width:70px;border:none;background:#fff8f0;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#7a3a00"' +
+              ' style="width:70px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
               ' oninput="onMoM2(' + i + ')">' +
             '</td>' +
-            '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
+            '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
               '<input id="mo-totc-' + i + '" type="number" min="0" step="0.01" value="' + tot.toFixed(2) + '"' +
-              ' style="width:74px;border:none;background:#fff8f0;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#7a3a00"' +
+              ' style="width:74px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
               ' oninput="onMoTotc(' + i + ')">' +
             '</td>' +
-            '<td class="col-mo-base no-print" style="border:1px solid #000;padding:3px 6px;background:#fff8f0;text-align:center">' +
+            '<td class="col-mo-base no-print" style="border:1px solid #000;padding:3px 6px;text-align:center">' +
               '<span style="font-size:8pt;color:#aaa">\u2014</span>' +
             '</td>';
           linhasSnapshot[i].parentNode.insertBefore(tr2, linhasSnapshot[i].nextSibling);
@@ -282,6 +297,7 @@ function aplicarMO() {
     }
   });
   // Recalcula totais globais após qualquer mudança de MO
+  renumerarLinhas();
   atualizarTotaisGlobaisComMo();
 }
 
@@ -371,7 +387,7 @@ function adicionarLinhaCustom() {
   tr.className = 'row-custom';
   tr.dataset.customIdx = idx;
   tr.innerHTML =
-    '<td style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;color:#1a5c8a"></td>' +
+    '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;vertical-align:middle"></td>' +
     '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
       '<input type="number" min="0" step="0.01" value="0" class="custom-area"' +
       ' style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
@@ -383,7 +399,7 @@ function adicionarLinhaCustom() {
       ' onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">m\u00b2</span>' +
     '</td>' +
     '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
-      '<div contenteditable="true" style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px;color:#1a3a6a"' +
+      '<div contenteditable="true" style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px"' +
       ' onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'"' +
       ' onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">T\u00edtulo do item</div>' +
       '<div contenteditable="true" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px"' +
@@ -403,13 +419,27 @@ function adicionarLinhaCustom() {
     '<td class="col-mo-base no-print" style="border:1px solid #000;padding:3px 6px;text-align:center">' +
       '<button onclick="removerLinhaCustom(this)" style="border:none;background:#e55;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">\u2715</button>' +
     '</td>';
-  tbody.appendChild(tr);
+  // Insere depois da última linha com conteúdo (row-kit, row-mo, row-custom),
+  // antes das linhas vazias de preenchimento (tr sem classe)
+  var todasLinhas = tbody.querySelectorAll('tr');
+  var ultimaComConteudo = null;
+  for (var li = 0; li < todasLinhas.length; li++) {
+    if (todasLinhas[li].className) { ultimaComConteudo = todasLinhas[li]; }
+  }
+  if (ultimaComConteudo && ultimaComConteudo.nextSibling) {
+    tbody.insertBefore(tr, ultimaComConteudo.nextSibling);
+  } else if (ultimaComConteudo) {
+    tbody.appendChild(tr);
+  } else {
+    tbody.appendChild(tr);
+  }
+  renumerarLinhas();
   atualizarTotaisGlobaisComMo();
 }
 
 function removerLinhaCustom(btn) {
   var tr = btn.closest('tr');
-  if (tr) { tr.parentNode.removeChild(tr); atualizarTotaisGlobaisComMo(); }
+  if (tr) { tr.parentNode.removeChild(tr); renumerarLinhas(); atualizarTotaisGlobaisComMo(); }
 }
 
 function onCustomArea(inp) {

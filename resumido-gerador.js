@@ -69,7 +69,7 @@ function _resumido_css() {
     '.mo-inp:focus{outline:1px solid #e8510a;background:#fff3e0;border-radius:2px;padding:0 2px}',
     '.mo-tag{font-size:7.5pt;color:#e8510a;font-weight:bold;white-space:nowrap}',
     '.tbl-mo-header{background:#ffe4b5!important}',
-    '.row-mo{background:#fff8f0}',
+    '.row-mo{}',
     '@media print{',
     '  .no-print{display:none!important}',
     '  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}',
@@ -99,7 +99,7 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
 
     // Linha principal (material ou agrupado)
     var tr = '<tr>' +
-      '<td style="text-align:center;border:1px solid #000;padding:5px 6px;vertical-align:middle">' + (i + 1) + '</td>' +
+      '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 6px;vertical-align:middle">' + (i + 1) + '</td>' +
       '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
         '<input id="area-' + i + '" type="number" min="0" step="0.01" value="' + area.toFixed(2) + '"' +
         ' style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
