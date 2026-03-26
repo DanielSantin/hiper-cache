@@ -353,13 +353,14 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <div class="tlabel">TAXA DE ENTREGA</div>
     <div class="tval" id="valE">—</div>
   </div>
-  <div class="trow">
+  <div class="trow" id="rowDesc">
     <div class="tlabel"></div>
     <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold">Desconto</div>
     <div class="tval">
       <span class="val-prefix">R$</span>
-      <input class="val-inp" type="number" id="iDescC" value="0" min="0" step="0.01"
-             oninput="onDescC()" placeholder="0,00" title="Clique para editar" style="width:75px">
+    <input class="val-inp" type="number" id="iDescC" value="0.00" min="0" step="0.01"
+          oninput="onDescC()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)" 
+          placeholder="0,00" title="Clique para editar" style="width:75px">
       <span class="val-print" id="iDescC-print">0,00</span>
     </div>
   </div>
@@ -376,7 +377,9 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     </div>
     <div class="tval">
       <span class="val-prefix">R$</span>
-      <input class="val-inp" type="number" id="valC" step="0.01" oninput="onValC()" style="width:75px">
+      <input class="val-inp" type="number" id="valC" step="0.01" 
+            oninput="onValC()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)" 
+            style="width:75px">
       <span class="val-print" id="valC-print">0,00</span>
     </div>
   </div>
@@ -385,7 +388,9 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <div class="ttag pix">À VISTA pix</div>
     <div class="tval">
       <span class="val-prefix">R$</span>
-      <input class="val-inp" type="number" id="valV" step="0.01" oninput="onValV()" style="width:75px">
+      <input class="val-inp" type="number" id="valV" step="0.01" 
+            oninput="onValV()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)" 
+            style="width:75px">
       <span class="val-print" id="valV-print">0,00</span>
     </div>
   </div>
@@ -459,7 +464,9 @@ function num(id){
 function silent(id,v){
   const e=el(id);
   if(!e) return;
-  if(document.activeElement!==e) e.value=parseFloat(v).toFixed(2);
+  if(document.activeElement!==e) {
+    e.value = parseFloat(v || 0).toFixed(2);
+  }
 }
 function syncPrint(id, n){
   const sp=el(id+'-print');
@@ -702,6 +709,14 @@ function nomePdf() {
   return 'orcamento-' + NUM_ORC + '-' + nome + '-' + data + '.pdf';
 }
 
+function ocultarDescontoZeroNoClone(clone) {
+  const descVal = parseFloat(document.getElementById('iDescC')?.value || '0');
+  if (!descVal || isNaN(descVal)) {
+    const rowDesc = clone.querySelector('#rowDesc');
+    if (rowDesc) rowDesc.style.display = 'none';
+  }
+}
+
 function congelarSelectEmClone(clone) {
   const selectOriginal = document.querySelector('.page select');
   const selectNoClone  = clone.querySelector('select');
@@ -717,7 +732,7 @@ async function copiarImagem() {
   const btn = el('btnCopy');
   btn.disabled = true;
   btn.textContent = '⏳ Gerando imagem...';
-  const MARGEM = 2;
+  const MARGEM = 5;
   const A4_MM_W = 210, MARGIN_MM = 8;
   const MM_TO_PX = 3.7795275591;
   const A4_PX_W  = Math.round(A4_MM_W * MM_TO_PX);
@@ -735,6 +750,7 @@ async function copiarImagem() {
   clone.style.cssText = 'width:100%;max-width:none;padding:0;margin:0';
   clone.querySelectorAll('.no-print, .margem-box').forEach(e => e.remove());
   congelarSelectEmClone(clone);
+  ocultarDescontoZeroNoClone(clone);
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
   await new Promise(r => setTimeout(r, 150));
@@ -804,6 +820,7 @@ async function baixarPdf() {
   clone.style.cssText = 'width:100%;max-width:none;padding:0;margin:0';
   clone.querySelectorAll('.no-print, .margem-box').forEach(e => e.remove());
   congelarSelectEmClone(clone);
+  ocultarDescontoZeroNoClone(clone);
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
   await new Promise(r => setTimeout(r, 150));
