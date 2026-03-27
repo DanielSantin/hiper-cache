@@ -92,8 +92,27 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
     var prop  = kit.custoRelativo / somaC;
     var tcKit = totalC * prop;
     var area  = kit.A;
-    var unid  = kit.nome === 'cortineiro' ? 'ml' : 'm\u00b2';
-    var vlM2C = area > 0 ? tcKit / area : 0;
+
+    // Para portas: exibe qtd total de portas como "área" e unidade "un."
+    var isPortas = kit.nome === 'portas';
+    var unid, areaExibida, nomeLabelExibido;
+
+    if (isPortas && kit.grupos && kit.grupos.length > 0) {
+      var qtdTotal = kit.grupos.reduce(function(s, g) { return s + (parseInt(g.qtd) || 0); }, 0);
+      areaExibida  = qtdTotal;
+      unid         = 'un.';
+      // Usa a função do resumido-dados para gerar descrição compacta
+      var descPortas = typeof resumido_descricaoPortas === 'function'
+        ? resumido_descricaoPortas(kit.grupos)
+        : (qtdTotal + ' porta(s)');
+      nomeLabelExibido = 'Fechamento de ' + descPortas;
+    } else {
+      areaExibida      = area;
+      unid             = kit.nome === 'cortineiro' ? 'ml' : 'm\u00b2';
+      nomeLabelExibido = kit.nomeLabel;
+    }
+
+    var vlM2C = areaExibida > 0 ? tcKit / areaExibida : 0;
     var moBase = kit.moBase !== undefined ? kit.moBase : 30;
     var texto = (RESUMIDO_TEXTOS[kit.nome] || {})[varianteTabica] || '';
 
@@ -101,9 +120,9 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
     var tr = '<tr>' +
       '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 6px;vertical-align:middle">' + (i + 1) + '</td>' +
       '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
-        '<input id="area-' + i + '" type="number" min="0" step="0.01" value="' + area.toFixed(2) + '"' +
+        '<input id="area-' + i + '" type="number" min="0" step="0.01" value="' + areaExibida.toFixed(2) + '"' +
         ' style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
-        ' oninput="onArea(' + i + ')" title="Editar \u00e1rea">' +
+        ' oninput="onArea(' + i + ')" title="Editar quantidade">' +
       '</td>' +
       '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
         '<span id="und-' + i + '" contenteditable="true" style="font-size:9pt;font-weight:bold;outline:none;cursor:text;display:inline-block;min-width:20px;border-radius:2px;padding:1px 2px"' +
@@ -114,7 +133,7 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
         '<div contenteditable="true" id="nomeLabel-' + i + '" ' +
         'style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
         'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
-        'onblur="this.style.background=\'\';this.style.outline=\'none\'">' + kit.nomeLabel + '</div>' +
+        'onblur="this.style.background=\'\';this.style.outline=\'none\'">' + nomeLabelExibido + '</div>' +
         '<div contenteditable="true" id="desc-' + i + '" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
         'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
         'onblur="this.style.background=\'\';this.style.outline=\'none\'" ' +
@@ -127,7 +146,7 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
       '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
         '<input id="m2c-' + i + '" type="number" min="0" step="0.01" value="' + vlM2C.toFixed(2) + '"' +
         ' style="width:70px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
-        ' oninput="onM2(' + i + ')" title="Editar R$/m\u00b2">' +
+        ' oninput="onM2(' + i + ')" title="Editar R$/un">' +
       '</td>' +
       '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
         '<input id="totc-' + i + '" type="number" min="0" step="0.01" value="' + tcKit.toFixed(2) + '"' +
@@ -425,7 +444,13 @@ function abrirOrcamentoResumido() {
   }
   var kitsArr = [];
   kitsAtivos.forEach(function(estado, nome) {
-    kitsArr.push({ nome: nome, A: estado.A || 0, P: estado.P || 0, cant: estado.cant || 3.15 });
+    kitsArr.push({
+      nome:   nome,
+      A:      estado.A    || 0,
+      P:      estado.P    || 0,
+      cant:   estado.cant || 3.15,
+      grupos: estado.grupos || null,  // só portas tem grupos
+    });
   });
   var varianteTabica  = resumido_detectarTabica(dadosOrc.itens);
   var custoPorKit     = resumido_custoPorKit(kitsArr, dadosOrc.itens);
@@ -433,11 +458,15 @@ function abrirOrcamentoResumido() {
   var somaC           = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
   var kitsInfo = kitsArr.map(function(k) {
     return {
-      nome: k.nome, nomeLabel: RESUMIDO_NOMES[k.nome] || k.nome,
-      A: k.A, P: k.P, cant: k.cant,
+      nome:        k.nome,
+      nomeLabel:   RESUMIDO_NOMES[k.nome] || k.nome,
+      A:           k.A,
+      P:           k.P,
+      cant:        k.cant,
+      grupos:      k.grupos || null,
       custoRelativo: custoPorKit[k.nome],
       totalCartao: (custoPorKit[k.nome] / somaC) * totalCartaoBase,
-      moBase: (typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30,
+      moBase:      (typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30,
     };
   });
   var clienteEl = document.getElementById('iCliente');
@@ -477,7 +506,13 @@ function abrirOrcamentoResumido() {
 
       var kitsArr = [];
       kitsAtivos.forEach(function(estado, nome) {
-        kitsArr.push({ nome: nome, A: estado.A || 0, P: estado.P || 0, cant: estado.cant || 3.15 });
+        kitsArr.push({
+          nome:   nome,
+          A:      estado.A    || 0,
+          P:      estado.P    || 0,
+          cant:   estado.cant || 3.15,
+          grupos: estado.grupos || null,
+        });
       });
       var dadosOrc    = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : { itens: [] };
       var varTab      = resumido_detectarTabica(dadosOrc.itens);
@@ -486,11 +521,15 @@ function abrirOrcamentoResumido() {
       var somaC       = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
       var kitsInfo = kitsArr.map(function(k) {
         return {
-          nome: k.nome, nomeLabel: RESUMIDO_NOMES[k.nome] || k.nome,
-          A: k.A, P: k.P, cant: k.cant,
+          nome:        k.nome,
+          nomeLabel:   RESUMIDO_NOMES[k.nome] || k.nome,
+          A:           k.A,
+          P:           k.P,
+          cant:        k.cant,
+          grupos:      k.grupos || null,
           custoRelativo: custoPorKit[k.nome],
           totalCartao: (custoPorKit[k.nome] / somaC) * totalBase,
-          moBase: (typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30,
+          moBase:      (typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30,
         };
       });
       var clienteEl = document.getElementById('iCliente');

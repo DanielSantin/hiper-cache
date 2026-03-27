@@ -23,6 +23,11 @@ const RESUMIDO_TEXTOS = {
     natural: `Fornecimento de material completo para Sancas de gesso acartonado, sendo: Chapa de gesso acartonado ST (Standart) 12,5 × 600 × 2000mm Marca Trevo, Cantoneira de aço galvanizado, Parafuso TA-25, Parafuso 4,5 × 45mm com bucha plástica c/anel, Fita telada fibra de vidro e massa drywall.`,
     misto:   `Fornecimento de material completo para Sancas de gesso acartonado, sendo: Chapa de gesso acartonado ST (Standart) 12,5 × 600 × 2000mm Marca Trevo, Cantoneira de aço galvanizado, Parafuso TA-25, Parafuso 4,5 × 45mm com bucha plástica c/anel, Fita telada fibra de vidro e massa drywall.`,
   },
+  portas: {
+    branca:  `Fornecimento de material completo para Fechamento de portas em Drywall, sendo: Chapa de gesso acartonado ST (Standart) 12,5 × 1200 × 2400mm Marca Trevo, Perfis de aço galvanizado tipo montantes e guias de 70mm (Normatizados com gramatura de 0,50), Parafusos TA-25, Parafusos 4,5 × 45mm com bucha plástica c/anel, Fita telada fibra de vidro e massa drywall.`,
+    natural: `Fornecimento de material completo para Fechamento de portas em Drywall, sendo: Chapa de gesso acartonado ST (Standart) 12,5 × 1200 × 2400mm Marca Trevo, Perfis de aço galvanizado tipo montantes e guias de 70mm (Normatizados com gramatura de 0,50), Parafusos TA-25, Parafusos 4,5 × 45mm com bucha plástica c/anel, Fita telada fibra de vidro e massa drywall.`,
+    misto:   `Fornecimento de material completo para Fechamento de portas em Drywall, sendo: Chapa de gesso acartonado ST (Standart) 12,5 × 1200 × 2400mm Marca Trevo, Perfis de aço galvanizado tipo montantes e guias de 70mm (Normatizados com gramatura de 0,50), Parafusos TA-25, Parafusos 4,5 × 45mm com bucha plástica c/anel, Fita telada fibra de vidro e massa drywall.`,
+  },
 };
 
 const RESUMIDO_NOMES = {
@@ -30,17 +35,20 @@ const RESUMIDO_NOMES = {
   aramado:     'Forro Aramado',
   paredes:     'Parede Drywall',
   cortineiro:  'Sanca / Cortineiro',
+  portas:      'Fechamento de Porta',
 };
 
 const COD_TABICA_BRANCA  = '3006';
 const COD_TABICA_NATURAL = '3010';
 
-// Custo base de mão de obra por tipo de kit (R$/m² ou R$/ml)
+// Custo base de mão de obra por tipo de kit (R$/m²)
+// Para portas: R$100/m² de área de fechamento (larg × alt de cada porta)
 const RESUMIDO_MO_BASE = {
   estruturado: 30,
   aramado:     30,
   paredes:     25,
   cortineiro:  25,
+  portas:      100,
 };
 
 // Detecta qual variante de tabica está no orçamento: branca | natural | misto
@@ -95,4 +103,31 @@ function resumido_custoPorKit(kitsArr, itens) {
 
   kitsArr.forEach(k => { if (resultado[k.nome] <= 0) resultado[k.nome] = 0.001; });
   return resultado;
+}
+
+// Gera a descrição detalhada de grupos de porta para o resumido
+// Ex: "3 portas (2× 70×210 cm, 1× 90×210 cm)"
+function resumido_descricaoPortas(grupos) {
+  if (!grupos || grupos.length === 0) return 'Fechamento de portas';
+
+  const qtdTotal = grupos.reduce((s, g) => s + (parseInt(g.qtd) || 0), 0);
+
+  // Agrupa por dimensão para exibir de forma compacta
+  const mapa = {};
+  grupos.forEach(g => {
+    const qtd  = parseInt(g.qtd)  || 0;
+    const larg = parseFloat(g.larg) || 0.70;
+    const alt  = parseFloat(g.alt)  || 2.10;
+    const largCm = Math.round(larg * 100);
+    const altCm  = Math.round(alt  * 100);
+    const chave  = `${largCm}×${altCm}`;
+    mapa[chave]  = (mapa[chave] || 0) + qtd;
+  });
+
+  const detalhe = Object.entries(mapa)
+    .map(([dim, qtd]) => `${qtd}× ${dim} cm`)
+    .join(', ');
+
+  const plural = qtdTotal === 1 ? 'porta' : 'portas';
+  return `${qtdTotal} ${plural} (${detalhe})`;
 }
