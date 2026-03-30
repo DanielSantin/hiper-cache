@@ -134,14 +134,10 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
         'style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
         'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
         'onblur="this.style.background=\'\';this.style.outline=\'none\'">' + nomeLabelExibido + '</div>' +
-        '<div contenteditable="true" id="desc-' + i + '" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+        '<div contenteditable="true" id="desc-' + i + '" style="font-size:8.5pt;color:#222;line-height:1.5;text-align:justify;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
         'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
         'onblur="this.style.background=\'\';this.style.outline=\'none\'" ' +
         'class="no-print-border">' + texto + '</div>' +
-        '<div style="margin-top:5px;font-size:8pt;color:#555;display:flex;gap:12px;flex-wrap:wrap">' +
-          '<span>Cart\u00e3o: <strong id="lm2c-' + i + '">R$ ' + fmtN(vlM2C) + '/<span class="lund-' + i + '">' + unid + '</span></strong></span>' +
-          '<span>\u00c0 vista: <strong id="lm2v-' + i + '">R$ ' + fmtN(vlM2C * PIX) + '/<span class="lund-' + i + '">' + unid + '</span></strong></span>' +
-        '</div>' +
       '</td>' +
       '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
         '<input id="m2c-' + i + '" type="number" min="0" step="0.01" value="' + vlM2C.toFixed(2) + '"' +

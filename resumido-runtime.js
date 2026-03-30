@@ -462,6 +462,32 @@ function onCustomM2(inp) {
   atualizarTotaisGlobaisComMo();
 }
 
+// ── Formatação de números para captura (PDF / Copiar) ─────────────────────────
+// Substitui todos os <input type="number"> visíveis por <span> formatado,
+// retornando uma função de restauração.
+function _congelarInputsNumericos(scope) {
+  var inputs = (scope || document).querySelectorAll('input[type="number"]');
+  var restaurar = [];
+  inputs.forEach(function(inp) {
+    // Pula inputs ocultos (dentro de .no-print já removido do clone, mas por segurança)
+    var val = parseFloat(inp.value);
+    var formatted = isNaN(val) ? inp.value
+      : val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    var span = document.createElement('span');
+    span.textContent = formatted;
+    // Copia estilo relevante do input
+    span.style.cssText = inp.style.cssText;
+    span.style.display = 'inline-block';
+    inp.parentNode.insertBefore(span, inp);
+    inp.style.display = 'none';
+    restaurar.push(function() {
+      inp.style.display = '';
+      if (span.parentNode) span.parentNode.removeChild(span);
+    });
+  });
+  return function() { restaurar.forEach(function(fn) { fn(); }); };
+}
+
 // ── Clone helpers ─────────────────────────────────────────────────────────────
 function congelarSelectEmClone(clone) {
   var selectOriginal = document.querySelector('.page select');
@@ -495,6 +521,8 @@ async function copiarImagem() {
   congelarSelectEmClone(clone);
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
+  // Formata todos os inputs numéricos do clone antes de capturar
+  var _restaurarInputs = _congelarInputsNumericos(wrapper);
   try {
     var inner = await html2canvas(wrapper, {
       scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
@@ -537,7 +565,7 @@ async function copiarImagem() {
       }
     }, 'image/png');
   } catch (err) {
-    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+    if (document.body.contains(wrapper)) { _restaurarInputs(); document.body.removeChild(wrapper); }
     ocultar.forEach(function(e) { e.style.display = e.dataset.prevDisplay || ''; });
     btn.disabled = false;
     btn.textContent = '\\u274C Erro';
@@ -563,6 +591,8 @@ async function baixarPdf() {
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
   await new Promise(function(r) { setTimeout(r, 150); });
+  // Formata todos os inputs numéricos do clone antes de capturar
+  var _restaurarInputsPdf = _congelarInputsNumericos(wrapper);
   try {
     var SCALE  = 2;
     var canvas = await html2canvas(wrapper, {
@@ -590,7 +620,7 @@ async function baixarPdf() {
       btn.style.background = '#e8510a';
     }, 4000);
   } catch (err) {
-    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+    if (document.body.contains(wrapper)) { _restaurarInputsPdf(); document.body.removeChild(wrapper); }
     ocultar.forEach(function(e) { e.style.display = e.dataset.prevDisplay || ''; });
     btn.disabled = false;
     btn.textContent = '\\u274C Erro';
