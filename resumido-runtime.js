@@ -185,14 +185,33 @@ function onToggleAgrupar() {
 function renumerarLinhas() {
   var tbody = el('tblBody');
   if (!tbody) return;
-  var num = 1;
-  var linhas = tbody.querySelectorAll('tr');
-  for (var li = 0; li < linhas.length; li++) {
-    var tr = linhas[li];
-    if (!tr.className) continue; // pula linhas vazias de preenchimento
-    var tdNum = tr.querySelector('.td-num');
-    if (tdNum) tdNum.textContent = num++;
-  }
+
+  // Pegamos TODAS as linhas do corpo da tabela
+  var todasAsLinhas = tbody.querySelectorAll('tr');
+  var contador = 1;
+
+  todasAsLinhas.forEach(function(tr) {
+    // Procuramos a célula que tem a classe 'td-num'
+    var td = tr.querySelector('.td-num');
+    
+    // Se a linha estiver visível E tiver a célula de número
+    if (td && tr.style.display !== 'none') {
+      
+      // Verificamos se a linha é um "Item Real" (Kit, MO ou Custom)
+      // para não numerar linhas que deveriam ser totalmente vazias
+      var ehItem = tr.classList.contains('row-kit') || 
+                   tr.classList.contains('row-mo') || 
+                   tr.classList.contains('row-custom') ||
+                   tr.innerText.trim() !== ""; // Segurança: se tem texto, é item
+
+      if (ehItem) {
+        td.textContent = contador++;
+      } else {
+        // Se for uma linha de preenchimento do fundo da página, limpa o número
+        td.textContent = '';
+      }
+    }
+  });
 }
 
 function aplicarMO() {
@@ -378,61 +397,55 @@ function recalcTotais() {
 
 // ── Linhas personalizadas ─────────────────────────────────────────────────────
 var _customCount = 0;
-
 function adicionarLinhaCustom() {
   var tbody = el('tblBody');
   if (!tbody) return;
+
   var idx = _customCount++;
-  var tr = document.createElement('tr');
-  tr.className = 'row-custom';
-  tr.dataset.customIdx = idx;
-  tr.innerHTML =
-    '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;vertical-align:middle"></td>' +
+  var novaTr = document.createElement('tr');
+  novaTr.className = 'row-custom';
+  novaTr.dataset.customIdx = idx;
+  
+  novaTr.innerHTML =
+    '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;font-weight:bold;vertical-align:middle"></td>' +
     '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
-      '<input type="number" min="0" step="0.01" value="0" class="custom-area"' +
-      ' style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
-      ' oninput="onCustomArea(this)" title="Editar área">' +
+      '<input type="number" step="0.01" value="0" class="custom-area" style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold" oninput="onCustomArea(this)">' +
     '</td>' +
     '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
-      '<span contenteditable="true" style="font-size:9pt;font-weight:bold;outline:none;cursor:text;display:inline-block;min-width:20px;border-radius:2px;padding:1px 2px"' +
-      ' onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'"' +
-      ' onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">m\u00b2</span>' +
+      '<span contenteditable="true" style="font-size:9pt;font-weight:bold;outline:none">m²</span>' +
     '</td>' +
     '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
-      '<div contenteditable="true" style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px"' +
-      ' onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'"' +
-      ' onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">T\u00edtulo do item</div>' +
-      '<div contenteditable="true" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px"' +
-      ' onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'"' +
-      ' onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">Descri\u00e7\u00e3o do item</div>' +
+      '<div contenteditable="true" style="font-weight:bold;outline:none" onfocus="this.style.background=\\'#fffde7\\'" onblur="this.style.background=\\'\\'">Novo Item Personalizado</div>' +
+      '<div contenteditable="true" style="font-size:8.5pt;color:#222;outline:none" onfocus="this.style.background=\\'#fffde7\\'" onblur="this.style.background=\\'\\'">Descrição do item...</div>' +
     '</td>' +
     '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
-      '<input type="number" min="0" step="0.01" value="0" class="custom-m2c"' +
-      ' style="width:70px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
-      ' oninput="onCustomM2(this)" title="Editar R$/m\u00b2">' +
+      '<input type="number" step="0.01" value="0" class="custom-m2c" style="width:70px;border:none;background:transparent;text-align:right;font-size:9pt;font-weight:bold" oninput="onCustomM2(this)">' +
     '</td>' +
     '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
-      '<input type="number" min="0" step="0.01" value="0" class="custom-totc"' +
-      ' style="width:74px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
-      ' oninput="atualizarTotaisGlobaisComMo()" title="Editar total">' +
+      '<input type="number" step="0.01" value="0" class="custom-totc" style="width:74px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold" oninput="atualizarTotaisGlobaisComMo()">' +
     '</td>' +
     '<td class="col-mo-base no-print" style="border:1px solid #000;padding:3px 6px;text-align:center">' +
-      '<button onclick="removerLinhaCustom(this)" style="border:none;background:#e55;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">\u2715</button>' +
+      '<button onclick="this.closest(\\'tr\\').remove(); renumerarLinhas(); atualizarTotaisGlobaisComMo();" style="border:none;background:#e55;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">✕</button>' +
     '</td>';
-  // Insere depois da última linha com conteúdo (row-kit, row-mo, row-custom),
-  // antes das linhas vazias de preenchimento (tr sem classe)
-  var todasLinhas = tbody.querySelectorAll('tr');
-  var ultimaComConteudo = null;
-  for (var li = 0; li < todasLinhas.length; li++) {
-    if (todasLinhas[li].className) { ultimaComConteudo = todasLinhas[li]; }
+
+  var rows = tbody.querySelectorAll('tr');
+  var ultimaOcupadaIdx = -1;
+
+  // Busca de baixo para cima a última linha que tem QUALQUER texto
+  for (var i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].innerText.trim() !== "") {
+      ultimaOcupadaIdx = i;
+      break;
+    }
   }
-  if (ultimaComConteudo && ultimaComConteudo.nextSibling) {
-    tbody.insertBefore(tr, ultimaComConteudo.nextSibling);
-  } else if (ultimaComConteudo) {
-    tbody.appendChild(tr);
+
+  // Insere logo após a última linha com conteúdo
+  if (ultimaOcupadaIdx !== -1 && rows[ultimaOcupadaIdx].nextSibling) {
+    tbody.insertBefore(novaTr, rows[ultimaOcupadaIdx].nextSibling);
   } else {
-    tbody.appendChild(tr);
+    tbody.appendChild(novaTr);
   }
+
   renumerarLinhas();
   atualizarTotaisGlobaisComMo();
 }
