@@ -179,7 +179,7 @@ async function aguardarInputHabilitado($input, timeout = 3000) {
     if (el && !el.disabled && !el.readOnly && $.contains(document, el)) return true;
     await delay(50);
   }
-  console.warn('[HiperCache] ⏱ Timeout aguardando input de quantidade habilitar.');
+  console.log('[HiperCache] ⏱ Timeout aguardando input de quantidade habilitar.');
   return false;
 }
 

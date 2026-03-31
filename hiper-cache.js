@@ -1,8 +1,10 @@
 (function() {
     const TARGET_PATH = '/produtos/GetSelect2ParaPedido';
+    const PRODUTO_API_PATH = 'get-dados-produto-pedido'; // api.hiper.com.br
     const MASTER_KEY  = 'hc:master';
     const MIN_ITEMS_THRESHOLD = 100;
-    const VERSAO_CUSTOS = "2026-02"; 
+    const VERSAO_CUSTOS = "2026-02";
+    const PRODUTO_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
 
     const CUSTOS_PADRAO = {
         "3073": 60.26, "3076": 25.93, "3006": 11.27, "3007": 12.89, "3008": 15.12,
@@ -22,8 +24,52 @@
     window.__hiperCustos = {};
     window.__hiperUnidades = (typeof UNIDADES_PADRAO !== 'undefined') ? UNIDADES_PADRAO : {};
 
+    // Cache em memória de dados de produto: { [produtoId]: { data, ts } }
+    const memProdutos = {};
+
     function normalizar(s) { 
         return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ''); 
+    }
+
+    // ── 0. Cache de Dados de Produto (stale-while-revalidate) ─────────────────
+
+    /**
+     * Lê produto do cache em memória.
+     * Retorna { data, stale } onde stale=true significa que o cache já passou de 24h.
+     */
+    function getProdutoCache(produtoId) {
+        const entry = memProdutos[produtoId];
+        if (!entry) return null;
+        const stale = (Date.now() - entry.ts) > PRODUTO_TTL_MS;
+        return { data: entry.data, stale };
+    }
+
+    /**
+     * Salva produto no cache em memória e avisa a extensão para persistir.
+     */
+    function setProdutoCache(produtoId, data) {
+        const ts = Date.now();
+        memProdutos[produtoId] = { data, ts };
+        window.postMessage({ type: 'HIPER_CACHE_SET', key: `produto:${produtoId}`, data, ts }, '*');
+    }
+
+    /**
+     * Faz a requisição real ao endpoint e atualiza o cache em background.
+     * Retorna a Promise com o dado fresco (usado quando não há cache).
+     */
+    async function revalidarProduto(produtoId, url, init) {
+        try {
+            const resp = await NATIVE_FETCH(url, init);
+            if (resp.ok) {
+                const data = await resp.json();
+                setProdutoCache(produtoId, data);
+                console.debug(`[HiperCache] 🔄 Produto ${produtoId} revalidado.`);
+                return data;
+            }
+        } catch (e) {
+            console.warn(`[HiperCache] Falha ao revalidar produto ${produtoId}:`, e);
+        }
+        return null;
     }
 
     // ── 1. Tunagem do Select2 (Motor Instantâneo) ─────────────────────────────
@@ -103,6 +149,50 @@
     // ── 4. Interceptadores de Rede ────────────────────────────────────────────
     window.fetch = async function(input, init) {
         const url = (typeof input === 'string') ? input : (input?.url ?? '');
+
+        // ── 4a. Stale-While-Revalidate: get-dados-produto-pedido ─────────────
+        if (url.includes(PRODUTO_API_PATH)) {
+            let produtoId;
+            try {
+                produtoId = new URL(url, location.origin).searchParams.get('produtoId');
+            } catch(e) {}
+
+            if (produtoId) {
+                const cached = getProdutoCache(produtoId);
+
+                if (cached && !cached.stale) {
+                    // Cache fresco: retorna imediatamente, sem revalidar
+                    console.debug(`[HiperCache] ✅ Produto ${produtoId} servido do cache (fresco).`);
+                    return new Response(JSON.stringify(cached.data), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+
+                if (cached && cached.stale) {
+                    // Cache stale: retorna imediatamente e revalida em background
+                    console.debug(`[HiperCache] ⏳ Produto ${produtoId} stale — servindo cache e revalidando.`);
+                    revalidarProduto(produtoId, url, init); // fire-and-forget
+                    return new Response(JSON.stringify(cached.data), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+
+                // Sem cache: requisição real, mas já salva o resultado para próxima vez
+                console.debug(`[HiperCache] 🌐 Produto ${produtoId} sem cache — buscando na rede.`);
+                const data = await revalidarProduto(produtoId, url, init);
+                if (data !== null) {
+                    return new Response(JSON.stringify(data), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+                // Se revalidarProduto falhou, deixa passar normalmente abaixo
+            }
+        }
+
+        // ── 4b. Cache do Select2 ──────────────────────────────────────────────
         if (url.includes(TARGET_PATH)) {
             if (memMaster.length > 0) {
                 try {
@@ -112,10 +202,10 @@
                     return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json' } });
                 } catch(e) {}
             } else if (!preloading) {
-                // Cache ainda vazio: dispara preload e deixa a requisição passar normalmente
                 executarPreload();
             }
         }
+
         return NATIVE_FETCH(input, init);
     };
 
@@ -160,7 +250,7 @@
         if (msg?.type === 'HIPER_CACHE_ALL') {
             const entries = msg.entries || {};
 
-            // Produtos
+            // Produtos (Select2 master list)
             if (entries[MASTER_KEY]?.data?.length >= MIN_ITEMS_THRESHOLD) {
                 memMaster = entries[MASTER_KEY].data;
                 window.__hiperMaster = memMaster;
@@ -169,7 +259,18 @@
                 executarPreload();
             }
 
-            // Custos (lê o que está no banco físico)
+            // Dados de produto individuais (stale-while-revalidate)
+            Object.keys(entries).forEach(key => {
+                if (key.startsWith('produto:')) {
+                    const produtoId = key.slice('produto:'.length);
+                    const entry = entries[key];
+                    if (entry?.data && entry?.ts) {
+                        memProdutos[produtoId] = { data: entry.data, ts: entry.ts };
+                    }
+                }
+            });
+
+            // Custos
             Object.keys(entries).forEach(key => {
                 if (key.includes('custo:')) {
                     const id = key.split(':').pop();
@@ -177,14 +278,12 @@
                 }
             });
 
-            // Na primeira carga, verifica se precisa injetar os padrões
             if (!inicializado) {
                 aplicarCustosPadrao();
                 inicializado = true;
-                console.info(`[HiperCache] ✅ Pronto: ${Object.keys(window.__hiperCustos).length} custos ativos.`);
+                console.info(`[HiperCache] ✅ Pronto: ${Object.keys(window.__hiperCustos).length} custos | ${Object.keys(memProdutos).length} produtos em cache.`);
             }
 
-            // Avisa o hiper-orcamento.js que os dados estão prontos
             window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
         }
 
@@ -216,7 +315,6 @@
     window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
     window.postMessage({ type: 'HIPER_CUSTO_LOAD_ALL' }, '*');
 
-    // MutationObserver: re-otimiza Select2 ao navegar para pedido-venda
     const iniciarObserver = () => {
         if (document.body) {
             new MutationObserver(() => {
@@ -228,9 +326,9 @@
     };
     iniciarObserver();
 
-    // Fallback: se após 3s o cache ainda estiver vazio, força o preload
     setTimeout(() => { if (memMaster.length < MIN_ITEMS_THRESHOLD) executarPreload(); }, 3000);
 
     window.__hiperReload = executarPreload;
     window.__nativeFetch = NATIVE_FETCH;
+    window.__hiperProdutoCache = memProdutos; // exposto para debug
 })();
