@@ -29,6 +29,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "unidades_padrao.js",
         "hiper-logo.js",
         "hiper-cache.js",
         "hiper-widgets.js",

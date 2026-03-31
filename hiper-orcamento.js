@@ -76,12 +76,23 @@ function extrairDadosPedido() {
     const qtd = parseMoedaOrc(qtdEl.value);
     if (!nome || qtd === 0) return;
     const codigo = extrairCodigoProduto(nome);
+
+    // Busca sigla no cache, com fallback para DOM e depois 'UN'
+    let unidade = unidadeDoItem(linha);
+    if (window.__hiperMaster?.length) {
+      const found = window.__hiperMaster.find(p => {
+          const c = (p.Nome || '').match(/^(\d{4})\b/)?.[1];
+          return c === codigo;
+      });
+      if (found?.und) unidade = found.und;
+    }
+
     itens.push({
       nome,
       qtd,
-      unidade:  unidadeDoItem(linha),
-      vlUnit:   parseMoedaOrc(vlEl?.value),
-      subtotal: parseMoedaOrc(stEl?.value),
+      unidade,
+      vlUnit:    parseMoedaOrc(vlEl?.value),
+      subtotal:  parseMoedaOrc(stEl?.value),
       idProduto: codigo,
     });
   }
@@ -445,12 +456,16 @@ console.log('[HiperOrc] Orçamento', NUM_ORC, '| Custos carregados:', JSON.strin
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(n){
   if(isNaN(n)||n==null) return '—';
-  return 'R$ '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return 'R$ ' + fmtNum(n);
 }
-function fmtNum(n){
-  if(isNaN(n)||n==null) return '—';
-  return Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  
+function fmtNum(n) {
+    return Number(n).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
 }
+
 function fmtP(n){
   return isNaN(n)?'':n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';
 }
@@ -727,6 +742,31 @@ function congelarSelectEmClone(clone) {
   }
 }
 
+function congelarInputsNoClone(clone) {
+    const ids = ['valC', 'valV', 'iDescC'];
+    
+    ids.forEach(id => {
+        const inputOriginal = document.getElementById(id);
+        const spanNoClone = clone.querySelector('#' + id + '-print');
+        
+        if (inputOriginal && spanNoClone) {
+            // Pegamos o valor, limpamos qualquer lixo e garantimos que é número
+            let valor = parseFloat(inputOriginal.value) || 0;
+            
+            // Inserimos no SPAN do CLONE com a formatação correta
+            spanNoClone.textContent = valor.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            
+            // Garante que o input original no PDF fique invisível
+            const inputNoClone = clone.querySelector('#' + id);
+            if (inputNoClone) inputNoClone.style.display = 'none';
+            spanNoClone.style.display = 'inline-block';
+        }
+    });
+}
+
 // ── Copiar imagem ─────────────────────────────────────────────────────────────
 async function copiarImagem() {
   const btn = el('btnCopy');
@@ -750,6 +790,7 @@ async function copiarImagem() {
   clone.style.cssText = 'width:100%;max-width:none;padding:0;margin:0';
   clone.querySelectorAll('.no-print, .margem-box').forEach(e => e.remove());
   congelarSelectEmClone(clone);
+  congelarInputsNoClone(clone);
   ocultarDescontoZeroNoClone(clone);
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
@@ -820,6 +861,7 @@ async function baixarPdf() {
   clone.style.cssText = 'width:100%;max-width:none;padding:0;margin:0';
   clone.querySelectorAll('.no-print, .margem-box').forEach(e => e.remove());
   congelarSelectEmClone(clone);
+  congelarInputsNoClone(clone);
   ocultarDescontoZeroNoClone(clone);
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);

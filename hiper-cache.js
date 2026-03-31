@@ -20,6 +20,7 @@
     let preloading = false;
     let inicializado = false;
     window.__hiperCustos = {};
+    window.__hiperUnidades = (typeof UNIDADES_PADRAO !== 'undefined') ? UNIDADES_PADRAO : {};
 
     function normalizar(s) { 
         return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ''); 
@@ -71,6 +72,8 @@
                     const id = item.idProduto ?? item.id ?? item.Codigo;
                     if (id && !unico.has(id)) {
                         item.text = item.Nome;
+                        const cod4 = (item.Nome || '').match(/^(\d{4})\b/)?.[1];
+                        item.und = (cod4 && window.__hiperUnidades[cod4]) ? window.__hiperUnidades[cod4] : 'UN';
                         unico.set(id, item);
                     }
                 });
@@ -228,4 +231,6 @@
     // Fallback: se após 3s o cache ainda estiver vazio, força o preload
     setTimeout(() => { if (memMaster.length < MIN_ITEMS_THRESHOLD) executarPreload(); }, 3000);
 
+    window.__hiperReload = executarPreload;
+    window.__nativeFetch = NATIVE_FETCH;
 })();
