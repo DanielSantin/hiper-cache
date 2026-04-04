@@ -312,8 +312,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <span class="panel-sep">|</span>
     <label>% imposto <input type="number" id="iImp" value="10.70" min="0" max="100" step="0.01" style="width:68px" oninput="recalc()"></label>
     <span class="panel-sep">|</span>
-    <label><input type="checkbox" id="chkVendedor" onchange="onVendedor()"> Observação:</label>
-    <input type="text" id="iVendedor" placeholder="ex: Vendedor: João" maxlength="80"
+    <label style="font-weight:bold;color:#1a3a6a;white-space:nowrap">Vendedor:</label>
+    <input type="text" id="iVendedor" placeholder="ex: Daniel Santin" maxlength="80"
            style="flex:1;min-width:140px;padding:3px 6px;border:1px solid #aaa;border-radius:4px;font-size:12px"
            oninput="onVendedor()">
   </div>
@@ -678,18 +678,17 @@ setTimeout(sincronizarAlturasLinhas, 100);
 
 // ── Vendedor ──────────────────────────────────────────────────────────────────
 function onVendedor() {
-  const chk  = el('chkVendedor');
   const inp  = el('iVendedor');
   const span = el('subVendedor');
-  if (!chk || !inp) return;
-  const show = chk.checked && inp.value.trim() !== '';
+  if (!inp) return;
+  const texto = inp.value.trim();
   if (span) {
-    span.style.display = show ? '' : 'none';
-    span.textContent   = inp.value.trim();
+    span.style.display = texto ? '' : 'none';
+    span.textContent   = texto ? 'Vendedor: ' + texto : '';
   }
   try {
     const bc = new BroadcastChannel('hiper_custo_channel');
-    bc.postMessage({ type: 'HIPER_VENDEDOR_SAVE', checked: chk.checked, text: inp.value });
+    bc.postMessage({ type: 'HIPER_VENDEDOR_SAVE', checked: !!texto, text: inp.value });
     bc.close();
   } catch(e) { console.error('[HiperOrc] ❌ BroadcastChannel falhou:', e); }
 }
@@ -697,7 +696,6 @@ function onVendedor() {
 (function() {
   const v = ${vendedorJSON};
   if (!v.text) return;
-  el('chkVendedor').checked = !!v.checked;
   el('iVendedor').value = v.text || '';
   onVendedor();
 })();
@@ -706,11 +704,10 @@ function onVendedor() {
   const bc = new BroadcastChannel('hiper_custo_channel');
   bc.onmessage = (ev) => {
     if (ev.data?.type !== 'HIPER_VENDEDOR_LOADED') return;
-    const { checked, text } = ev.data;
-    const chk = el('chkVendedor'), inp = el('iVendedor');
-    if (!chk || !inp) return;
-    chk.checked = !!checked;
-    inp.value   = text || '';
+    const { text } = ev.data;
+    const inp = el('iVendedor');
+    if (!inp) return;
+    inp.value = text || '';
     onVendedor();
     bc.close();
   };
