@@ -114,7 +114,9 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
 
     var vlM2C = areaExibida > 0 ? tcKit / areaExibida : 0;
     var moBase = kit.moBase !== undefined ? kit.moBase : 30;
-    var texto = (RESUMIDO_TEXTOS[kit.nome] || {})[varianteTabica] || '';
+    var texto = typeof resumido_resolverTexto === 'function'
+      ? resumido_resolverTexto(kit.nome, varianteTabica, kit.cfg || null)
+      : ((RESUMIDO_TEXTOS[kit.nome] || {})[varianteTabica] || '');
 
     // Linha principal (material ou agrupado)
     var tr = '<tr>' +
@@ -153,7 +155,7 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
       '<td class="col-mo-base no-print" style="text-align:right;border:1px solid #000;padding:3px 6px;vertical-align:middle;min-width:90px">' +
         '<input id="mobase-' + i + '" class="mo-inp" type="number" min="0" step="0.01" value="' + moBase.toFixed(2) + '"' +
         ' oninput="onMoBase(' + i + ')" title="Custo base MO">' +
-        '<div class="mo-tag" id="mo-venda-' + i + '">Venda: R$ ' + fmtN(_calcVendaMo(moBase, 13.53, 20)) + '</div>' +
+        '<div class="mo-tag" id="mo-venda-' + i + '">Venda: R$ ' + fmtN(_calcVendaMo(moBase, 13.53, 30)) + '</div>' +
       '</td>' +
       '</tr>';
 
@@ -208,7 +210,7 @@ function _resumido_montarScript(kitsInfo, numeroOrcamento) {
     'var _pdfOK     = false;',
     '// MO config (editável no painel)',
     'var _MO_IMPOSTO = 13.53;  // % NF serviço',
-    'var _MO_LUCRO   = 20;     // % lucro desejado',
+    'var _MO_LUCRO   = 30;     // % lucro desejado',
     'var _MO_ATIVA   = false;  // checkbox incluir MO',
     'var _MO_AGRUPAR = true;   // agrupar mat+MO na mesma linha',
     '',
@@ -282,7 +284,7 @@ function resumido_gerarHtml(payload, opcoes) {
     '</div>\n' +
     '<div class="prow">\n' +
     '<label>Imposto NF servi\u00e7o: <input type="number" id="cfgImposto" value="13.53" min="0" max="100" step="0.01" style="width:64px" oninput="onCfgMO()"> %</label>\n' +
-    '<label>Lucro servi\u00e7o: <input type="number" id="cfgLucro" value="20" min="0" max="100" step="0.01" style="width:56px" oninput="onCfgMO()"> %</label>\n' +
+    '<label>Lucro servi\u00e7o: <input type="number" id="cfgLucro" value="30" min="0" max="100" step="0.01" style="width:56px" oninput="onCfgMO()"> %</label>\n' +
     '<span style="font-size:11px;color:#888">\u2192 Custo base configur\u00e1vel por item na coluna laranja (oculta na impress\u00e3o)</span>\n' +
     '</div>\n' +
     '<div class="prow">\n' +
@@ -446,6 +448,7 @@ function abrirOrcamentoResumido() {
       P:      estado.P    || 0,
       cant:   estado.cant || 3.15,
       grupos: estado.grupos || null,  // só portas tem grupos
+      cfg:    estado.cfg   || null,   // só paredes têm cfg
     });
   });
   var varianteTabica  = resumido_detectarTabica(dadosOrc.itens);
@@ -455,14 +458,19 @@ function abrirOrcamentoResumido() {
   var kitsInfo = kitsArr.map(function(k) {
     return {
       nome:        k.nome,
-      nomeLabel:   RESUMIDO_NOMES[k.nome] || k.nome,
+      nomeLabel:   typeof resumido_resolverNome === 'function'
+                     ? resumido_resolverNome(k.nome, k.cfg)
+                     : (RESUMIDO_NOMES[k.nome] || k.nome),
       A:           k.A,
       P:           k.P,
       cant:        k.cant,
       grupos:      k.grupos || null,
+      cfg:         k.cfg   || null,
       custoRelativo: custoPorKit[k.nome],
       totalCartao: (custoPorKit[k.nome] / somaC) * totalCartaoBase,
-      moBase:      (typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30,
+      moBase:      typeof resumido_resolverMoBase === 'function'
+                     ? resumido_resolverMoBase(k.nome, k.cfg)
+                     : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
     };
   });
   var clienteEl = document.getElementById('iCliente');
@@ -508,6 +516,7 @@ function abrirOrcamentoResumido() {
           P:      estado.P    || 0,
           cant:   estado.cant || 3.15,
           grupos: estado.grupos || null,
+          cfg:    estado.cfg   || null,
         });
       });
       var dadosOrc    = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : { itens: [] };
@@ -518,14 +527,19 @@ function abrirOrcamentoResumido() {
       var kitsInfo = kitsArr.map(function(k) {
         return {
           nome:        k.nome,
-          nomeLabel:   RESUMIDO_NOMES[k.nome] || k.nome,
+          nomeLabel:   typeof resumido_resolverNome === 'function'
+                         ? resumido_resolverNome(k.nome, k.cfg)
+                         : (RESUMIDO_NOMES[k.nome] || k.nome),
           A:           k.A,
           P:           k.P,
           cant:        k.cant,
           grupos:      k.grupos || null,
+          cfg:         k.cfg   || null,
           custoRelativo: custoPorKit[k.nome],
           totalCartao: (custoPorKit[k.nome] / somaC) * totalBase,
-          moBase:      (typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30,
+          moBase:      typeof resumido_resolverMoBase === 'function'
+                         ? resumido_resolverMoBase(k.nome, k.cfg)
+                         : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
         };
       });
       var clienteEl = document.getElementById('iCliente');
