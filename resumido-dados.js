@@ -29,8 +29,12 @@ const RESUMIDO_NOMES = {
 };
 
 // Resolve o nome legível de um kit, incluindo paredes parametrizadas (id = "parede_...")
+// e instâncias múltiplas de kits normais (id = "cortineiro_1234", "aramado_5678", etc.)
 function resumido_resolverNome(id, cfg) {
   if (RESUMIDO_NOMES[id]) return RESUMIDO_NOMES[id];
+  // Instância múltipla de kit normal: id = "nomeKit_timestamp"
+  const tipoBase = id && id.replace(/_\d+$/, '');
+  if (tipoBase !== id && RESUMIDO_NOMES[tipoBase]) return RESUMIDO_NOMES[tipoBase];
   // Parede parametrizada: usa paredeLabelCfg se disponível
   if (id && id.startsWith('parede_') && cfg) {
     if (typeof paredeLabelCfg === 'function') return 'Parede ' + paredeLabelCfg(cfg);
@@ -55,6 +59,12 @@ function resumido_resolverTexto(id, varianteTabica, cfg) {
   if (RESUMIDO_TEXTOS[id]) {
     var t = RESUMIDO_TEXTOS[id];
     return typeof t === 'string' ? t : (t[varianteTabica] || '');
+  }
+  // Instância múltipla de kit normal: id = "nomeKit_timestamp"
+  const tipoBase = id && id.replace(/_\d+$/, '');
+  if (tipoBase !== id && RESUMIDO_TEXTOS[tipoBase]) {
+    var t2 = RESUMIDO_TEXTOS[tipoBase];
+    return typeof t2 === 'string' ? t2 : (t2[varianteTabica] || '');
   }
 
   // Parede parametrizada
@@ -136,6 +146,9 @@ const RESUMIDO_MO_BASE = {
 // Resolve o custo base de MO para qualquer kit, incluindo paredes parametrizadas
 function resumido_resolverMoBase(id, cfg) {
   if (RESUMIDO_MO_BASE[id] !== undefined) return RESUMIDO_MO_BASE[id];
+  // Instância múltipla de kit normal: id = "nomeKit_timestamp"
+  const tipoBase = id && id.replace(/_\d+$/, '');
+  if (tipoBase !== id && RESUMIDO_MO_BASE[tipoBase] !== undefined) return RESUMIDO_MO_BASE[tipoBase];
   if (id && id.startsWith('parede_') && cfg) {
     if (typeof paredeMoBase === 'function') return paredeMoBase(cfg);
     // Fallback manual (espelha a lógica de paredeMoBase em kit.js)
@@ -172,7 +185,9 @@ function resumido_custoPorKit(kitsArr, itens) {
         ? paredeGerarFormulas(k.cfg)
         : {};
     } else {
-      formulasPorKit[k.nome] = FORMULAS[k.nome] || {};
+      // Suporte a instâncias múltiplas: "cortineiro_1234" → tipo base "cortineiro"
+      const tipoBase = k.nome.replace(/_\d+$/, '');
+      formulasPorKit[k.nome] = FORMULAS[tipoBase] || FORMULAS[k.nome] || {};
     }
   });
 
@@ -212,6 +227,71 @@ function resumido_custoPorKit(kitsArr, itens) {
   });
 
   kitsArr.forEach(k => { if (resultado[k.nome] <= 0) resultado[k.nome] = 0.001; });
+  return resultado;
+}
+
+// Agrupa kitsArr para o resumido: kits do mesmo tipo base são fundidos em uma linha.
+// Paredes (id começa com "parede_") e portas nunca são agrupadas.
+//
+// Retorna um novo array onde cada entrada agrupada tem:
+//   nome        = tipo base (ex: "cortineiro")
+//   A           = soma das áreas/ML de todas as instâncias
+//   P           = soma dos perímetros
+//   cant        = média ponderada pelo A (ou média simples se A=0)
+//   custoRelativo = soma dos custos parciais
+//   _agrupado   = true  (flag para depuração)
+//
+// custoPorKit deve ser calculado ANTES do agrupamento (com os ids únicos originais)
+// e passado aqui para que as somas sejam feitas corretamente.
+function resumido_agruparKitsArr(kitsArr, custoPorKit) {
+  const grupos = new Map(); // tipoBase → entrada agrupada
+
+  kitsArr.forEach(k => {
+    const isPaiol = k.nome === 'portas' || (k.cfg && k.nome.startsWith('parede_'));
+    if (isPaiol) {
+      // Portas e paredes passam direto, sem agrupar
+      grupos.set(k.nome, Object.assign({}, k, { custoRelativo: custoPorKit[k.nome] || 0 }));
+      return;
+    }
+
+    // Tipo base: remove sufixo numérico (ex: "cortineiro_1718" → "cortineiro")
+    const tipoBase = k.nome.replace(/_\d+$/, '');
+    const custo    = custoPorKit[k.nome] || 0;
+    const aAtual   = k.A || 0;
+
+    if (!grupos.has(tipoBase)) {
+      grupos.set(tipoBase, {
+        nome:          tipoBase,
+        A:             aAtual,
+        P:             k.P || 0,
+        cant:          k.cant || 3.15,
+        grupos:        null,
+        cfg:           null,
+        custoRelativo: custo,
+        _agrupado:     true,
+        _cantPeso:     aAtual,   // peso acumulado para média ponderada do cant
+      });
+    } else {
+      const g = grupos.get(tipoBase);
+      // Média ponderada de cant pelo A (cantoneiras por metro linear)
+      const pesoAnterior = g._cantPeso;
+      const pesoNovo     = pesoAnterior + aAtual;
+      g.cant        = pesoNovo > 0
+        ? (g.cant * pesoAnterior + (k.cant || 3.15) * aAtual) / pesoNovo
+        : g.cant;
+      g._cantPeso   = pesoNovo;
+      g.A           += aAtual;
+      g.P           += (k.P || 0);
+      g.custoRelativo += custo;
+    }
+  });
+
+  // Remove campo auxiliar de peso antes de retornar
+  const resultado = [];
+  grupos.forEach(g => {
+    delete g._cantPeso;
+    resultado.push(g);
+  });
   return resultado;
 }
 

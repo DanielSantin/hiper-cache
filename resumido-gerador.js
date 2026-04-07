@@ -453,24 +453,27 @@ function abrirOrcamentoResumido() {
   });
   var varianteTabica  = resumido_detectarTabica(dadosOrc.itens);
   var custoPorKit     = resumido_custoPorKit(kitsArr, dadosOrc.itens);
+  var kitsArrAgrupado = typeof resumido_agruparKitsArr === 'function'
+    ? resumido_agruparKitsArr(kitsArr, custoPorKit)
+    : kitsArr;
   var totalCartaoBase = dadosOrc.itens.reduce(function(s, it) { return s + it.qtd * it.vlUnit; }, 0);
   var somaC           = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
-  var kitsInfo = kitsArr.map(function(k) {
+  var kitsInfo = kitsArrAgrupado.map(function(k) {
     return {
-      nome:        k.nome,
-      nomeLabel:   typeof resumido_resolverNome === 'function'
-                     ? resumido_resolverNome(k.nome, k.cfg)
-                     : (RESUMIDO_NOMES[k.nome] || k.nome),
-      A:           k.A,
-      P:           k.P,
-      cant:        k.cant,
-      grupos:      k.grupos || null,
-      cfg:         k.cfg   || null,
-      custoRelativo: custoPorKit[k.nome],
-      totalCartao: (custoPorKit[k.nome] / somaC) * totalCartaoBase,
-      moBase:      typeof resumido_resolverMoBase === 'function'
-                     ? resumido_resolverMoBase(k.nome, k.cfg)
-                     : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
+      nome:          k.nome,
+      nomeLabel:     typeof resumido_resolverNome === 'function'
+                       ? resumido_resolverNome(k.nome, k.cfg)
+                       : (RESUMIDO_NOMES[k.nome] || k.nome),
+      A:             k.A,
+      P:             k.P,
+      cant:          k.cant,
+      grupos:        k.grupos || null,
+      cfg:           k.cfg   || null,
+      custoRelativo: k.custoRelativo,
+      totalCartao:   (k.custoRelativo / somaC) * totalCartaoBase,
+      moBase:        typeof resumido_resolverMoBase === 'function'
+                       ? resumido_resolverMoBase(k.nome, k.cfg)
+                       : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
     };
   });
   var clienteEl = document.getElementById('iCliente');
@@ -519,27 +522,30 @@ function abrirOrcamentoResumido() {
           cfg:    estado.cfg   || null,
         });
       });
-      var dadosOrc    = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : { itens: [] };
-      var varTab      = resumido_detectarTabica(dadosOrc.itens);
-      var custoPorKit = resumido_custoPorKit(kitsArr, dadosOrc.itens);
+      var dadosOrc         = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : { itens: [] };
+      var varTab           = resumido_detectarTabica(dadosOrc.itens);
+      var custoPorKit      = resumido_custoPorKit(kitsArr, dadosOrc.itens);
+      var kitsArrAgrupado  = typeof resumido_agruparKitsArr === 'function'
+        ? resumido_agruparKitsArr(kitsArr, custoPorKit)
+        : kitsArr;
       var totalBase   = dadosOrc.itens.reduce(function(s, it) { return s + it.qtd * it.vlUnit; }, 0);
       var somaC       = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
-      var kitsInfo = kitsArr.map(function(k) {
+      var kitsInfo = kitsArrAgrupado.map(function(k) {
         return {
-          nome:        k.nome,
-          nomeLabel:   typeof resumido_resolverNome === 'function'
-                         ? resumido_resolverNome(k.nome, k.cfg)
-                         : (RESUMIDO_NOMES[k.nome] || k.nome),
-          A:           k.A,
-          P:           k.P,
-          cant:        k.cant,
-          grupos:      k.grupos || null,
-          cfg:         k.cfg   || null,
-          custoRelativo: custoPorKit[k.nome],
-          totalCartao: (custoPorKit[k.nome] / somaC) * totalBase,
-          moBase:      typeof resumido_resolverMoBase === 'function'
-                         ? resumido_resolverMoBase(k.nome, k.cfg)
-                         : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
+          nome:          k.nome,
+          nomeLabel:     typeof resumido_resolverNome === 'function'
+                           ? resumido_resolverNome(k.nome, k.cfg)
+                           : (RESUMIDO_NOMES[k.nome] || k.nome),
+          A:             k.A,
+          P:             k.P,
+          cant:          k.cant,
+          grupos:        k.grupos || null,
+          cfg:           k.cfg   || null,
+          custoRelativo: k.custoRelativo,
+          totalCartao:   (k.custoRelativo / somaC) * totalBase,
+          moBase:        typeof resumido_resolverMoBase === 'function'
+                           ? resumido_resolverMoBase(k.nome, k.cfg)
+                           : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
         };
       });
       var clienteEl = document.getElementById('iCliente');

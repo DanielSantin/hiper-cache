@@ -47,13 +47,17 @@ for (const [nomeGrupo, niveis] of Object.entries(GRUPOS_VARIACAO)) {
 // O valor bruto original é sempre preservado e exibido no tooltip.
 const ARREDONDAMENTO_CODIGOS = {
   "3021": (v) => Math.ceil(v / 50) * 50, // Parafuso TA-25 unitário
-  "3032": (v) => Math.ceil(v / 50) * 50, // Parafuso TA-25 caixa 1000
   "3058": (v) => Math.ceil(v / 50) * 50, // Parafuso 6mm
   "3020": (v) => Math.ceil(v / 50) * 50, // Bucha 6mm unitário
-  "3173": (v) => Math.ceil(v / 50) * 50, // Bucha 6mm pacote 1000
   "3163": (v) => Math.ceil(v / 50) * 50, // Parafuso cimentícia unitário
-  "3177": (v) => Math.ceil(v / 50) * 50, // Parafuso cimentícia caixa 500
+  "3035": (v) => Math.ceil(v / 10) * 10, // Sisal
+  "3022": (v) => Math.ceil(v),           // Arame 10
+  "3023": (v) => Math.ceil(v),           // Arame 18
 };
+
+// Códigos que devem ser adicionados mas não devem ser modificados automaticamente
+const BLACKLIST_SETAR = new Set(["3007", "3008"]);
+
 
 // ── 2. DEFINIÇÃO DOS KITS (não-parede) ────────────────────────────────
 const KITS_GESSO = {
@@ -335,7 +339,7 @@ const FORMULAS_GESSO = {
 const KIT_INPUTS = {
   aramado:     [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }],
   estruturado: [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }],
-  cortineiro:  [{ key: "A", label: "ML" }, { key: "cant", label: "Cant/m", title: "Cantoneiras por metro linear (padrão: 3,15)" }],
+  cortineiro:  [{ key: "A", label: "ML" }, { key: "cant", label: "Cant/3ml", title: "Cantoneiras por metro linear (padrão: 3,15)" }],
   // portas e paredes não usam KIT_INPUTS — têm painéis próprios
 };
 
@@ -418,8 +422,10 @@ async function aguardarInputHabilitado($input, timeout = 3000) {
   return false;
 }
 
+
+
 // ── SETAR QUANTIDADE ───────────────────────────────────────────────────
-async function setarQuantidade($inputQtd, valor, valorBruto = null) {
+async function setarQuantidade($inputQtd, valor, valorBruto = null, apenasHint=false) {
   const pronto = await aguardarInputHabilitado($inputQtd);
   if (!pronto) return;
 
@@ -441,6 +447,7 @@ async function setarQuantidade($inputQtd, valor, valorBruto = null) {
   }
   $hint.text(`≈ ${bruto}`);
 
+  if (apenasHint) return;
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
   setter ? setter.call(nativeInput, valorStr) : (nativeInput.value = valorStr);
 
@@ -513,11 +520,12 @@ function recalcularTudo() {
       formulas = paredeGerarFormulas(estado.cfg);
 
     } else {
-      // kit normal (aramado, estruturado, cortineiro)
+      // kit normal (aramado, estruturado, cortineiro, etc.)
       A    = num(estado.A);
       P    = num(estado.P    ?? 0);
       cant = num(estado.cant ?? 3.15);
-      formulas = FORMULAS_GESSO[id] ?? {};
+      // estado.nomeKit guarda o tipo base (ex: "cortineiro") mesmo quando o id é único
+      formulas = FORMULAS_GESSO[estado.nomeKit ?? id] ?? {};
     }
 
     const fatorMargem = 1 + (num(estado.margem ?? 0) / 100);
@@ -547,7 +555,7 @@ function recalcularTudo() {
     // Aplica arredondamento especial se existir para este código (ou código resolvido).
     // O qtdBruta original é sempre preservado e vai pro tooltip.
     const codigoFinal  = nivel ? nivel.codigo : codigo;
-    const arredondarFn = ARREDONDAMENTO_CODIGOS[codigoFinal] ?? ARREDONDAMENTO_CODIGOS[codigo];
+    const arredondarFn = ARREDONDAMENTO_CODIGOS[codigoFinal];
 
     if (nivel) {
       const qtdRaw   = (qtdBruta / nivel.tamanho);
@@ -562,7 +570,8 @@ function recalcularTudo() {
       const $qtd = $linha.find(
         ".quantidade-produto input, input.quantidade-unitaria, input[ng-model*='quantidade']"
       ).first();
-      if ($qtd.length) setarQuantidade($qtd, qtdFinal, qtdBruta);
+      const apenasHint = BLACKLIST_SETAR.has(codigoFinal)
+      if ($qtd.length) setarQuantidade($qtd, qtdFinal, qtdBruta, apenasHint);
     }
   });
 }
@@ -591,10 +600,14 @@ function removerKit(id) {
 
 // ── APLICAR KIT (não-parede) ───────────────────────────────────────────
 async function aplicarKitGesso(nomeKit) {
-  if (kitsAtivos.has(nomeKit)) return;
+  // Portas continuam usando id fixo (lógica de grupos própria)
+  if (nomeKit === 'portas' && kitsAtivos.has('portas')) return;
 
   const codigos = KITS_GESSO[nomeKit];
   if (!codigos) return;
+
+  // Gera id único para todos os kits (exceto portas que mantém id fixo)
+  const id = nomeKit === 'portas' ? 'portas' : nomeKit + '_' + Date.now();
 
   $(".linha-produto:not(.default)").each(function() {
     const $linha = $(this);
@@ -663,11 +676,11 @@ async function aplicarKitGesso(nomeKit) {
   });
 
   const estadoInicial = nomeKit === 'portas'
-    ? { tipo: 'portas', A: 0, grupos: [{ id: Date.now(), qtd: 1, larg: 0.70, alt: 2.10 }], linhas: linhasDoKit }
-    : { tipo: 'kit', A: 0, P: 0, cant: 3.15, linhas: linhasDoKit };
+    ? { tipo: 'portas', nomeKit, A: 0, grupos: [{ id: Date.now(), qtd: 1, larg: 0.70, alt: 2.10 }], linhas: linhasDoKit }
+    : { tipo: 'kit', nomeKit, A: 0, P: 0, cant: 3.15, linhas: linhasDoKit };
 
-  kitsAtivos.set(nomeKit, estadoInicial);
-  console.log(`[HiperCache] ✅ Kit "${nomeKit}" ativo`);
+  kitsAtivos.set(id, estadoInicial);
+  console.log(`[HiperCache] ✅ Kit "${id}" ativo`);
 }
 
 // ── APLICAR PAREDE PARAMETRIZADA ──────────────────────────────────────
@@ -882,8 +895,9 @@ function renderizarPainel() {
       lista.appendChild(item);
 
     } else {
-      // Kit normal (aramado, estruturado, cortineiro)
-      const campos = KIT_INPUTS[id] || [{ key: 'A', label: 'Área (m²)' }];
+      // Kit normal (aramado, estruturado, cortineiro, e suas instâncias múltiplas)
+      const tipoKit = estado.nomeKit ?? id;
+      const campos = KIT_INPUTS[tipoKit] || [{ key: 'A', label: 'Área (m²)' }];
       const item = document.createElement('div');
       item.className = 'hp-item';
 
@@ -899,7 +913,7 @@ function renderizarPainel() {
 
       const margemKit = estado.margem != null ? estado.margem : '';
       item.innerHTML = `
-        <span class="hp-badge">${KIT_LABELS[id] || id}</span>
+        <span class="hp-badge">${KIT_LABELS[tipoKit] || tipoKit}</span>
         ${inputsHTML}
         <div class="hp-sep"></div>
         <span class="hp-lbl" title="Margem extra em % (ex: 5 = +5% em todos os itens)" style="cursor:help;text-decoration:underline dotted">Margem Material</span>
@@ -917,7 +931,7 @@ function renderizarPainel() {
   addWrap.className = 'hp-add-wrap';
 
   const disponiveis = Object.keys(KITS_GESSO).filter(t =>
-    t === 'portas' ? true : !kitsAtivos.has(t)
+    t !== 'portas' || !kitsAtivos.has('portas')
   );
 
   if (disponiveis.length > 0) {
