@@ -14,10 +14,11 @@ const MODULES = [
   { src: 'hiper-logo.js' },
   { src: 'hiper-cache.js' },
   { src: 'hiper-widgets.js' },
+  { src: 'hiper-ui.js' },
   { src: 'hiper-orcamento.js' },
   { src: 'kit.js' },
   { src: 'resumido-dados.js' },
-  // Carrega o runtime como TEXTO e salva em window antes de executar o gerador
+  { src: 'hiper-db.js' },
   { src: 'resumido-runtime.js' },
   { src: 'resumido-gerador.js' },
 ];

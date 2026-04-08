@@ -937,33 +937,35 @@ function abrirOrcamento() {
 }
 
 
-function injetarBotaoOrcamento() {
-  if (document.getElementById('hiper-btn-orcamento')) return;
-  const barra = document.querySelector('#CadastroPedidoVenda .corpo-pedido-venda .parte-4 > div');
-  if (!barra) return;
-
-  const btn = document.createElement('button');
-  btn.id        = 'hiper-btn-orcamento';
-  btn.type      = 'button';
-  btn.className = 'btn btn-lg no-margin-bottom btn-block-xs';
-  btn.style.cssText = 'background:rgba(207, 124, 255, 0.3);color:rgb(200, 200, 200);border:1px solid #ccc;margin-top:4px;font-size:12px;opacity:0.75;';
-  btn.innerHTML = '📄 Orçamento';
-  btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; btn.style.borderColor = '#1a7a1a'; btn.style.color = '#1a7a1a'; });
-  btn.addEventListener('mouseleave', () => { btn.style.opacity = '0.75'; btn.style.borderColor = '#ccc'; btn.style.color = '#555'; });
-  btn.addEventListener('click', abrirOrcamento);
-
-  const ultimo = barra.querySelector('button.btn-gerar-pedido');
-  if (ultimo) ultimo.after(btn);
-  else barra.appendChild(btn);
-
-  console.info('[HiperCache] Botão de orçamento injetado.');
-}
-
-new MutationObserver(() => {
-  if (location.hash.includes('pedido-venda') && !document.getElementById('hiper-btn-orcamento')) {
-    injetarBotaoOrcamento();
+// ── Registro no centralizador de UI (hiper-ui.js) ────────────────────────────
+// ordem 10 — botão de orçamento fica logo após o btn-gerar-pedido nativo
+(function _registrarOrcamento() {
+  function _criarBotao() {
+    // Posiciona após o btn-gerar-pedido nativo, se existir.
+    // O hiper-ui.js cuida de inserir no anchor; aqui só criamos o elemento.
+    const btn = document.createElement('button');
+    btn.id        = 'hiper-btn-orcamento';
+    btn.type      = 'button';
+    btn.className = 'btn btn-lg no-margin-bottom btn-block-xs';
+    btn.style.cssText = 'background:rgba(207, 124, 255, 0.3);color:rgb(200, 200, 200);border:1px solid #ccc;margin-top:4px;font-size:12px;opacity:0.75;';
+    btn.innerHTML = '📄 Orçamento';
+    btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; btn.style.borderColor = '#1a7a1a'; btn.style.color = '#1a7a1a'; });
+    btn.addEventListener('mouseleave', () => { btn.style.opacity = '0.75'; btn.style.borderColor = '#ccc'; btn.style.color = '#555'; });
+    btn.addEventListener('click', abrirOrcamento);
+    console.info('[HiperCache] Botão de orçamento criado.');
+    return btn;
   }
-}).observe(document.body || document.documentElement, { childList: true, subtree: true });
+
+  function _registrar() {
+    if (window.__hiperUI) {
+      window.__hiperUI.registrar({ id: 'hiper-btn-orcamento', ordem: 10, render: _criarBotao });
+    } else {
+      // hiper-ui.js ainda não carregou — tenta novamente em 50ms
+      setTimeout(_registrar, 50);
+    }
+  }
+  _registrar();
+})();
 
 // ── Exportar custos ───────────────────────────────────────────────────────────
 window.__hiperExportarCustos = async function() {

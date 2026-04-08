@@ -34,10 +34,12 @@
         "hiper-cache.js",
         "hiper-widgets.js",
         "hiper-orcamento.js",
+        "hiper-db.js",
         "kit.js",
         "resumido-dados.js",
         "resumido-runtime.js",
-        "resumido-gerador.js"
+        "resumido-gerador.js",
+        "hiper-ui.js"
       ],
       "matches": [
         "https://tagdrywall.hiper.com.br/*"

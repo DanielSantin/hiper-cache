@@ -837,8 +837,8 @@ function _renderFormParede(lista) {
   lista.appendChild(form);
 }
 
-function renderizarPainel() {
-  const painel = document.getElementById('hiper-painel-kits');
+function renderizarPainel(painelRef) {
+  const painel = painelRef || document.getElementById('hiper-painel-kits');
   if (!painel) return;
   const lista = painel.querySelector('#hp-lista');
   if (!lista) return;
@@ -1040,45 +1040,33 @@ function _bindPainelEventos(lista) {
   });
 }
 
-// ── INJETAR PAINEL ─────────────────────────────────────────────────────
-function injetarPainelKits() {
-  if (document.getElementById("hiper-painel-kits")) return;
+// ── REGISTRO NO CENTRALIZADOR DE UI (hiper-ui.js) ─────────────────────
+// ordem 20 — painel de kits fica logo abaixo do botão de orçamento
+(function _registrarKits() {
+  function _criarPainel() {
+    _injetarCssPainel();
+    const container = document.createElement('div');
+    container.id = 'hiper-painel-kits';
+    container.innerHTML = `
+      <div class="hp-titulo">🧱 Estruturas de Gesso</div>
+      <div id="hp-lista" class="hp-lista"></div>
+    `;
+    // Passa o container diretamente — ele ainda não está no DOM,
+    // então getElementById('hiper-painel-kits') retornaria null.
+    renderizarPainel(container);
+    console.info('[HiperCache] ✅ Painel de estruturas criado.');
+    return container;
+  }
 
-  const anchor = document.getElementById('hiper-btn-orcamento')?.parentElement ||
-                 document.querySelector('.aba-esquerda .parte-4 > div');
-  if (!anchor) return;
-
-  _injetarCssPainel();
-
-  const container = document.createElement("div");
-  container.id = "hiper-painel-kits";
-  container.innerHTML = `
-    <div class="hp-titulo">🧱 Estruturas de Gesso</div>
-    <div id="hp-lista" class="hp-lista"></div>
-  `;
-  anchor.appendChild(container);
-
-  renderizarPainel();
-  console.info('[HiperCache] ✅ Painel de estruturas injetado.');
-}
-
-// ── OBSERVER ───────────────────────────────────────────────────────────
-function iniciarObserver() {
-  const target = document.body || document.documentElement;
-  if (!target) return;
-
-  new MutationObserver(() => {
-    if (location.hash.includes("pedido-venda") && !document.getElementById("hiper-painel-kits")) {
-      injetarPainelKits();
+  function _registrar() {
+    if (window.__hiperUI) {
+      window.__hiperUI.registrar({ id: 'hiper-painel-kits', ordem: 20, render: _criarPainel });
+    } else {
+      setTimeout(_registrar, 50);
     }
-  }).observe(target, { childList: true, subtree: true });
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", iniciarObserver);
-} else {
-  iniciarObserver();
-}
+  }
+  _registrar();
+})();
 
 window.aplicarKitGesso     = aplicarKitGesso;
 window.aplicarParedeCfg    = aplicarParedeCfg;
