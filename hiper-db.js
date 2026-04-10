@@ -5,6 +5,13 @@
 (function() {
   'use strict';
 
+  // Captura o parâmetro ?recuperar= IMEDIATAMENTE — antes do Hiper reescrever o hash
+  ;(function() {
+    const hashQuery = location.hash.split('?')[1] || '';
+    const cod = new URLSearchParams(hashQuery).get('recuperar');
+    if (cod) window.__hiperRecuperarCodigo = cod.trim().toUpperCase();
+  })();
+
   const API_BASE   = 'https://db.superaserver.com/api';
   const TIMEOUT_MS = 4000;
 
@@ -454,7 +461,7 @@ function getNumeroOrcamento() {
 
   // ── Repopular pedido completo (itens + kits) ──────────────────────────────────
 
-  async function repovoarPedido(pedido) {
+  async function repovoarPedido(pedido, silencioso = false) {
     const totalOriginal = pedido.itens.reduce((s, it) => s + it.subtotal, 0);
     const desconto      = totalOriginal - pedido.total;
 
@@ -468,10 +475,12 @@ function getNumeroOrcamento() {
       ? `\n\n🧱 ${pedido.kits.length} estrutura(s) de kit salva(s).`
       : '';
 
-    const ok = confirm(
-      `📦 Pedido ${pedido.codigo}\nSalvo em: ${pedido.atualizado_em}\n\n${lista}${kitsInfo}\n\nCarregar estes itens no pedido atual?`
-    );
-    if (!ok) return;
+    if (!silencioso) {
+      const ok = confirm(
+        `📦 Pedido ${pedido.codigo}\nSalvo em: ${pedido.atualizado_em}\n\n${lista}${kitsInfo}\n\nCarregar estes itens no pedido atual?`
+      );
+      if (!ok) return;
+    }
 
     // Restaura itens primeiro (eles criam as linhas no DOM)
     await restaurarItens(pedido.itens);
@@ -495,7 +504,7 @@ function getNumeroOrcamento() {
   function criarPainelRecuperacao() {
     const painel = document.createElement('div');
     painel.id = 'hiper-painel-recuperar';
-    painel.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;background:#fff8e1;border:1px solid #ffe082;border-radius:4px;font-size:12px;';
+    painel.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;background:#fff8e1;border:1px solid #ffe082;border-radius:4px;font-size:12px;flex-wrap:wrap;';
     painel.innerHTML = `
       <span style="white-space:nowrap;color:#6d4c00;font-weight:600;">🔎 Recuperar:</span>
       <input id="hiper-rec-codigo" type="text" placeholder="Ex: A1042"
@@ -504,6 +513,10 @@ function getNumeroOrcamento() {
         style="padding:3px 10px;background:#f57f17;color:#fff;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;">
         Carregar
       </button>
+      <a id="hiper-rec-lista" href="https://db.superaserver.com/" target="_blank"
+        style="padding:3px 10px;background:#1e4a7a;color:#93c5fd;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;text-decoration:none;white-space:nowrap;">
+        📋 Lista de orçamentos
+      </a>
       <span id="hiper-rec-msg" style="color:#888;font-size:11px;"></span>
     `;
 
@@ -511,9 +524,10 @@ function getNumeroOrcamento() {
     const btn = painel.querySelector('#hiper-rec-btn');
     const msg = painel.querySelector('#hiper-rec-msg');
 
-    async function carregar() {
-      const codigo = inp.value.trim().toUpperCase();
+    async function carregar(codigoForçado, silencioso = false) {
+      const codigo = (codigoForçado || inp.value).trim().toUpperCase();
       if (!codigo) return;
+      inp.value       = codigo;
       btn.disabled    = true;
       msg.style.color = '#888';
       msg.textContent = 'Buscando...';
@@ -522,7 +536,7 @@ function getNumeroOrcamento() {
         msg.style.color = '#1a7a1a';
         const nKits = pedido.kits?.length ? ` + ${pedido.kits.length} kit(s)` : '';
         msg.textContent = `✅ ${pedido.itens.length} itens${nKits}`;
-        await repovoarPedido(pedido);
+        await repovoarPedido(pedido, silencioso);
       } catch(e) {
         msg.style.color = '#c00';
         msg.textContent = e.message || 'Erro ao buscar.';
@@ -531,8 +545,22 @@ function getNumeroOrcamento() {
       }
     }
 
-    btn.addEventListener('click', carregar);
+    btn.addEventListener('click', () => carregar());
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') carregar(); });
+
+    // ── Auto-recuperar: usa código capturado no topo do módulo ─────────────────
+    // O código é lido em __hiperRecuperarCodigo imediatamente quando o script
+    // carrega, antes do Hiper ter chance de reescrever o hash.
+    if (window.__hiperRecuperarCodigo) {
+      const _tentarAutoRecuperar = async () => {
+        let t = 0;
+        while (!window.__hiperMaster?.length && t++ < 60) await delay(200);
+        carregar(window.__hiperRecuperarCodigo, true);
+        window.__hiperRecuperarCodigo = null;
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _tentarAutoRecuperar);
+      else _tentarAutoRecuperar();
+    }
 
     console.info('[HiperDB] ✅ Painel de recuperação criado.');
     return painel;
