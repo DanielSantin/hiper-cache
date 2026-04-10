@@ -483,7 +483,7 @@ function abrirOrcamentoResumido() {
     kitsInfo: kitsInfo, totalCartaoBase: totalCartaoBase,
     varianteTabica: varianteTabica, avisoMisto: varianteTabica === 'misto',
     LOGO: window.__hiperLogo || window.__hiperLogoBase64 || '',
-    numeroOrcamento: typeof gerarNumeroOrcamento === 'function' ? gerarNumeroOrcamento() : ('R' + Date.now()),
+    numeroOrcamento: opcoes.numeroOrcamento,
     dataHoje: new Date().toLocaleDateString('pt-BR'),
     clienteNome: (clienteEl && clienteEl.value.trim()) || '',
     vendedorTexto: (chkV && chkV.checked && inpV && inpV.value.trim()) ? inpV.value.trim() : '',

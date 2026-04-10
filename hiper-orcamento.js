@@ -22,35 +22,70 @@ function formatMoeda(n) {
 }
 
 // ── Geração de número de orçamento sequencial ─────────────────────────────────
-// Formato: A1000, A1001 … A9999, B1000, B1001 … Z9999, AA1000, …
-// Armazenado em localStorage com chave 'hiper_orc_counter'
-function gerarNumeroOrcamento() {
-  const CHAVE = 'hiper_orc_counter';
-  let raw = 0;
-  try { raw = parseInt(localStorage.getItem(CHAVE) || '0', 10) || 0; } catch(e) {}
-  const novo = raw + 1;
-  try { localStorage.setItem(CHAVE, String(novo)); } catch(e) {}
+// Formato: E1000, E1001 … E99999  (letra fixa por funcionário, definida no popup)
+// Ao atingir 99999 volta para 1000 (wrap-around).
+// Letra: chrome.storage.local → 'hiper_orc_letra'  (padrão: 'A')
+// Contador: chrome.storage.local → 'hiper_orc_counter'  (padrão: 999 → primeiro será 1000)
+//
+// __hiperOrcConfig é a cópia em memória, carregada via postMessage do content script
+// bridge (hiper-cache.js / hiper-db.js). gerarNumeroOrcamento() é a ÚNICA função
+// que incrementa o contador — hiper-db.js apenas chama esta.
 
-  // Converte índice numérico em código alfanumérico
-  // Bloco de letras: cada letra cobre 9000 números (1000–9999)
-  // Índice 1 → A1000, 9000 → A9999, 9001 → B1000, 18000 → B9999 …
-  const idx0   = novo - 1;            // base-zero
-  const bloco  = Math.floor(idx0 / 9000); // qual bloco de letras
-  const dentro = (idx0 % 9000) + 1000;   // número dentro do bloco (1000–9999)
+// ── Boot: carrega config do storage via postMessage e escuta mudanças ──────────
+(function _bootOrcConfig() {
+  // Solicita ao bridge (content script) os valores salvos
+  window.addEventListener('message', function _onOrcConfig(ev) {
+    if (ev.source !== window) return;
+    const msg = ev.data;
 
-  // Converte bloco em letra(s): 0→A, 1→B … 25→Z, 26→AA, 27→AB …
-  function blocoParaLetras(b) {
-    let letras = '';
-    b = b + 1; // 1-based para facilitar o módulo
-    while (b > 0) {
-      b--;
-      letras = String.fromCharCode(65 + (b % 26)) + letras;
-      b = Math.floor(b / 26);
+    // Bridge responde com todos os dados do storage
+    if (msg?.type === 'HIPER_CACHE_ALL') {
+      const entries = msg.entries || {};
+      // hiper_orc_* chegam como primitivos (sem wrapper { data, ts })
+      const letra   = entries['hiper_orc_letra']   || 'A';
+      const counter = entries['hiper_orc_counter'] ?? 999;
+      window.__hiperOrcConfig = {
+        letra:   String(letra).toUpperCase(),
+        counter: parseInt(counter, 10) || 999,
+      };
     }
-    return letras;
-  }
 
-  return blocoParaLetras(bloco) + String(dentro);
+    // O popup alterou a config — atualiza imediatamente em memória
+    if (msg?.type === 'HIPER_ORC_CONFIG_CHANGED') {
+      if (!window.__hiperOrcConfig) window.__hiperOrcConfig = { letra: 'A', counter: 999 };
+      if (msg.letra   != null) window.__hiperOrcConfig.letra   = String(msg.letra).toUpperCase();
+      if (msg.counter != null) window.__hiperOrcConfig.counter = parseInt(msg.counter, 10) || 999;
+    }
+  });
+
+  // Fallback: lê direto do chrome.storage se disponível (quando rodando como content script)
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    chrome.storage.local.get(['hiper_orc_letra', 'hiper_orc_counter'], (r) => {
+      window.__hiperOrcConfig = {
+        letra:   ((r.hiper_orc_letra)   || 'A').toUpperCase(),
+        counter: parseInt(r.hiper_orc_counter ?? '999', 10) || 999,
+      };
+    });
+    chrome.storage.onChanged.addListener((changes) => {
+      if (!window.__hiperOrcConfig) window.__hiperOrcConfig = { letra: 'A', counter: 999 };
+      if (changes.hiper_orc_letra)   window.__hiperOrcConfig.letra   = (changes.hiper_orc_letra.newValue   || 'A').toUpperCase();
+      if (changes.hiper_orc_counter) window.__hiperOrcConfig.counter = parseInt(changes.hiper_orc_counter.newValue ?? '999', 10) || 999;
+    });
+  }
+})();
+
+function gerarNumeroOrcamento() {
+  const cfg = window.__hiperOrcConfig || { letra: 'A', counter: 999 };
+  let next = cfg.counter + 1;
+  if (next > 99999) next = 1000; // wrap-around
+
+  cfg.counter = next;
+  window.__hiperOrcConfig = cfg;
+
+  // Persiste via postMessage para o bridge (evita chamar chrome.storage direto)
+  window.postMessage({ type: 'HIPER_CACHE_SET', key: 'hiper_orc_counter', data: next, ts: Date.now() }, '*');
+
+  return cfg.letra + String(next);
 }
 
 function extrairDadosPedido() {
@@ -920,8 +955,8 @@ function abrirOrcamento() {
     return;
   }
 
-  // Gera o número sequencial ANTES de abrir (incrementa o contador)
   const numeroOrcamento = gerarNumeroOrcamento();
+  window.__hiperNumeroOrcamentoAtual = numeroOrcamento;
 
   const opcoes = {
     parcelas: parcelasSelecionadas,

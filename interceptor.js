@@ -106,8 +106,12 @@ window.addEventListener('message', async (event) => {
   }
 
   if (msg.type === 'HIPER_CACHE_SET') {
+    // hiper_orc_* são salvos como primitivos pelo popup — mantém consistência
+    const ORC_PLAIN_KEYS = new Set(['hiper_orc_letra', 'hiper_orc_counter']);
     await safeStorage(() =>
-      chrome.storage.local.set({ [msg.key]: { data: msg.data, ts: msg.ts } })
+      ORC_PLAIN_KEYS.has(msg.key)
+        ? chrome.storage.local.set({ [msg.key]: msg.data })
+        : chrome.storage.local.set({ [msg.key]: { data: msg.data, ts: msg.ts } })
     );
   }
 

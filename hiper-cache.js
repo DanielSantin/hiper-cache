@@ -190,6 +190,16 @@
                 }
             });
 
+            // Propaga config de orçamento para __hiperOrcConfig (consumido por hiper-orcamento.js)
+            // Essas chaves chegam como primitivos (o popup e interceptor não usam wrapper { data, ts })
+            const letra   = entries['hiper_orc_letra']   ?? null;
+            const counter = entries['hiper_orc_counter'] ?? null;
+            if (letra != null || counter != null) {
+                if (!window.__hiperOrcConfig) window.__hiperOrcConfig = { letra: 'A', counter: 999 };
+                if (letra   != null) window.__hiperOrcConfig.letra   = String(letra).toUpperCase();
+                if (counter != null) window.__hiperOrcConfig.counter = parseInt(counter, 10) || 999;
+            }
+
             if (!inicializado) {
                 aplicarCustosPadrao();
                 inicializado = true;

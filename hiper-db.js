@@ -12,6 +12,9 @@
 
   const _nativeFetch = window.__nativeFetch || window.fetch.bind(window);
 
+  // __hiperOrcConfig é carregado e mantido sincronizado por hiper-orcamento.js.
+  // hiper-db.js não duplica essa lógica — apenas consome window.__hiperOrcConfig.
+
   function fetchComTimeout(url, opts) {
     const ctrl  = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -22,20 +25,20 @@
     try { return (window.__hiperVendedor?.text || '').trim(); } catch(e) { return ''; }
   }
 
-  function getNumeroOrcamento() {
-    try {
-      const raw    = parseInt(localStorage.getItem('hiper_orc_counter') || '0', 10);
-      const idx0   = raw - 1;
-      const bloco  = Math.floor(idx0 / 9000);
-      const dentro = (idx0 % 9000) + 1000;
-      function blocoParaLetras(b) {
-        let letras = ''; b = b + 1;
-        while (b > 0) { b--; letras = String.fromCharCode(65 + (b % 26)) + letras; b = Math.floor(b / 26); }
-        return letras;
-      }
-      return blocoParaLetras(bloco) + String(dentro);
-    } catch(e) { return ''; }
+  // Delega à função global definida em hiper-orcamento.js (única fonte da verdade).
+function getNumeroOrcamento() {
+  try {
+    // Prioridade: número já gerado no fluxo atual
+    if (window.__hiperNumeroOrcamentoAtual) {
+      return window.__hiperNumeroOrcamentoAtual;
+    }
+
+    console.warn('[HiperDB] Número de orçamento ainda não foi gerado no fluxo atual');
+    return '';
+  } catch (e) {
+    return '';
   }
+}
 
   // ── Serialização dos kits ativos ──────────────────────────────────────────────
   // Converte o Map kitsAtivos (kit.js) num array serializável.
@@ -88,8 +91,15 @@
   // ── Salvar pedido na API ──────────────────────────────────────────────────────
 
   async function salvarPedido(codigo, dados) {
-    if (!codigo || !dados?.itens?.length) return;
+    if (!codigo) {
+      console.warn('[HiperDB] ❌ Código vazio');
+      return;
+    }
 
+    if (!dados?.itens?.length) {
+      console.warn('[HiperDB] ❌ Nenhum item encontrado para salvar', dados);
+      return;
+    }
     const kits = serializarKits();
 
     const payload = {
@@ -153,7 +163,7 @@
           const resp = await fetch(url);
           let html   = await resp.text();
 
-          const titleMatch = html.match(/<title>[^<]*?(\b[A-Z]{1,3}\d{4})\b/i);
+          const titleMatch = html.match(/<title>[^<]*?(\b[A-Z]{1,3}\d{4,5})\b/i);
           const numOrc     = titleMatch ? titleMatch[1].toUpperCase() : getNumeroOrcamento();
 
           const snippet = `

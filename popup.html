@@ -6,7 +6,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      width: 240px;
+      width: 260px;
       font-family: 'Segoe UI', sans-serif;
       background: #0f1117;
       color: #e2e8f0;
@@ -87,6 +87,71 @@
     .btn-clear { background: #ef4444; }
     .btn-clear:hover { background: #dc2626; }
 
+    /* Config orçamento */
+    .orc-config { display: flex; flex-direction: column; gap: 8px; }
+
+    .orc-row { display: flex; align-items: center; gap: 6px; }
+
+    .orc-row label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      color: #64748b;
+      width: 62px;
+      flex-shrink: 0;
+    }
+
+    select.orc-select {
+      flex: 0 0 52px;
+      padding: 4px 6px;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 5px;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    input.orc-num {
+      flex: 1;
+      padding: 4px 8px;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 5px;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 700;
+      min-width: 0;
+    }
+
+    input.orc-num:focus, select.orc-select:focus {
+      outline: none;
+      border-color: #38bdf8;
+    }
+
+    .orc-preview {
+      font-size: 11px;
+      color: #38bdf8;
+      letter-spacing: .5px;
+      text-align: right;
+    }
+
+    .btn-orc-save {
+      width: 100%;
+      padding: 6px;
+      border: none;
+      border-radius: 5px;
+      background: #1e4a7a;
+      color: #93c5fd;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+      margin: 0;
+    }
+    .btn-orc-save:hover { background: #1d4ed8; color: #fff; }
+
     .feedback {
       font-size: 11px;
       color: #22c55e;
@@ -146,6 +211,31 @@
     <div class="label">Custos salvos</div>
     <div class="value-sm" id="custoCount">—</div>
     <div class="sub">Persistem entre sessões</div>
+  </div>
+
+  <div class="card">
+    <div class="label" style="margin-bottom:8px">Numeração de orçamentos</div>
+    <div class="orc-config">
+      <div class="orc-row">
+        <label>Letra</label>
+        <select id="orcLetra" class="orc-select">
+          <!-- A–Z -->
+          <option>A</option><option>B</option><option>C</option><option>D</option>
+          <option>E</option><option>F</option><option>G</option><option>H</option>
+          <option>I</option><option>J</option><option>K</option><option>L</option>
+          <option>M</option><option>N</option><option>O</option><option>P</option>
+          <option>Q</option><option>R</option><option>S</option><option>T</option>
+          <option>U</option><option>V</option><option>W</option><option>X</option>
+          <option>Y</option><option>Z</option>
+        </select>
+      </div>
+      <div class="orc-row">
+        <label>Contador</label>
+        <input id="orcCounter" class="orc-num" type="number" min="999" max="99999" step="1" placeholder="999" />
+      </div>
+      <div class="orc-preview" id="orcPreview">Próximo: —</div>
+      <button class="btn-orc-save" id="orcSaveBtn">💾 Salvar configuração</button>
+    </div>
   </div>
 
   <button class="btn-export" id="exportBtn">⬇️ Exportar custos (JSON)</button>
