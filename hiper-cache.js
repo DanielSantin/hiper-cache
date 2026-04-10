@@ -200,6 +200,15 @@
                 if (counter != null) window.__hiperOrcConfig.counter = parseInt(counter, 10) || 999;
             }
 
+            // Propaga vendedor salvo para __hiperVendedor (consumido por hiper-orcamento.js e hiper-db.js)
+            // IMPORTANTE: sempre sobrescreve — o objeto pode ter sido criado vazio por hiper-orcamento.js
+            // antes do storage responder, e o `if (!window.__hiperVendedor)` antigo impedia a atualização.
+            const vendedorText    = entries['vendedor']?.text    ?? null;
+            const vendedorChecked = entries['vendedor']?.checked ?? null;
+            if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
+            if (vendedorText    != null) window.__hiperVendedor.text    = String(vendedorText);
+            if (vendedorChecked != null) window.__hiperVendedor.checked = vendedorChecked === true || vendedorChecked === 'true';
+
             if (!inicializado) {
                 aplicarCustosPadrao();
                 inicializado = true;
@@ -224,7 +233,21 @@
             window.postMessage({ type: 'HIPER_CUSTO_EXPORT_DATA', custos: window.__hiperCustos }, '*');
         }
 
-        // D) Sincronização de custo em memória
+        // D) Vendedor alterado na aba do orçamento — persiste no chrome.storage
+        if (msg?.type === 'HIPER_VENDEDOR_SET') {
+            const { text, checked } = msg;
+            if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
+            if (text    != null) window.__hiperVendedor.text    = String(text);
+            if (checked != null) window.__hiperVendedor.checked = Boolean(checked);
+            // Salva via BroadcastChannel — mesmo caminho que o custo usa
+            try {
+                const bc = new BroadcastChannel('hiper_custo_channel');
+                bc.postMessage({ type: 'HIPER_VENDEDOR_SAVE', text: window.__hiperVendedor.text, checked: window.__hiperVendedor.checked });
+                bc.close();
+            } catch(e) {}
+        }
+
+        // E) Sincronização de custo em memória
         if (msg?.type === 'HIPER_CUSTO_SYNC') {
             const { id, val } = msg;
             if (id != null) {

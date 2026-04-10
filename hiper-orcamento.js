@@ -48,6 +48,14 @@ function formatMoeda(n) {
         letra:   String(letra).toUpperCase(),
         counter: parseInt(counter, 10) || 999,
       };
+      // Carrega vendedor persistido.
+      // Atualiza campo a campo (sem recriar o objeto) para não sobrescrever
+      // escrita concorrente do hiper-cache.js que processa o mesmo HIPER_CACHE_ALL.
+      const vendedorText    = entries['vendedor']?.text    ?? null;
+      const vendedorChecked = entries['vendedor']?.checked ?? null;
+      if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
+      if (vendedorText    != null) window.__hiperVendedor.text    = String(vendedorText);
+      if (vendedorChecked != null) window.__hiperVendedor.checked = vendedorChecked === true || vendedorChecked === 'true';
     }
 
     // O popup alterou a config — atualiza imediatamente em memória
@@ -60,16 +68,23 @@ function formatMoeda(n) {
 
   // Fallback: lê direto do chrome.storage se disponível (quando rodando como content script)
   if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    chrome.storage.local.get(['hiper_orc_letra', 'hiper_orc_counter'], (r) => {
+    chrome.storage.local.get(['hiper_orc_letra', 'hiper_orc_counter', 'hiper_vendedor_text', 'hiper_vendedor_checked'], (r) => {
       window.__hiperOrcConfig = {
         letra:   ((r.hiper_orc_letra)   || 'A').toUpperCase(),
         counter: parseInt(r.hiper_orc_counter ?? '999', 10) || 999,
+      };
+      window.__hiperVendedor = {
+        text:    r.hiper_vendedor_text    || '',
+        checked: r.hiper_vendedor_checked || false,
       };
     });
     chrome.storage.onChanged.addListener((changes) => {
       if (!window.__hiperOrcConfig) window.__hiperOrcConfig = { letra: 'A', counter: 999 };
       if (changes.hiper_orc_letra)   window.__hiperOrcConfig.letra   = (changes.hiper_orc_letra.newValue   || 'A').toUpperCase();
       if (changes.hiper_orc_counter) window.__hiperOrcConfig.counter = parseInt(changes.hiper_orc_counter.newValue ?? '999', 10) || 999;
+      if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
+      if (changes.hiper_vendedor_text)    window.__hiperVendedor.text    = changes.hiper_vendedor_text.newValue    || '';
+      if (changes.hiper_vendedor_checked) window.__hiperVendedor.checked = changes.hiper_vendedor_checked.newValue || false;
     });
   }
 })();
@@ -721,11 +736,12 @@ function onVendedor() {
     span.style.display = texto ? '' : 'none';
     span.textContent   = texto ? 'Vendedor: ' + texto : '';
   }
+  // Persiste via window.opener (página principal → bridge → chrome.storage)
   try {
-    const bc = new BroadcastChannel('hiper_custo_channel');
-    bc.postMessage({ type: 'HIPER_VENDEDOR_SAVE', checked: !!texto, text: inp.value });
-    bc.close();
-  } catch(e) { console.error('[HiperOrc] ❌ BroadcastChannel falhou:', e); }
+    if (window.opener) {
+      window.opener.postMessage({ type: 'HIPER_VENDEDOR_SET', text: inp.value, checked: !!texto }, '*');
+    }
+  } catch(e) { console.error('[HiperOrc] ❌ postMessage para opener falhou:', e); }
 }
 
 (function() {
@@ -733,20 +749,6 @@ function onVendedor() {
   if (!v.text) return;
   el('iVendedor').value = v.text || '';
   onVendedor();
-})();
-
-(function() {
-  const bc = new BroadcastChannel('hiper_custo_channel');
-  bc.onmessage = (ev) => {
-    if (ev.data?.type !== 'HIPER_VENDEDOR_LOADED') return;
-    const { text } = ev.data;
-    const inp = el('iVendedor');
-    if (!inp) return;
-    inp.value = text || '';
-    onVendedor();
-    bc.close();
-  };
-  bc.postMessage({ type: 'HIPER_VENDEDOR_LOAD' });
 })();
 
 // ── Gera nome do arquivo PDF ───────────────────────────────────────────────────

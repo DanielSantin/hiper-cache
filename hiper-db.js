@@ -5,7 +5,7 @@
 (function() {
   'use strict';
 
-  const API_BASE   = 'https://db.superaserver.com';
+  const API_BASE   = 'https://db.superaserver.com/api';
   const TIMEOUT_MS = 4000;
 
   // ── Utilitários ──────────────────────────────────────────────────────────────
@@ -22,7 +22,11 @@
   }
 
   function getVendedor() {
-    try { return (window.__hiperVendedor?.text || '').trim(); } catch(e) { return ''; }
+    try {
+      const v = (window.__hiperVendedor?.text || '').trim();
+      if (!v) console.warn('[HiperDB] ⚠️ Vendedor vazio ao salvar pedido — verifique se o nome foi configurado no popup.');
+      return v;
+    } catch(e) { return ''; }
   }
 
   // Delega à função global definida em hiper-orcamento.js (única fonte da verdade).
@@ -137,11 +141,13 @@ function getNumeroOrcamento() {
     if (!btn || btn._dbHooked) return;
     btn._dbHooked = true;
     btn.addEventListener('click', () => {
+      // Delay de 300 ms: aguarda hiper-orcamento.js gerar o número E o HIPER_CACHE_ALL
+      // já ter populado window.__hiperVendedor antes de chamar getVendedor().
       setTimeout(() => {
         const codigo = getNumeroOrcamento();
         const dados  = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : null;
         if (dados) salvarPedido(codigo, dados);
-      }, 100);
+      }, 300);
     }, true);
   }
 
