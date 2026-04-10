@@ -5,13 +5,11 @@
 (function() {
   'use strict';
 
-  const API_BASE   = 'https://147.15.4.240:8000';
+  const API_BASE   = 'https://db.superaserver.com';
   const TIMEOUT_MS = 4000;
 
   // ── Utilitários ──────────────────────────────────────────────────────────────
 
-  // Usa o fetch nativo guardado pelo hiper-cache.js — evita o monkey-patch
-  // que intercepta apenas as rotas do Select2 mas pode causar efeitos colaterais.
   const _nativeFetch = window.__nativeFetch || window.fetch.bind(window);
 
   function fetchComTimeout(url, opts) {
@@ -39,10 +37,61 @@
     } catch(e) { return ''; }
   }
 
+  // ── Serialização dos kits ativos ──────────────────────────────────────────────
+  // Converte o Map kitsAtivos (kit.js) num array serializável.
+  // NÃO salva referências ao DOM ($linha) — apenas os parâmetros de entrada.
+  function serializarKits() {
+    const kitsAtivos = window.kitsAtivos;
+    if (!kitsAtivos?.size) return [];
+
+    const resultado = [];
+
+    kitsAtivos.forEach((estado, id) => {
+      if (estado.tipo === 'portas') {
+        resultado.push({
+          id,
+          tipo:   'portas',
+          grupos: (estado.grupos || []).map(g => ({
+            id:   g.id,
+            qtd:  g.qtd,
+            larg: g.larg,
+            alt:  g.alt,
+          })),
+        });
+
+      } else if (estado.tipo === 'parede') {
+        resultado.push({
+          id,
+          tipo:   'parede',
+          cfg:    { ...estado.cfg },
+          A:      estado.A    || 0,
+          margem: estado.margem != null ? estado.margem : 0,
+        });
+
+      } else {
+        // kit normal: aramado, estruturado, cortineiro…
+        resultado.push({
+          id,
+          tipo:    'kit',
+          nomeKit: estado.nomeKit ?? id,
+          A:       estado.A    || 0,
+          P:       estado.P    || 0,
+          cant:    estado.cant ?? 3.15,
+          margem:  estado.margem != null ? estado.margem : 0,
+        });
+      }
+    });
+
+    return resultado;
+  }
+
   // ── Salvar pedido na API ──────────────────────────────────────────────────────
 
   async function salvarPedido(codigo, dados) {
     if (!codigo || !dados?.itens?.length) return;
+
+    const kits = serializarKits();
+
     const payload = {
       codigo,
       vendedor: getVendedor(),
@@ -56,6 +105,7 @@
         vlUnit:    it.vlUnit   || 0,
         subtotal:  it.subtotal || it.qtd * it.vlUnit,
       })),
+      kits,
     };
     try {
       const res = await fetchComTimeout(`${API_BASE}/pedido`, {
@@ -63,14 +113,14 @@
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
-      if (res.ok) console.info(`[HiperDB] ✅ Pedido ${codigo} salvo.`);
+      if (res.ok) console.info(`[HiperDB] ✅ Pedido ${codigo} salvo (${kits.length} kit(s)).`);
       else        console.warn(`[HiperDB] Servidor retornou ${res.status}.`);
     } catch(e) {
       console.info('[HiperDB] API indisponível — continuando offline.');
     }
   }
 
-  // ── Hook no botão Orçamento (página mãe) ─────────────────────────────────────
+  // ── Hook no botão Orçamento ───────────────────────────────────────────────────
 
   function hookBotaoOrcamento() {
     const btn = document.getElementById('hiper-btn-orcamento');
@@ -176,6 +226,218 @@
     return res.json();
   }
 
+  // ── Restaurar itens no pedido (sem recalcular via fórmulas) ──────────────────
+  // Insere cada item pelo idProduto / código do nome usando o mesmo mecanismo
+  // do kit.js (inserirViaCache + setarQuantidade), mas alimentando os valores
+  // já finalizados que vieram do banco — nunca chama recalcularTudo().
+
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+
+  async function restaurarItens(itens) {
+    if (!itens?.length) return;
+
+    // Aguarda o master estar pronto (máx 10s)
+    let t = 0;
+    while (!window.__hiperMaster?.length && t++ < 100) await delay(100);
+    if (!window.__hiperMaster?.length) {
+      console.warn('[HiperDB] Master não disponível — itens não restaurados.');
+      return;
+    }
+
+    // Limpa linhas vazias existentes
+    $('.linha-produto:not(.default)').each(function() {
+      const texto = $(this).find('.select2-chosen').text().trim();
+      if (texto === 'Nome, código de barras, código do produto ou referência interna') {
+        $(this).find('.btn-remover-linha, .btn-excluir-linha, [ng-click*="remover"], [ng-click*="excluir"]')
+               .first().click();
+      }
+    });
+
+    await delay(200);
+
+    // Adiciona uma linha por item
+    const totalAntes = $('.linha-produto:not(.default)').length;
+    for (let i = 0; i < itens.length; i++) {
+      $('.btn-adicionar-mais-produtos').click();
+    }
+
+    // Aguarda as linhas aparecerem
+    const inicio = Date.now();
+    while (Date.now() - inicio < 5000) {
+      if ($('.linha-produto:not(.default)').length >= totalAntes + itens.length) break;
+      await delay(50);
+    }
+
+    const todasLinhas = $('.linha-produto:not(.default)').toArray();
+    const linhasNovas = todasLinhas.slice(totalAntes);
+
+    for (let i = 0; i < itens.length; i++) {
+      const it    = itens[i];
+      const $linha = $(linhasNovas[i]);
+      if (!$linha.length) continue;
+
+      // Resolve o produto: tenta pelo idProduto, depois pelo código no início do nome
+      const codigoBusca = it.idProduto || (it.nome || '').match(/^(\d{4})\b/)?.[1] || '';
+      const produto = codigoBusca
+        ? (window.__hiperMaster.find(p => String(p.id ?? p.idProduto) === String(codigoBusca)) ||
+           window.__hiperMaster.find(p => (p.Nome || '').startsWith(codigoBusca + ' ')))
+        : null;
+
+      if (produto) {
+        const $input = $linha.find('input.produto');
+        if ($input.length) {
+          // inserirViaCache está exposto por kit.js; se não estiver, fazemos inline
+          if (typeof inserirViaCache === 'function') {
+            inserirViaCache($input, produto);
+          } else {
+            const data = { id: String(produto.id ?? produto.idProduto), text: produto.Nome ?? produto.text, ...produto };
+            const s2 = $input.data('select2');
+            if (s2) {
+              const ant = s2.data();
+              $input.val(data.id);
+              s2.updateSelection(data);
+              $input.trigger({ type: 'select2-selected', val: data.id, choice: data });
+              s2.triggerChange({ added: data, removed: ant });
+            }
+          }
+          await delay(150);
+        }
+      } else {
+        console.warn(`[HiperDB] Produto não encontrado para item "${it.nome}" — linha ficará em branco.`);
+      }
+
+      // Seta quantidade com o valor salvo no banco (sem usar fórmulas)
+      const $qtd = $linha.find(
+        '.quantidade-produto input, input.quantidade-unitaria, input[ng-model*="quantidade"]'
+      ).first();
+
+      if ($qtd.length) {
+        const pronto = await _aguardarHabilitado($qtd);
+        if (pronto) {
+          const nativeInput = $qtd[0];
+          const campoDecimal = (nativeInput.value || '').includes(',') || (nativeInput.value || '').includes('.');
+          const valorStr = campoDecimal
+            ? it.qtd.toFixed(2).replace('.', ',')
+            : String(Math.ceil(it.qtd));
+
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+          setter ? setter.call(nativeInput, valorStr) : (nativeInput.value = valorStr);
+          nativeInput.dispatchEvent(new Event('input',  { bubbles: true }));
+          nativeInput.dispatchEvent(new Event('change', { bubbles: true }));
+          nativeInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+          nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
+        }
+      }
+    }
+
+    console.info(`[HiperDB] ✅ ${itens.length} item(ns) restaurado(s) no pedido.`);
+  }
+
+  async function _aguardarHabilitado($input, timeout = 3000) {
+    const inicio = Date.now();
+    while (Date.now() - inicio < timeout) {
+      const el = $input[0];
+      if (el && !el.disabled && !el.readOnly && $.contains(document, el)) return true;
+      await delay(50);
+    }
+    return false;
+  }
+
+  // ── Restaurar kits (sem recalcular — usa quantidades do banco) ────────────────
+  // Recria cada entrada no kitsAtivos e monta o painel de UI, mas NÃO chama
+  // recalcularTudo(). As quantidades dos itens já foram preenchidas por
+  // restaurarItens() com os valores finais gravados no banco.
+
+  async function restaurarKits(kits) {
+    if (!kits?.length) return;
+
+    const kitsAtivos = window.kitsAtivos;
+    if (!kitsAtivos) {
+      console.warn('[HiperDB] kitsAtivos não disponível — kits não restaurados.');
+      return;
+    }
+
+    // Aguarda master
+    let t = 0;
+    while (!window.__hiperMaster?.length && t++ < 100) await delay(100);
+    if (!window.__hiperMaster?.length) {
+      console.warn('[HiperDB] Master não disponível — kits não restaurados.');
+      return;
+    }
+
+    for (const kit of kits) {
+      if (kit.tipo === 'parede') {
+        // Recria a entrada de parede no Map apontando para as linhas que
+        // restaurarItens() já inseriu. Busca as $linhas pelo código do produto.
+        const codigos = window.paredeCodigosAtivos?.(kit.cfg) ?? [];
+        const linhasDoKit = _resolverLinhasPorCodigos(codigos);
+
+        kitsAtivos.set(kit.id, {
+          tipo:   'parede',
+          cfg:    { ...kit.cfg },
+          A:      kit.A      || 0,
+          margem: kit.margem || 0,
+          linhas: linhasDoKit,
+        });
+
+      } else if (kit.tipo === 'portas') {
+        const codigos = Object.keys(window.FORMULAS_GESSO?.portas ?? {});
+        const linhasDoKit = _resolverLinhasPorCodigos(codigos);
+
+        kitsAtivos.set(kit.id, {
+          tipo:   'portas',
+          nomeKit: 'portas',
+          A:      0,
+          grupos: (kit.grupos || []).map(g => ({ ...g })),
+          linhas: linhasDoKit,
+        });
+
+      } else {
+        // kit normal
+        const codigos = window.KITS_GESSO?.[kit.nomeKit] ?? [];
+        const linhasDoKit = _resolverLinhasPorCodigos(codigos);
+
+        kitsAtivos.set(kit.id, {
+          tipo:    'kit',
+          nomeKit: kit.nomeKit,
+          A:       kit.A      || 0,
+          P:       kit.P      || 0,
+          cant:    kit.cant   ?? 3.15,
+          margem:  kit.margem || 0,
+          linhas:  linhasDoKit,
+        });
+      }
+    }
+
+    // Atualiza o painel de UI sem recalcular quantidades
+    if (typeof window.renderizarPainel === 'function') {
+      window.renderizarPainel();
+    }
+
+    console.info(`[HiperDB] ✅ ${kits.length} kit(s) restaurado(s) no painel.`);
+  }
+
+  // Dado um array de códigos de produto, encontra as $linhas no DOM que
+  // já foram preenchidas com esses produtos por restaurarItens().
+  function _resolverLinhasPorCodigos(codigos) {
+    const linhas = [];
+    codigos.forEach(codigo => {
+      let $linhaEncontrada = null;
+      $('.linha-produto:not(.default)').each(function() {
+        const s2 = $(this).find('input.produto').data('select2');
+        const nomeProduto = s2?.data()?.Nome ?? s2?.data()?.text ?? '';
+        if (nomeProduto.startsWith(codigo + ' ') || nomeProduto.startsWith(codigo)) {
+          $linhaEncontrada = $(this);
+          return false; // break
+        }
+      });
+      linhas.push({ codigo, $linha: $linhaEncontrada || $() });
+    });
+    return linhas;
+  }
+
+  // ── Repopular pedido completo (itens + kits) ──────────────────────────────────
+
   async function repovoarPedido(pedido) {
     const totalOriginal = pedido.itens.reduce((s, it) => s + it.subtotal, 0);
     const desconto      = totalOriginal - pedido.total;
@@ -186,24 +448,33 @@
     lista += `\n\nTotal: R$ ${pedido.total.toFixed(2).replace('.',',')}`;
     if (desconto > 0.01) lista += `\nDesconto: R$ ${desconto.toFixed(2).replace('.',',')}`;
 
+    const kitsInfo = pedido.kits?.length
+      ? `\n\n🧱 ${pedido.kits.length} estrutura(s) de kit salva(s).`
+      : '';
+
     const ok = confirm(
-      `📦 Pedido ${pedido.codigo}\nSalvo em: ${pedido.atualizado_em}\n\n${lista}\n\nCarregar estes itens como referência?`
+      `📦 Pedido ${pedido.codigo}\nSalvo em: ${pedido.atualizado_em}\n\n${lista}${kitsInfo}\n\nCarregar estes itens no pedido atual?`
     );
     if (!ok) return;
 
-    sessionStorage.setItem('hiper_recuperar_pedido', JSON.stringify(pedido));
+    // Restaura itens primeiro (eles criam as linhas no DOM)
+    await restaurarItens(pedido.itens);
 
-    alert(
-      `✅ Dados salvos em sessionStorage!\n\n` +
-      `Para ver os itens, abra o console (F12) e rode:\n` +
-      `  JSON.parse(sessionStorage.hiper_recuperar_pedido).itens\n\n` +
-      (desconto > 0.01
-        ? `💰 Para o desconto: no widget "Valor Final", coloque ${pedido.total.toFixed(2).replace('.',',')}`
-        : '')
-    );
+    // Depois víncula os kits às linhas já inseridas (sem recalcular)
+    if (pedido.kits?.length) {
+      await restaurarKits(pedido.kits);
+    }
+
+    if (desconto > 0.01) {
+      alert(
+        `✅ Pedido carregado!\n\n` +
+        `💰 Este pedido tinha desconto.\n` +
+        `No widget "Valor Final", ajuste para: ${pedido.total.toFixed(2).replace('.',',')}`
+      );
+    }
   }
 
-  // ── Cria o painel de recuperação (sem inserir no DOM — hiper-ui.js faz isso) ──
+  // ── Cria o painel de recuperação ──────────────────────────────────────────────
 
   function criarPainelRecuperacao() {
     const painel = document.createElement('div');
@@ -233,7 +504,8 @@
       try {
         const pedido = await recuperarPedido(codigo);
         msg.style.color = '#1a7a1a';
-        msg.textContent = `✅ ${pedido.itens.length} itens`;
+        const nKits = pedido.kits?.length ? ` + ${pedido.kits.length} kit(s)` : '';
+        msg.textContent = `✅ ${pedido.itens.length} itens${nKits}`;
         await repovoarPedido(pedido);
       } catch(e) {
         msg.style.color = '#c00';
@@ -250,15 +522,11 @@
     return painel;
   }
 
-  // ── Registro no centralizador de UI (hiper-ui.js) ─────────────────────────────
-  // ordem 30 — painel de recuperação fica abaixo dos kits
-  // hookBotaoOrcamento() continua sendo chamado pelo centralizador via MutationObserver
-  // interno, pois depende de #hiper-btn-orcamento que já é gerenciado pelo hiper-ui.js.
+  // ── Registro no centralizador de UI ──────────────────────────────────────────
   (function _registrarDB() {
     function _registrar() {
       if (window.__hiperUI) {
         window.__hiperUI.registrar({ id: 'hiper-painel-recuperar', ordem: 30, render: criarPainelRecuperacao });
-        // Hook no botão de orçamento — tenta agora e monitora via observer do hiper-ui.js
         hookBotaoOrcamento();
       } else {
         setTimeout(_registrar, 50);
@@ -267,7 +535,6 @@
     _registrar();
   })();
 
-  // Garante o hook no botão mesmo após re-renderizações do Angular
   new MutationObserver(() => {
     if (location.hash.includes('pedido-venda')) hookBotaoOrcamento();
   }).observe(document.documentElement, { childList: true, subtree: true });
