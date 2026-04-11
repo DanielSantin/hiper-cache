@@ -736,12 +736,12 @@ function onVendedor() {
     span.style.display = texto ? '' : 'none';
     span.textContent   = texto ? 'Vendedor: ' + texto : '';
   }
-  // Persiste via window.opener (página principal → bridge → chrome.storage)
+  // Persiste via BroadcastChannel → interceptor → chrome.storage
   try {
-    if (window.opener) {
-      window.opener.postMessage({ type: 'HIPER_VENDEDOR_SET', text: inp.value, checked: !!texto }, '*');
-    }
-  } catch(e) { console.error('[HiperOrc] ❌ postMessage para opener falhou:', e); }
+    const bc = new BroadcastChannel('hiper_custo_channel');
+    bc.postMessage({ type: 'HIPER_VENDEDOR_SAVE', text: inp.value, checked: !!texto });
+    bc.close();
+  } catch(e) { console.error('[HiperOrc] ❌ BroadcastChannel vendedor falhou:', e); }
 }
 
 (function() {

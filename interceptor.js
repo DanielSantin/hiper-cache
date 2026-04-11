@@ -72,6 +72,10 @@ try {
         await chrome.storage.local.set({ 'vendedor': { checked: msg.checked, text: msg.text } });
         console.log('[Interceptor] ✅ Vendedor salvo:', msg.text);
       });
+      // Notifica a página original para atualizar __hiperVendedor em memória
+      // (mesmo padrão do HIPER_CUSTO_SYNC)
+      window.postMessage({ type: 'HIPER_VENDEDOR_SYNC', text: msg.text, checked: msg.checked }, '*');
+      console.log('[Interceptor] 📡 Vendedor sync disparado para página original:', msg.text);
     }
 
     // ── Carrega vendedor e responde via BC (funciona para blob: também) ───────
@@ -138,30 +142,11 @@ window.addEventListener('message', async (event) => {
       const all    = await chrome.storage.local.get(null);
       const custos = {};
       for (const [k, v] of Object.entries(all)) {
-        if (k.startsWith('custo:')) custos[k.slice(6)] = v.val;
+        if (k.startsWith('custo:')) custos[k.slice(6)] = v.data;
       }
       console.log('[Interceptor] 📦 Carregando custos:', Object.keys(custos).length, 'itens —', JSON.stringify(custos));
       window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos }, '*');
     });
   }
 
-  // Vendedor: salva via relay do hiper-cache.js (página principal → interceptor)
-  if (msg.type === 'HIPER_VENDEDOR_SAVE' && msg._fromBC) {
-    await safeStorage(async () => {
-      await chrome.storage.local.set({ 'vendedor': { checked: msg.checked, text: msg.text } });
-      console.log('[Interceptor] ✅ Vendedor salvo (via relay):', msg.text);
-    });
-  }
-
-  // Vendedor: carrega a pedido da página principal
-  if (msg.type === 'HIPER_VENDEDOR_LOAD') {
-    await safeStorage(async () => {
-      const result = await chrome.storage.local.get('vendedor');
-      const v = result?.vendedor || { checked: false, text: '' };
-      const bcReply = new BroadcastChannel('hiper_custo_channel');
-      bcReply.postMessage({ type: 'HIPER_VENDEDOR_LOADED', checked: v.checked, text: v.text });
-      bcReply.close();
-      console.log('[Interceptor] ✅ Vendedor carregado e enviado (via window.message):', v.text);
-    });
-  }
 });

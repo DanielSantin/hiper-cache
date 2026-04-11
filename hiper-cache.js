@@ -233,21 +233,7 @@
             window.postMessage({ type: 'HIPER_CUSTO_EXPORT_DATA', custos: window.__hiperCustos }, '*');
         }
 
-        // D) Vendedor alterado na aba do orçamento — persiste no chrome.storage
-        if (msg?.type === 'HIPER_VENDEDOR_SET') {
-            const { text, checked } = msg;
-            if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
-            if (text    != null) window.__hiperVendedor.text    = String(text);
-            if (checked != null) window.__hiperVendedor.checked = Boolean(checked);
-            // Salva via BroadcastChannel — mesmo caminho que o custo usa
-            try {
-                const bc = new BroadcastChannel('hiper_custo_channel');
-                bc.postMessage({ type: 'HIPER_VENDEDOR_SAVE', text: window.__hiperVendedor.text, checked: window.__hiperVendedor.checked });
-                bc.close();
-            } catch(e) {}
-        }
-
-        // E) Sincronização de custo em memória
+        // D) Sincronização de custo em memória
         if (msg?.type === 'HIPER_CUSTO_SYNC') {
             const { id, val } = msg;
             if (id != null) {
@@ -255,11 +241,18 @@
                 DEBUG && console.log('[HiperCache] 🔄 Custo sincronizado em memória — id:', id, '| val:', val);
             }
         }
+
+        // E) Sincronização de vendedor em memória (vindo do blob via interceptor)
+        if (msg?.type === 'HIPER_VENDEDOR_SYNC') {
+            if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
+            if (msg.text    != null) window.__hiperVendedor.text    = String(msg.text);
+            if (msg.checked != null) window.__hiperVendedor.checked = Boolean(msg.checked);
+            console.log('[HiperCache] 🔄 Vendedor sincronizado em memória:', msg.text);
+        }
     });
 
     // ── 6. Inicialização ──────────────────────────────────────────────────────
     window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
-    window.postMessage({ type: 'HIPER_CUSTO_LOAD_ALL' }, '*');
 
     const iniciarObserver = () => {
         if (document.body) {
