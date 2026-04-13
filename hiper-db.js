@@ -193,18 +193,32 @@ function getNumeroOrcamento() {
         nome:     tds[3].textContent.trim(),
         qtd:      parseFloat(tds[1].textContent.replace(',','.')) || 0,
         unidade:  tds[2].textContent.trim() || 'UN',
-        vlUnit:   parseFloat((tds[4].textContent||'').replace(/[^\\d,]/g,'').replace(',','.')) || 0,
-        subtotal: parseFloat((tds[5].textContent||'').replace(/[^\\d,]/g,'').replace(',','.')) || 0,
+        vlUnit:   parseFloat((tds[4].textContent||'').replace(/[^\d,]/g,'').replace(',','.')) || 0,
+        subtotal: parseFloat((tds[5].textContent||'').replace(/[^\d,]/g,'').replace(',','.')) || 0,
       });
     });
-    var totalEl = document.getElementById('iTotal') || document.querySelector('.tval');
-    var total = totalEl ? parseFloat((totalEl.value||totalEl.textContent||'').replace(/[^\\d,]/g,'').replace(',','.')) || 0 : 0;
-    return { itens: itens, total: total, desconto: 0 };
+
+    // Seletores corretos conforme hiper-orcamento.js
+    var totalC   = parseFloat(document.getElementById('valC')?.value   || '0') || 0;
+    var totalV   = parseFloat(document.getElementById('valV')?.value   || '0') || 0;
+    var desconto = parseFloat(document.getElementById('iDescC')?.value || '0') || 0;
+
+    // Usa o total à vista (PIX) como total canônico; fallback para cartão
+    var total = totalV > 0 ? totalV : totalC;
+
+    return { itens: itens, total: total, desconto: desconto };
   }
+  // No snippet injetado, substitua _dbSave por:
+  var _dbSaveTimer = null;
   function _dbSave() {
-    var payload = _dbPayload();
-    if (!payload.itens.length) return;
-    window.opener && window.opener.postMessage({ type: 'HIPER_DB_SAVE', codigo: _NR_DB, dados: payload }, '*');
+    clearTimeout(_dbSaveTimer);
+    _dbSaveTimer = setTimeout(function() {
+      var payload = _dbPayload();
+      if (!payload.itens.length) return;
+      window.opener && window.opener.postMessage(
+        { type: 'HIPER_DB_SAVE', codigo: _NR_DB, dados: payload }, '*'
+      );
+    }, 400); // 400ms de debounce — absorve o duplo disparo print+beforeprint
   }
   function _hookBotoes() {
     ['btnPdf','btnCopy','btnPrint'].forEach(function(id) {
