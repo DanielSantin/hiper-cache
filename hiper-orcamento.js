@@ -432,11 +432,11 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <div class="tlabel" id="lblC">Valor Total – Parcelado em até ${parcelas}x no Cartão de Crédito</div>
     <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold">
       <select id="select-parcelas-input" style="...">
-          ${[1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
-              `<option value="${n}" ${n === parcelas ? 'selected' : ''}>
-                  ${n === 1 ? 'CARTÃO 3x' : 'CARTÃO ' + n + 'x'}
-              </option>`
-          ).join('')}
+        ${[1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
+            `<option value="${n}" ${n === parcelas ? 'selected' : ''}>
+                CARTÃO ${n}x
+            </option>`
+        ).join('')}
       </select>
     </div>
     <div class="tval">
