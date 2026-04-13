@@ -155,11 +155,16 @@ function extrairDadosPedido() {
   const freteEl    = document.querySelector('.totais-frete .col-xs-9.col-sm-6.col-md-2 p');
   const totalEl    = document.querySelector('.totais-valor-total .col-xs-9.col-sm-6.col-md-2 p, .valor-total');
 
+  const selectParcelas = document.getElementById('hiper-select-parcelas');
+  const parcelasStr    = selectParcelas ? selectParcelas.value : 'Cartão 3X';
+  const parcelasNum    = parseInt((parcelasStr || '').replace(/\D/g, ''), 10) || 1;
+
   return {
     itens,
     desconto: parseMoedaOrc(descontoEl?.textContent),
     frete:    parseMoedaOrc(freteEl?.textContent),
     total:    parseMoedaOrc(totalEl?.textContent),
+    parcelas: parcelasNum,
   };
 }
 
@@ -346,11 +351,11 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 <div class="page">
 
 <div class="toolbar no-print">
-  <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
-  <button class="btn-copy" id="btnCopy" onclick="copiarImagem()">📋 Copiar para WhatsApp</button>
-  <button class="btn-pdf" id="btnPdf" onclick="baixarPdf()">⬇️ Baixar PDF</button>
+  <button class="btn-print" onclick="_dbSalvar(); window.print()">🖨️ Imprimir / Salvar PDF</button>
+  <button class="btn-copy" id="btnCopy" onclick="_dbSalvar(); copiarImagem()">📋 Copiar para WhatsApp</button>
+  <button class="btn-pdf" id="btnPdf" onclick="_dbSalvar(); baixarPdf()">⬇️ Baixar PDF</button>
   <button id="btnResumido"
-    onclick="if(window.__gerarResumidoDaAba){window.__gerarResumidoDaAba();} else if(window.abrirOrcamentoResumido){window.abrirOrcamentoResumido();}"
+    onclick="_dbSalvar(); if(window.__gerarResumidoDaAba){window.__gerarResumidoDaAba();} else if(window.abrirOrcamentoResumido){window.abrirOrcamentoResumido();}"
     style="padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#1a5c8a">
     📝 Resumido
   </button>
@@ -373,7 +378,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   <div class="cliente-row">
     <label for="iCliente">Cliente:</label>
     <input type="text" id="iCliente" class="cliente-inp" placeholder="Nome do cliente…" maxlength="80"
-           oninput="onCliente()" onblur="onClienteBlur()" autocomplete="off">
+           oninput="onCliente()" autocomplete="off">
     <span class="cliente-badge">aparece no cabeçalho e no PDF</span>
   </div>
 </div>
@@ -510,7 +515,82 @@ const NUM_ORC   = ${numOrcJSON};
 let _descMaxCartao = NaN;
 let _pdfBaixado = false;
 
-// ── Aviso ao fechar sem baixar PDF ───────────────────────────────────────────
+// ── Salva no banco via opener (hiper-db.js) ───────────────────────────────────
+// Chamada por todos os 4 botões da toolbar antes de sua ação principal.
+// Coleta os valores atuais da janela (já editados pelo usuário) e envia.
+function _parseTdMoeda(txt) {
+  // Remove tudo exceto dígitos, vírgula e ponto, depois normaliza separadores BR
+  const s = (txt || '').replace(/[^\d,.]/g, '');
+  // Formato BR: último separador é vírgula decimal → "1.234,56"
+  if (/,/.test(s)) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+  return parseFloat(s) || 0;
+}
+
+function _dbSalvar() {
+  try {
+    const rows = document.querySelectorAll('.tbl tbody tr:not(.vazia)');
+    const itens = [];
+
+    // Monta índice pelo nome para aproveitar os valores já calculados em ITENS
+    // (ITENS é serializado no momento da geração do orçamento, antes de qualquer
+    //  problema de timing com o DOM do Hiper ERP)
+    const itensIdx = {};
+    (ITENS || []).forEach(function(it) { itensIdx[it.nome] = it; });
+
+    rows.forEach(function(tr) {
+      const tds = tr.querySelectorAll('td');
+      if (tds.length < 6) return;
+      const nome = tds[3].textContent.trim();
+      if (!nome) return;
+
+      // Tenta ler do DOM primeiro; se vier zerado, usa o valor de ITENS
+      let vlUnit   = _parseTdMoeda(tds[4].textContent);
+      let subtotal = _parseTdMoeda(tds[5].textContent);
+      const ref = itensIdx[nome];
+      if (ref) {
+        if (!vlUnit   && ref.vlUnit)   vlUnit   = ref.vlUnit;
+        if (!subtotal && ref.subtotal) subtotal = ref.subtotal;
+      }
+
+      const qtd = parseFloat(tds[1].textContent.replace(',', '.')) || 0;
+      // Garante consistência: se subtotal ainda zerado, recalcula
+      if (!subtotal && vlUnit && qtd) subtotal = qtd * vlUnit;
+
+      itens.push({
+        nome,
+        qtd,
+        unidade:  tds[2].textContent.trim() || 'UN',
+        vlUnit,
+        subtotal,
+        idProduto: ref?.idProduto || null,
+      });
+    });
+    if (!itens.length) return;
+
+    const totalC   = parseFloat(el('valC')?.value   || '0') || 0;
+    const totalV   = parseFloat(el('valV')?.value   || '0') || 0;
+    const desconto = parseFloat(el('iDescC')?.value || '0') || 0;
+    const total    = totalC > 0 ? totalC : totalV;  // prioriza valor cartão
+
+    // Lê as parcelas do select interno da janela
+    const selParcelas = el('select-parcelas-input');
+    const parcelas    = selParcelas ? (parseInt(selParcelas.value, 10) || 1) : 1;
+
+    // Lê o nome do cliente digitado na janela
+    const clienteInp = el('iCliente');
+    const cliente    = clienteInp ? clienteInp.value.trim() : '';
+
+    const dados = { itens, total, desconto, parcelas, cliente };
+
+    if (window.opener && typeof window.opener.__hiperDBSave === 'function') {
+      window.opener.__hiperDBSave(NUM_ORC, dados);
+    }
+  } catch(e) {
+    console.warn('[HiperOrc] _dbSalvar falhou:', e);
+  }
+}
+
+
 window.addEventListener('beforeunload', function(e) {
   if (_pdfBaixado) return;
   const msg = 'O PDF do orçamento ' + NUM_ORC + ' ainda não foi baixado. Tem certeza que deseja fechar?';
@@ -571,21 +651,6 @@ function onCliente() {
     span.style.display = 'none';
     span.textContent   = '';
   }
-}
-
-function onClienteBlur() {
-  const inp = el('iCliente');
-  if (!inp) return;
-  const nome = inp.value.trim();
-  if (nome === _clienteAnterior) return; // não mudou, não envia
-  _clienteAnterior = nome;
-  console.log('[HiperOrc] 💾 Cliente alterado — enviando via BC:', nome);
-  try {
-    const bc = new BroadcastChannel('hiper_custo_channel');
-    bc.postMessage({ type: 'HIPER_CLIENTE_SAVE', numOrc: NUM_ORC, cliente: nome });
-    bc.close();
-    console.log('[HiperOrc] ✅ Cliente enviado — orçamento:', NUM_ORC, '| nome:', nome);
-  } catch(e) { console.error('[HiperOrc] ❌ BroadcastChannel cliente falhou:', e); }
 }
 
 // Retorna o primeiro nome do cliente (para o nome do arquivo PDF)

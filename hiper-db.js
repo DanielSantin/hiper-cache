@@ -118,6 +118,8 @@ function getNumeroOrcamento() {
       vendedor: getVendedor(),
       total:    dados.total    || 0,
       desconto: dados.desconto || 0,
+      parcelas: dados.parcelas || 1,
+      cliente:  dados.cliente  || '',
       itens: dados.itens.map(it => ({
         idProduto: it.idProduto || null,
         nome:      it.nome,
@@ -141,114 +143,12 @@ function getNumeroOrcamento() {
     }
   }
 
-  // ── Hook no botão Orçamento ───────────────────────────────────────────────────
+  // ── Save público — chamado pelos botões da janela do orçamento ───────────────
+  // hiper-orcamento.js chama window.__hiperDBSave(codigo, dados) em cada um
+  // dos 4 botões (Imprimir, Copiar WhatsApp, Baixar PDF, Resumido).
 
-  function hookBotaoOrcamento() {
-    const btn = document.getElementById('hiper-btn-orcamento');
-    if (!btn || btn._dbHooked) return;
-    btn._dbHooked = true;
-    btn.addEventListener('click', () => {
-      // Delay de 300 ms: aguarda hiper-orcamento.js gerar o número E o HIPER_CACHE_ALL
-      // já ter populado window.__hiperVendedor antes de chamar getVendedor().
-      setTimeout(() => {
-        const codigo = getNumeroOrcamento();
-        const dados  = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : null;
-        if (dados) salvarPedido(codigo, dados);
-      }, 300);
-    }, true);
-  }
-
-  // ── Escuta postMessage vindo do HTML do orçamento (blob: window) ──────────────
-
-  window.addEventListener('message', (ev) => {
-    if (ev.data?.type !== 'HIPER_DB_SAVE') return;
-    const { codigo, dados } = ev.data;
+  window.__hiperDBSave = function(codigo, dados) {
     if (codigo && dados) salvarPedido(codigo, dados);
-  });
-
-  // ── Patch window.open para injetar snippet de save no blob gerado ─────────────
-
-  const _origOpen = window.open.bind(window);
-  window.open = function(url, target, features) {
-    if (typeof url === 'string' && url.startsWith('blob:')) {
-      (async () => {
-        try {
-          const resp = await fetch(url);
-          let html   = await resp.text();
-
-          const titleMatch = html.match(/<title>[^<]*?(\b[A-Z]{1,3}\d{4,5})\b/i);
-          const numOrc     = titleMatch ? titleMatch[1].toUpperCase() : getNumeroOrcamento();
-
-          const snippet = `
-<script>
-(function() {
-  var _NR_DB = ${JSON.stringify(numOrc)};
-  function _dbPayload() {
-    var rows = document.querySelectorAll('.tbl tbody tr:not(.vazia)');
-    var itens = [];
-    rows.forEach(function(tr) {
-      var tds = tr.querySelectorAll('td');
-      if (tds.length < 6) return;
-      itens.push({
-        nome:     tds[3].textContent.trim(),
-        qtd:      parseFloat(tds[1].textContent.replace(',','.')) || 0,
-        unidade:  tds[2].textContent.trim() || 'UN',
-        vlUnit:   parseFloat((tds[4].textContent||'').replace(/[^\d,]/g,'').replace(',','.')) || 0,
-        subtotal: parseFloat((tds[5].textContent||'').replace(/[^\d,]/g,'').replace(',','.')) || 0,
-      });
-    });
-
-    // Seletores corretos conforme hiper-orcamento.js
-    var totalC   = parseFloat(document.getElementById('valC')?.value   || '0') || 0;
-    var totalV   = parseFloat(document.getElementById('valV')?.value   || '0') || 0;
-    var desconto = parseFloat(document.getElementById('iDescC')?.value || '0') || 0;
-
-    // Usa o total à vista (PIX) como total canônico; fallback para cartão
-    var total = totalV > 0 ? totalV : totalC;
-
-    return { itens: itens, total: total, desconto: desconto };
-  }
-  // No snippet injetado, substitua _dbSave por:
-  var _dbSaveTimer = null;
-  function _dbSave() {
-    clearTimeout(_dbSaveTimer);
-    _dbSaveTimer = setTimeout(function() {
-      var payload = _dbPayload();
-      if (!payload.itens.length) return;
-      window.opener && window.opener.postMessage(
-        { type: 'HIPER_DB_SAVE', codigo: _NR_DB, dados: payload }, '*'
-      );
-    }, 400); // 400ms de debounce — absorve o duplo disparo print+beforeprint
-  }
-  function _hookBotoes() {
-    ['btnPdf','btnCopy','btnPrint'].forEach(function(id) {
-      var btn = document.getElementById(id);
-      if (btn && !btn._dbHooked) {
-        btn._dbHooked = true;
-        btn.addEventListener('click', function() { setTimeout(_dbSave, 200); }, true);
-      }
-    });
-    window.addEventListener('beforeprint', _dbSave);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _hookBotoes);
-  else _hookBotoes();
-})();
-<\/script>`;
-
-          html = html.replace('<body>', '<body>' + snippet);
-          const newBlob = new Blob([html], { type: 'text/html;charset=utf-8' });
-          const newUrl  = URL.createObjectURL(newBlob);
-          setTimeout(() => URL.revokeObjectURL(newUrl), 120000);
-          _origOpen(newUrl, target, features);
-          return;
-        } catch(e) {
-          console.warn('[HiperDB] Falha ao patchear blob:', e);
-        }
-        _origOpen(url, target, features);
-      })();
-      return null;
-    }
-    return _origOpen(url, target, features);
   };
 
   // ── Recuperação de pedido ─────────────────────────────────────────────────────
@@ -631,22 +531,16 @@ function getNumeroOrcamento() {
     return painel;
   }
 
-  // ── Registro no centralizador de UI ──────────────────────────────────────────
   (function _registrarDB() {
     function _registrar() {
       if (window.__hiperUI) {
         window.__hiperUI.registrar({ id: 'hiper-painel-recuperar', ordem: 30, render: criarPainelRecuperacao });
-        hookBotaoOrcamento();
       } else {
         setTimeout(_registrar, 50);
       }
     }
     _registrar();
   })();
-
-  new MutationObserver(() => {
-    if (location.hash.includes('pedido-venda')) hookBotaoOrcamento();
-  }).observe(document.documentElement, { childList: true, subtree: true });
 
   console.info('[HiperDB] ✅ Módulo DB carregado. API:', API_BASE);
 })();
