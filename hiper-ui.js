@@ -113,18 +113,18 @@ function _estaNoFormulario() {
     }, 250);
   }
 
-  new MutationObserver(() => {
+ new MutationObserver(() => {
     const hash = location.hash;
 
     if (hash !== _hashAtual) {
       _hashAtual = hash;
       _desmontar();
-      if (hash.includes('pedido-venda')) _iniciarRetry();
+      if (ROTA_FORMULARIO.test(hash)) _iniciarRetry(); // ← era .includes()
       return;
     }
 
     // Mesmo hash — verifica se algum widget desmontou (Angular re-renderizou)
-    if (hash.includes('pedido-venda')) {
+    if (ROTA_FORMULARIO.test(hash)) {                 // ← era .includes()
       const algumFaltando = _widgets.some(
         w => w.mounted && !document.getElementById(w.id)
       );
@@ -137,7 +137,7 @@ function _estaNoFormulario() {
   }).observe(document.documentElement, { childList: true, subtree: true });
 
   // Tentativa imediata se já estiver na rota
-  if (location.hash.includes('pedido-venda')) _iniciarRetry();
+  if (ROTA_FORMULARIO.test(location.hash)) _iniciarRetry(); // ← era .includes()
 
   // ── API pública ───────────────────────────────────────────────────────────────
   window.__hiperUI = {
