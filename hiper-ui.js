@@ -16,6 +16,12 @@
 // inserido imediatamente na posição correta.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const ROTA_FORMULARIO = /pedido-venda\/(novo|editar|visualizar)(\/|$)/;
+
+function _estaNoFormulario() {
+  return ROTA_FORMULARIO.test(location.hash);
+}
+
 (function () {
   'use strict';
 
@@ -33,7 +39,7 @@
 
   // ── Encontra o anchor ─────────────────────────────────────────────────────────
   function _getAnchor() {
-    if (!location.hash.includes('pedido-venda')) return null;
+    if (!_estaNoFormulario()) return null;
     for (const sel of ANCHOR_SELECTORS) {
       const el = document.querySelector(sel);
       if (el) return el;

@@ -459,17 +459,55 @@ function getNumeroOrcamento() {
     return linhas;
   }
 
-  // ── Repopular pedido completo (itens + kits) ──────────────────────────────────
+  // ── Aguarda o .valor-total estabilizar após restaurar itens ───────────────────
+  async function aguardarTotalEstabilizar(timeout = 8000, tolerancia = 100) {
+    const inicio = Date.now();
+    let valorAnterior = NaN;
+    let igualPor = 0;
+
+    while (Date.now() - inicio < timeout) {
+      const el = document.querySelector('.valor-total');
+      const atual = el ? parseMoeda(el.textContent.trim()) : NaN;
+
+      if (!isNaN(atual) && atual > 0) {
+        if (Math.abs(atual - valorAnterior) < 0.01) {
+          igualPor += 100;
+          if (igualPor >= tolerancia) return atual; // estável por 100ms seguidos
+        } else {
+          igualPor = 0;
+        }
+        valorAnterior = atual;
+      }
+      await delay(100);
+    }
+    return valorAnterior; // retorna o que tiver, mesmo que não estabilizou
+  }
+
+  // ── Aplica desconto via widget Valor Final ────────────────────────────────────
+  async function aplicarDescontoWidget(valorFinal) {
+    const inp = document.getElementById('hiper-vf-input');
+    const btn = document.getElementById('hiper-vf-btn');
+
+    if (!inp || !btn) {
+      console.warn('[HiperDB] Widget Valor Final não encontrado — desconto não aplicado.');
+      return false;
+    }
+
+    // Usa o mesmo formato que o widget espera
+    inp.value = valorFinal.toFixed(2).replace('.', ',');
+    btn.click();
+    return true;
+  }
 
   async function repovoarPedido(pedido, silencioso = false) {
-    const totalOriginal = pedido.itens.reduce((s, it) => s + it.subtotal, 0);
-    const desconto      = totalOriginal - pedido.total;
+    const totalSalvo = pedido.total;
+    const desconto   = (pedido.itens.reduce((s, it) => s + it.subtotal, 0)) - totalSalvo;
 
     let lista = pedido.itens.map((it, i) =>
       `${i+1}. ${it.nome}\n   ${it.qtd} ${it.unidade} × R$ ${it.vlUnit.toFixed(2).replace('.',',')} = R$ ${it.subtotal.toFixed(2).replace('.',',')}`
     ).join('\n');
-    lista += `\n\nTotal: R$ ${pedido.total.toFixed(2).replace('.',',')}`;
-    if (desconto > 0.01) lista += `\nDesconto: R$ ${desconto.toFixed(2).replace('.',',')}`;
+    lista += `\n\nTotal salvo: R$ ${totalSalvo.toFixed(2).replace('.',',')}`;
+    if (desconto > 0.01) lista += `\nDesconto original: R$ ${desconto.toFixed(2).replace('.',',')}`;
 
     const kitsInfo = pedido.kits?.length
       ? `\n\n🧱 ${pedido.kits.length} estrutura(s) de kit salva(s).`
@@ -482,19 +520,32 @@ function getNumeroOrcamento() {
       if (!ok) return;
     }
 
-    // Restaura itens primeiro (eles criam as linhas no DOM)
     await restaurarItens(pedido.itens);
 
-    // Depois víncula os kits às linhas já inseridas (sem recalcular)
     if (pedido.kits?.length) {
       await restaurarKits(pedido.kits);
     }
 
-    if (desconto > 0.01) {
+    // ── Aguarda preços carregarem e aplica desconto pela diferença ────────────
+    const totalAtual = await aguardarTotalEstabilizar();
+
+    if (!isNaN(totalAtual) && totalAtual > 0 && Math.abs(totalAtual - totalSalvo) > 0.01) {
+      const aplicado = await aplicarDescontoWidget(totalSalvo);
+
+      if (aplicado) {
+        const diff = totalAtual - totalSalvo;
+        console.info(
+          `[HiperDB] Desconto aplicado: total atual R$ ${totalAtual.toFixed(2)} → final R$ ${totalSalvo.toFixed(2)} (diff R$ ${diff.toFixed(2)})`
+        );
+      }
+    } else if (!isNaN(totalAtual) && Math.abs(totalAtual - totalSalvo) <= 0.01) {
+      console.info('[HiperDB] Totais idênticos — nenhum desconto necessário.');
+    } else {
+      // Fallback: se não conseguiu ler o total, avisa o usuário
       alert(
         `✅ Pedido carregado!\n\n` +
-        `💰 Este pedido tinha desconto.\n` +
-        `No widget "Valor Final", ajuste para: ${pedido.total.toFixed(2).replace('.',',')}`
+        `⚠️ Não foi possível calcular o desconto automaticamente.\n` +
+        `No widget "Valor Final", ajuste para: ${totalSalvo.toFixed(2).replace('.',',')}`
       );
     }
   }

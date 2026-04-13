@@ -7,7 +7,7 @@ function parseMoeda(str) {
   const s = str.replace(/[^\d,\.]/g, '');
   const commas = (s.match(/,/g)||[]).length, dots = (s.match(/\./g)||[]).length;
   if (commas===1 && dots===0) return parseFloat(s.replace(',','.'));
-  if (dots===1 && commas===0) return parseFloat(s);
+  if (dots===1  && commas===0) return parseFloat(s);
   return parseFloat(s.replace(/\./g,'').replace(',','.'));
 }
 
@@ -41,7 +41,6 @@ function injetarWidget() {
   const btn = document.getElementById('hiper-vf-btn');
   const msg = document.getElementById('hiper-vf-msg');
 
-
   async function zerarDesconto(di) {
     const atual = parseMoeda(di.value);
     if (isNaN(atual) || atual === 0) return;
@@ -49,9 +48,8 @@ function injetarWidget() {
     di.value = '0,00';
     ['input', 'change', 'blur'].forEach(e => dispararEvento(di, e));
 
-    // Aguarda o sistema processar de fato o zero
     await new Promise(resolve => {
-      const MAX_TENTATIVAS = 20; // ~1 segundo no total
+      const MAX_TENTATIVAS = 20;
       let tentativas = 0;
       const checar = setInterval(() => {
         const valorAtual = parseMoeda(getDescontoInput()?.value);
@@ -64,12 +62,16 @@ function injetarWidget() {
     });
   }
 
-  async function aplicar() {
-    const vd = parseMoeda(inp.value);
+  // ── Aplica valor final com loop de correção de arredondamento ─────────────
+  async function aplicar(valorDesejado) {
+    const vd = valorDesejado !== undefined ? valorDesejado : parseMoeda(inp.value);
     const di = getDescontoInput();
 
     if (isNaN(vd) || vd <= 0) { msg.style.color='#c00'; msg.textContent='Valor inválido.'; return; }
     if (!di)                  { msg.style.color='#c00'; msg.textContent='Campo de desconto não encontrado.'; return; }
+
+    msg.style.color = '#888';
+    msg.textContent = 'Calculando...';
 
     await zerarDesconto(di);
 
@@ -77,16 +79,35 @@ function injetarWidget() {
     if (isNaN(vt) || vt <= 0) { msg.style.color='#c00'; msg.textContent='Não foi possível ler o total.'; return; }
     if (vd > vt)               { msg.style.color='#c00'; msg.textContent='Valor maior que o total bruto.'; return; }
 
-    const desc = vt - vd;
-    const ds   = desc.toFixed(6).replace('.', ',');
-    di.value   = ds;
-    ['input','change','blur'].forEach(e => dispararEvento(di, e));
+    // Loop de correção: ajusta desconto até total resultante bater com vd
+    let descAtual = vt - vd;
+    const MAX_TENTATIVAS = 6;
 
-    msg.style.color = '#1a7a1a';
-    msg.textContent = `Desconto R$ ${ds} (${((desc/vt)*100).toFixed(2)}%)`;
+    for (let i = 0; i < MAX_TENTATIVAS; i++) {
+      di.value = descAtual.toFixed(6).replace('.', ',');
+      ['input', 'change', 'blur'].forEach(e => dispararEvento(di, e));
+
+      await new Promise(r => setTimeout(r, 200));
+
+      const totalResultante = getValorTotal();
+      const diff = totalResultante - vd;
+
+      if (Math.abs(diff) < 0.005) break; // ✅ convergiu
+
+      descAtual += diff;
+    }
+
+    const totalFinal = getValorTotal();
+    const descFinal  = vt - totalFinal;
+    const exato      = Math.abs(totalFinal - vd) < 0.005;
+
+    msg.style.color = exato ? '#1a7a1a' : '#b8860b';
+    msg.textContent = exato
+      ? `Desconto R$ ${descFinal.toFixed(2).replace('.',',')} (${((descFinal/vt)*100).toFixed(2)}%)`
+      : `⚠️ Final: R$ ${totalFinal.toFixed(2).replace('.',',')} (diff R$ ${(totalFinal-vd).toFixed(2).replace('.',',')})`;
   }
 
-  btn.addEventListener('click', aplicar);
+  btn.addEventListener('click', () => aplicar());
   inp.addEventListener('keydown', e => { if (e.key==='Enter') aplicar(); });
 
   // Botão desconto PIX 4,77%
@@ -105,12 +126,8 @@ function injetarWidget() {
     const vt = getValorTotal();
     if (isNaN(vt) || vt <= 0) return;
 
-    const desc = vt * 0.0477;
-    di.value   = desc.toFixed(6).replace('.', ',');
-    ['input','change','blur'].forEach(e => dispararEvento(di, e));
-
-    msg.style.color = '#1a7a1a';
-    msg.textContent = `PIX: -R$ ${desc.toFixed(2).replace('.',',')} (4,77%)`;
+    // Reutiliza o loop de correção via aplicar()
+    await aplicar(vt * (1 - 0.0477));
   });
 
   console.info('[HiperCache] Widget "Valor Final" injetado.');
