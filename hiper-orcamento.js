@@ -210,6 +210,9 @@ function gerarHtmlOrcamento(dados, opcoes) {
   const linhasVaziasC = Array(vazias).fill('<div class="custo-row"></div>').join('');
 
   const LOGO = window.__hiperLogo || window.__hiperLogoBase64 || '';
+  const IMG_TEL = window.__hiperIconeTel || '';
+  const IMG_WHATS = window.__hiperIconeWhats || '';
+
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -459,7 +462,22 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 </div>
 
 <div class="rodape">
-  <div>Contato Vendas: Luciana Santin – Fone / Watts: +55 (69) 99237-1547</div>
+  <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 5px;">
+    
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <strong>Atendimento Loja: (69) 3213-1072</strong>
+      <img src="${IMG_TEL}" style="width:12px; height:12px;">
+      <img src="${IMG_WHATS}" style="width:13px; height:13px;">
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <strong>Luciana Santin: (69) 99237-1547</strong>
+      <img src="${IMG_TEL}" style="width:12px; height:12px;">
+      <img src="${IMG_WHATS}" style="width:13px; height:13px;">
+    </div>
+
+  </div>
+
   <div>Av. Rio de Janeiro, 5075 A - Nova Porto Velho – Em frente ao Sindsef</div>
   <div>Chave Pix CNPJ - 56.240.315/0001-60 – Guimarães &amp; Santin</div>
   <div class="entrega">➡ ENTREGA SOMENTE NO TÉRREO</div>

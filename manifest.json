@@ -30,7 +30,7 @@
     {
       "resources": [
         "unidades_padrao.js",
-        "hiper-logo.js",
+        "hiper-icones.js",
         "hiper-cache.js",
         "hiper-widgets.js",
         "hiper-orcamento.js",
