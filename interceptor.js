@@ -66,6 +66,26 @@ try {
       window.postMessage({ type: 'HIPER_CUSTO_SYNC', id: msg.id, val: msg.val }, '*');
     }
 
+    // ── Salva cliente via PATCH na API ────────────────────────────────────────
+    if (msg.type === 'HIPER_CLIENTE_SAVE') {
+      const { numOrc, cliente } = msg;
+      console.log('[Interceptor] 📡 BC recebeu cliente — orçamento:', numOrc, '| nome:', cliente);
+      try {
+        const res = await fetch(`https://db.superaserver.com/api/pedido/${encodeURIComponent(numOrc)}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ cliente }),
+        });
+        if (res.ok) {
+          console.log('[Interceptor] ✅ Cliente salvo no banco — orçamento:', numOrc, '| nome:', cliente);
+        } else {
+          console.warn('[Interceptor] ⚠️ API retornou', res.status, 'ao salvar cliente');
+        }
+      } catch(e) {
+        console.warn('[Interceptor] ❌ Falha ao salvar cliente na API:', e);
+      }
+    }
+
     // ── Salva vendedor ────────────────────────────────────────────────────────
     if (msg.type === 'HIPER_VENDEDOR_SAVE') {
       await safeStorage(async () => {

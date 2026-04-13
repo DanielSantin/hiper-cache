@@ -370,7 +370,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   <div class="cliente-row">
     <label for="iCliente">Cliente:</label>
     <input type="text" id="iCliente" class="cliente-inp" placeholder="Nome do cliente…" maxlength="80"
-           oninput="onCliente()" autocomplete="off">
+           oninput="onCliente()" onblur="onClienteBlur()" autocomplete="off">
     <span class="cliente-badge">aparece no cabeçalho e no PDF</span>
   </div>
 </div>
@@ -539,6 +539,8 @@ function syncPrint(id, n){
 }
 
 // ── Nome do cliente ───────────────────────────────────────────────────────────
+let _clienteAnterior = '';
+
 function onCliente() {
   const inp  = el('iCliente');
   const span = el('subCliente');
@@ -551,6 +553,21 @@ function onCliente() {
     span.style.display = 'none';
     span.textContent   = '';
   }
+}
+
+function onClienteBlur() {
+  const inp = el('iCliente');
+  if (!inp) return;
+  const nome = inp.value.trim();
+  if (nome === _clienteAnterior) return; // não mudou, não envia
+  _clienteAnterior = nome;
+  console.log('[HiperOrc] 💾 Cliente alterado — enviando via BC:', nome);
+  try {
+    const bc = new BroadcastChannel('hiper_custo_channel');
+    bc.postMessage({ type: 'HIPER_CLIENTE_SAVE', numOrc: NUM_ORC, cliente: nome });
+    bc.close();
+    console.log('[HiperOrc] ✅ Cliente enviado — orçamento:', NUM_ORC, '| nome:', nome);
+  } catch(e) { console.error('[HiperOrc] ❌ BroadcastChannel cliente falhou:', e); }
 }
 
 // Retorna o primeiro nome do cliente (para o nome do arquivo PDF)
