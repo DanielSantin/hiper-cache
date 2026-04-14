@@ -417,10 +417,6 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 </div>
 
 <div class="totais-wrap">
-  <div class="trow-entrega" id="rowE" style="display:none">
-    <div class="tlabel">TAXA DE ENTREGA</div>
-    <div class="tval" id="valE">—</div>
-  </div>
   <div class="trow" id="rowDesc">
     <div class="tlabel"></div>
     <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold">Desconto</div>
@@ -430,6 +426,14 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
           oninput="onDescC()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)" 
           placeholder="0,00" title="Clique para editar" style="width:75px">
       <span class="val-print" id="iDescC-print">0,00</span>
+    </div>
+  </div>
+  <div class="trow" id="rowE" style="display:none">
+    <div class="tlabel">Taxa de Entrega</div>
+    <div class="ttag" style="background:transparent;font-size:9pt;font-weight:bold">Entrega</div>
+    <div class="tval">
+      <span class="val-prefix">R$</span>
+      <input class="val-inp" id="valE" type="number" step="0.01" style="width:75px" readonly>
     </div>
   </div>
   <div class="trow">
@@ -711,8 +715,8 @@ function recalc(){
   syncPrint('iDescC', descC);
   syncPrint('valC',   totalC);
   syncPrint('valV',   totalV);
-  el('rowE').style.display = el('chkE').checked ? 'flex' : 'none';
-  el('valE').textContent   = fmt(num('iE'));
+  el('rowE').style.display = el('chkE').checked ? 'grid' : 'none';
+  el('valE').value = num('iE').toFixed(2);
   recalcMargem(totalC, totalV);
 }
 
@@ -802,6 +806,14 @@ function aplicarDescMax(){
 
 if(${frete0>0?'true':'false'}) el('chkE').checked=true;
 recalc();
+
+el('select-parcelas-input').addEventListener('change', function() {
+  const n = parseInt(this.value, 10) || 1;
+  el('lblC').textContent = n <= 1
+    ? 'Valor Total – À vista no Cartão de Crédito'
+    : 'Valor Total – Parcelado em até ' + n + 'x no Cartão de Crédito';
+});
+el('select-parcelas-input').dispatchEvent(new Event('change'));
 
 // ── Sincroniza altura das linhas de custo ─────────────────────────────────────
 function sincronizarAlturasLinhas() {
