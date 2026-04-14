@@ -37,19 +37,17 @@
   }
 
   // Delega à função global definida em hiper-orcamento.js (única fonte da verdade).
-function getNumeroOrcamento() {
-  try {
-    // Prioridade: número já gerado no fluxo atual
-    if (window.__hiperNumeroOrcamentoAtual) {
-      return window.__hiperNumeroOrcamentoAtual;
+  function getNumeroOrcamento() {
+    try {
+      if (window.__hiperNumeroOrcamentoAtual) {
+        return window.__hiperNumeroOrcamentoAtual;
+      }
+      console.warn('[HiperDB] Número de orçamento ainda não foi gerado no fluxo atual');
+      return '';
+    } catch (e) {
+      return '';
     }
-
-    console.warn('[HiperDB] Número de orçamento ainda não foi gerado no fluxo atual');
-    return '';
-  } catch (e) {
-    return '';
   }
-}
 
   // ── Serialização dos kits ativos ──────────────────────────────────────────────
   // Converte o Map kitsAtivos (kit.js) num array serializável.
@@ -304,8 +302,6 @@ function getNumeroOrcamento() {
 
     for (const kit of kits) {
       if (kit.tipo === 'parede') {
-        // Recria a entrada de parede no Map apontando para as linhas que
-        // restaurarItens() já inseriu. Busca as $linhas pelo código do produto.
         const codigos = window.paredeCodigosAtivos?.(kit.cfg) ?? [];
         const linhasDoKit = _resolverLinhasPorCodigos(codigos);
 
@@ -407,45 +403,188 @@ function getNumeroOrcamento() {
       return false;
     }
 
-    // Usa o mesmo formato que o widget espera
     inp.value = valorFinal.toFixed(2).replace('.', ',');
     btn.click();
     return true;
   }
 
-  async function repovoarPedido(pedido, silencioso = false) {
-    const totalSalvo = pedido.total;
-    const desconto   = (pedido.itens.reduce((s, it) => s + it.subtotal, 0)) - totalSalvo;
+  // ── Toast de confirmação (sem confirm() bloqueante) ───────────────────────────
+  function mostrarConfirmacaoImportacao(pedido) {
+    return new Promise(resolve => {
+      const totalFmt = pedido.total.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      });
 
-    let lista = pedido.itens.map((it, i) =>
-      `${i+1}. ${it.nome}\n   ${it.qtd} ${it.unidade} × R$ ${it.vlUnit.toFixed(2).replace('.',',')} = R$ ${it.subtotal.toFixed(2).replace('.',',')}`
-    ).join('\n');
-    lista += `\n\nTotal salvo: R$ ${totalSalvo.toFixed(2).replace('.',',')}`;
-    if (desconto > 0.01) lista += `\nDesconto original: R$ ${desconto.toFixed(2).replace('.',',')}`;
+      const nItens = pedido.itens.length;
 
-    const kitsInfo = pedido.kits?.length
-      ? `\n\n🧱 ${pedido.kits.length} estrutura(s) de kit salva(s).`
-      : '';
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        outline: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.25);
+        backdrop-filter: blur(2px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+      `;
 
-    if (!silencioso) {
-      const ok = confirm(
-        `📦 Pedido ${pedido.codigo}\nSalvo em: ${pedido.atualizado_em}\n\n${lista}${kitsInfo}\n\nCarregar estes itens no pedido atual?`
-      );
-      if (!ok) return;
+      const box = document.createElement('div');
+      box.style.cssText = `
+        background: #fff;
+        border-radius: 14px;
+        padding: 22px 24px;
+        width: 320px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.15);
+        font-family: sans-serif;
+        animation: fadeIn .2s ease;
+      `;
+
+      box.innerHTML = `
+        <div style="font-size:13px;color:#888;margin-bottom:6px;">
+          Confirmar importação
+        </div>
+
+        <div style="font-size:18px;font-weight:600;margin-bottom:14px;">
+          ${pedido.codigo}
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:14px;">
+          <div style="flex:1;background:#f6f7f9;border-radius:8px;padding:10px;">
+            <div style="font-size:11px;color:#888;">Total</div>
+            <div style="font-size:15px;font-weight:500;">${totalFmt}</div>
+          </div>
+
+          <div style="flex:1;background:#f6f7f9;border-radius:8px;padding:10px;">
+            <div style="font-size:11px;color:#888;">Itens</div>
+            <div style="font-size:15px;font-weight:500;">${nItens}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button id="cancelar"
+            style="padding:6px 12px;border:none;background:#eee;border-radius:6px;cursor:pointer;">
+            Cancelar
+          </button>
+
+          <button id="confirmar"
+            style="padding:6px 12px;border:none;background:#2563eb;color:#fff;border-radius:6px;cursor:pointer;">
+            Importar
+          </button>
+        </div>
+      `;
+
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+      overlay.tabIndex = -1;
+      overlay.focus();
+
+      const btnConfirmar = box.querySelector('#confirmar');
+      const btnCancelar  = box.querySelector('#cancelar');
+
+      // 🔥 move o foco pro botão confirmar
+      setTimeout(() => btnConfirmar.focus(), 0);
+
+      // 🔥 trata teclado dentro do modal
+      overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          btnConfirmar.click();
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          btnCancelar.click();
+        }
+      });
+
+      const fechar = (res) => {
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+          overlay.remove();
+          resolve(res);
+        }, 200);
+      };
+
+      box.querySelector('#cancelar').onclick = () => fechar(false);
+      box.querySelector('#confirmar').onclick = () => fechar(true);
+    });
+  }
+
+    function mostrarToastRecuperacao(pedido) {
+      const el = document.createElement('div');
+
+      el.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: #fff;
+        color: #111;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-family: sans-serif;
+        border: 1px solid rgba(0,0,0,.08);
+        box-shadow: 0 6px 18px rgba(0,0,0,.10);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        opacity: 0;
+        transform: translateY(10px) scale(.98);
+        transition: all .25s ease;
+        z-index: 99999;
+      `;
+
+      el.innerHTML = `
+        <span style="
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          width:18px;
+          height:18px;
+          border-radius:50%;
+          background:#e8f0fe;
+          color:#1a56db;
+          font-size:12px;
+          font-weight:600;
+        ">✓</span>
+
+        <span>
+          Orçamento <strong>${pedido.codigo}</strong> carregado
+        </span>
+      `;
+
+      document.body.appendChild(el);
+
+      // anima entrada
+      requestAnimationFrame(() => {
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0) scale(1)';
+      });
+
+      // saída
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(10px) scale(.98)';
+        setTimeout(() => el.remove(), 250);
+      }, 2200);
     }
 
+  // ── Repovoar pedido (sem confirm/alert bloqueante) ────────────────────────────
+
+  async function repovoarPedido(pedido) {
     await restaurarItens(pedido.itens);
 
     if (pedido.kits?.length) {
       await restaurarKits(pedido.kits);
     }
 
-    // ── Aguarda preços carregarem e aplica desconto pela diferença ────────────
+    const totalSalvo = pedido.total;
     const totalAtual = await aguardarTotalEstabilizar();
 
     if (!isNaN(totalAtual) && totalAtual > 0 && Math.abs(totalAtual - totalSalvo) > 0.01) {
       const aplicado = await aplicarDescontoWidget(totalSalvo);
-
       if (aplicado) {
         const diff = totalAtual - totalSalvo;
         console.info(
@@ -454,14 +593,9 @@ function getNumeroOrcamento() {
       }
     } else if (!isNaN(totalAtual) && Math.abs(totalAtual - totalSalvo) <= 0.01) {
       console.info('[HiperDB] Totais idênticos — nenhum desconto necessário.');
-    } else {
-      // Fallback: se não conseguiu ler o total, avisa o usuário
-      alert(
-        `✅ Pedido carregado!\n\n` +
-        `⚠️ Não foi possível calcular o desconto automaticamente.\n` +
-        `No widget "Valor Final", ajuste para: ${totalSalvo.toFixed(2).replace('.',',')}`
-      );
     }
+
+    mostrarToastRecuperacao(pedido);
   }
 
   // ── Cria o painel de recuperação ──────────────────────────────────────────────
@@ -489,8 +623,8 @@ function getNumeroOrcamento() {
     const btn = painel.querySelector('#hiper-rec-btn');
     const msg = painel.querySelector('#hiper-rec-msg');
 
-    async function carregar(codigoForçado, silencioso = false) {
-      const codigo = (codigoForçado || inp.value).trim().toUpperCase();
+    async function carregar(codigoForcado) {
+      const codigo = (codigoForcado || inp.value).trim().toUpperCase();
       if (!codigo) return;
       inp.value       = codigo;
       btn.disabled    = true;
@@ -498,10 +632,17 @@ function getNumeroOrcamento() {
       msg.textContent = 'Buscando...';
       try {
         const pedido = await recuperarPedido(codigo);
+        const confirmou = await mostrarConfirmacaoImportacao(pedido);
+        if (!confirmou) {
+          msg.style.color = '#999';
+          msg.textContent = 'Importação cancelada';
+          return;
+        }
+        
         msg.style.color = '#1a7a1a';
         const nKits = pedido.kits?.length ? ` + ${pedido.kits.length} kit(s)` : '';
         msg.textContent = `✅ ${pedido.itens.length} itens${nKits}`;
-        await repovoarPedido(pedido, silencioso);
+        await repovoarPedido(pedido);
       } catch(e) {
         msg.style.color = '#c00';
         msg.textContent = e.message || 'Erro ao buscar.';
@@ -514,13 +655,11 @@ function getNumeroOrcamento() {
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') carregar(); });
 
     // ── Auto-recuperar: usa código capturado no topo do módulo ─────────────────
-    // O código é lido em __hiperRecuperarCodigo imediatamente quando o script
-    // carrega, antes do Hiper ter chance de reescrever o hash.
     if (window.__hiperRecuperarCodigo) {
       const _tentarAutoRecuperar = async () => {
         let t = 0;
         while (!window.__hiperMaster?.length && t++ < 60) await delay(200);
-        carregar(window.__hiperRecuperarCodigo, true);
+        carregar(window.__hiperRecuperarCodigo);
         window.__hiperRecuperarCodigo = null;
       };
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _tentarAutoRecuperar);
