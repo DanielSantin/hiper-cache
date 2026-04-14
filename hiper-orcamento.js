@@ -92,7 +92,7 @@ function formatMoeda(n) {
 function gerarNumeroOrcamento() {
   const cfg = window.__hiperOrcConfig || { letra: 'A', counter: 999 };
   let next = cfg.counter + 1;
-  if (next > 99999) next = 1000; // wrap-around
+  if (next > 999999) next = 1000; // wrap-around
 
   cfg.counter = next;
   window.__hiperOrcConfig = cfg;
@@ -997,9 +997,35 @@ async function baixarPdf() {
   congelarSelectEmClone(clone);
   congelarInputsNoClone(clone);
   ocultarDescontoZeroNoClone(clone);
+
+  // ── Header e footer do PDF ────────────────────────────────────────────────
+  const clienteNome  = el('iCliente')?.value.trim()  || '';
+  const vendedorNome = el('iVendedor')?.value.trim() || '';
+
+  const pdfHeader = document.createElement('div');
+  pdfHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0 2px 8px;border-bottom:1px solid #ddd;margin-bottom:12px;font-family:Arial,sans-serif;font-size:9pt;color:#888';
+  pdfHeader.innerHTML =
+    '<a href="https://tagdrywall.hiper.com.br/v1/#/pedido-venda/novo?recuperar=' + NUM_ORC + '" ' +
+    'style="font-weight:bold;color:#888;font-size:10pt;text-decoration:none">Or\u00e7amento ' + NUM_ORC + '</a>' +
+    '<span>' + (clienteNome ? 'Cliente: <strong style="color:#666">' + clienteNome + '</strong> &nbsp;|&nbsp; ' : '') +
+    'Emitido em ' + new Date().toLocaleDateString('pt-BR') + '</span>';
+
+  const pdfFooter = document.createElement('div');
+  pdfFooter.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 2px 0;border-top:1px solid #ccc;margin-top:8px;font-family:Arial,sans-serif;font-size:8pt;color:#888';
+  pdfFooter.innerHTML =
+    '<span>Com\u00e9rcio e Serv. Gesso Acartonado Ltda &nbsp;|&nbsp; CNPJ 56.240.315/0001-60</span>' +
+    '<span>' + (vendedorNome ? 'Vendedor: ' + vendedorNome + ' &nbsp;|&nbsp; ' : '') +
+    '* Or\u00e7amento v\u00e1lido por 10 dias</span>';
+
+  wrapper.appendChild(pdfHeader);
   wrapper.appendChild(clone);
+  wrapper.appendChild(pdfFooter);
   document.body.appendChild(wrapper);
   await new Promise(r => setTimeout(r, 150));
+
+  // Mede altura real do header apos renderizacao no DOM (antes do html2canvas)
+  const headerPxReal = pdfHeader.offsetHeight;
+
   try {
     const SCALE = 2;
     const canvas = await html2canvas(wrapper, {
@@ -1018,6 +1044,17 @@ async function baixarPdf() {
     const pageH = finalMmH <= (A4_MM_H - MARGIN_MM * 2) ? A4_MM_H : finalMmH + MARGIN_MM * 2;
     const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:[A4_MM_W, pageH] });
     pdf.addImage(canvas.toDataURL('image/png',1.0),'PNG',MARGIN_MM,MARGIN_MM,finalMmW,finalMmH,undefined,'FAST');
+
+    // ── Link clicável sobre "Orçamento XXXX" no header do PDF ────────────────
+    // O header tem ~8px de altura no canvas (em px lógicos antes do SCALE).
+    // Calcula a posição Y do header em mm no PDF: ele começa logo após a margem.
+    // Largura estimada do texto "Orçamento XXXXX" ≈ 38mm (fonte ~10pt, ~6 chars + label).
+    // Converte altura real do header (px DOM) para mm no PDF pela mesma proporcao da imagem
+    const wrapperPxH = canvas.height / SCALE;
+    const headerMmH  = (headerPxReal / wrapperPxH) * finalMmH;
+    const linkUrl    = 'https://tagdrywall.hiper.com.br/v1/#/pedido-venda/novo?recuperar=' + NUM_ORC;
+    pdf.link(MARGIN_MM, MARGIN_MM + 8, 55, headerMmH, { url: linkUrl });
+
     pdf.save(nomePdf());
 
     // Marca como baixado e atualiza UI
