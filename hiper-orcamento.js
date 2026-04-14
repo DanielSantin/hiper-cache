@@ -218,7 +218,6 @@ function gerarHtmlOrcamento(dados, opcoes) {
   const IMG_TEL = window.__hiperIconeTel || '';
   const IMG_WHATS = window.__hiperIconeWhats || '';
 
-
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1081,13 +1080,17 @@ async function baixarPdf() {
 }
 
 function calcularParcelasPadrao(total) {
-  return Math.min(6, Math.max(1, Math.round(total / 300)));
+  if (total >= 3000) return 5;
+  if (total >= 2000) return 4;
+  if (total >= 1000) return 3;
+  if (total >= 500)  return 2;
+  return 1;
 }
 
 function abrirOrcamento() {
   const dados = extrairDadosPedido();
-  const selectParcelas = document.getElementById('hiper-select-parcelas');
-  const parcelasSelecionadas = selectParcelas ? selectParcelas.value : 'Cartão 3X';
+  const parcelasSelecionadas = calcularParcelasPadrao(dados.total || dados.itens.reduce((s, it) => s + it.qtd * it.vlUnit, 0));
+
 
   if (dados.itens.length === 0) {
     alert('Nenhum item encontrado. Adicione pelo menos um produto.');
