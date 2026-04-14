@@ -5,7 +5,7 @@
 // ── 1. GRUPOS DE VARIAÇÃO ──────────────────────────────────────────────
 const GRUPOS_VARIACAO = {
   parafuso: [
-    { codigo: "3021", tamanho: 1,    limite: 700      },
+    { codigo: "3021", tamanho: 1,    limite: 450      },
     { codigo: "3032", tamanho: 1000, limite: Infinity },
   ],
   massa: [
