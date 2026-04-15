@@ -137,11 +137,14 @@ function extrairDadosPedido() {
       if (found?.und) unidade = found.und;
     }
 
+    const vlUnitBruto = parseMoedaOrc(vlEl?.value);
+    const vlUnit      = Math.round(vlUnitBruto * 0.9523 * 100) / 100;
     itens.push({
       nome,
       qtd,
       unidade,
-      vlUnit:    parseMoedaOrc(vlEl?.value),
+      vlUnit,
+      vlUnitBruto,
       subtotal:  parseMoedaOrc(stEl?.value),
       idProduto: codigo,
     });
@@ -708,8 +711,8 @@ function getBase(){
 function recalc(){
   const base   = getBase();
   const descC  = num('iDescC');
-  const totalC = Math.max(0, base - descC);
-  const totalV = totalC * PIX;
+  const totalV = Math.max(0, base - descC);
+  const totalC = totalV / PIX;
   silent('valC', totalC.toFixed(2));
   silent('valV', totalV.toFixed(2));
   syncPrint('iDescC', descC);
@@ -724,9 +727,9 @@ function onValC(){
   const base   = getBase();
   const totalC = num('valC');
   const totalV = totalC * PIX;
-  silent('iDescC', Math.max(0, base - totalC).toFixed(2));
+  silent('iDescC', Math.max(0, base - totalV).toFixed(2));
   silent('valV',   totalV.toFixed(2));
-  syncPrint('iDescC', Math.max(0, base - totalC));
+  syncPrint('iDescC', Math.max(0, base - totalV));
   syncPrint('valC',   totalC);
   syncPrint('valV',   totalV);
   recalcMargem(totalC, totalV);
@@ -736,9 +739,9 @@ function onValV(){
   const base   = getBase();
   const totalV = num('valV');
   const totalC = totalV / PIX;
-  silent('iDescC', Math.max(0, base - totalC).toFixed(2));
+  silent('iDescC', Math.max(0, base - totalV).toFixed(2));
   silent('valC',   totalC.toFixed(2));
-  syncPrint('iDescC', Math.max(0, base - totalC));
+  syncPrint('iDescC', Math.max(0, base - totalV));
   syncPrint('valC',   totalC);
   syncPrint('valV',   totalV);
   recalcMargem(totalC, totalV);
@@ -750,8 +753,8 @@ function onDescC(){ recalc(); }
 function recalcMargem(totalC, totalV){
   if(totalC===undefined){
     const base = getBase();
-    totalC = Math.max(0, base - num('iDescC'));
-    totalV = totalC * PIX;
+    totalV = Math.max(0, base - num('iDescC'));
+    totalC = totalV / PIX;
   }
   const pctImp  = num('iImp');
   const imposto = totalV * pctImp / 100;
@@ -781,7 +784,7 @@ function recalcMargem(totalC, totalV){
   const k     = 0.80 - pctImp/100;
   const tvMin = temCusto && k>0 ? custoTotal/k : NaN;
   const tcMin = !isNaN(tvMin) ? tvMin/PIX : NaN;
-  _descMaxCartao = !isNaN(tcMin) ? Math.max(0, getBase() - tcMin) : NaN;
+  _descMaxCartao = !isNaN(tvMin) ? Math.max(0, getBase() - tvMin) : NaN;
   const btn = el('btnDescMax'), txt = el('mDescMaxTxt');
   if(!temCusto){
     txt.textContent = 'Preencha os custos para calcular a margem.';
