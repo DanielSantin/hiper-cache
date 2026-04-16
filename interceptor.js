@@ -16,6 +16,7 @@ const MODULES = [
   { src: 'hiper-widgets.js' },
   { src: 'hiper-ui.js' },
   { src: 'hiper-orcamento.js' },
+  { src: "hiper-lucro-widget.js"},
   { src: 'kit.js' },
   { src: 'resumido-dados.js' },
   { src: 'hiper-db.js' },

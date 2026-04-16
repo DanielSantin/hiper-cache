@@ -673,7 +673,7 @@
   (function _registrarDB() {
     function _registrar() {
       if (window.__hiperUI) {
-        window.__hiperUI.registrar({ id: 'hiper-painel-recuperar', ordem: 30, render: criarPainelRecuperacao });
+        window.__hiperUI.registrar({ id: 'hiper-painel-recuperar', ordem: 10, render: criarPainelRecuperacao });
       } else {
         setTimeout(_registrar, 50);
       }

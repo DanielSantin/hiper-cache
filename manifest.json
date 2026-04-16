@@ -34,6 +34,7 @@
         "hiper-cache.js",
         "hiper-widgets.js",
         "hiper-orcamento.js",
+        "hiper-lucro-widget.js",
         "hiper-db.js",
         "kit.js",
         "resumido-dados.js",

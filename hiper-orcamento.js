@@ -1139,8 +1139,7 @@ function abrirOrcamento() {
     btn.id        = 'hiper-btn-orcamento';
     btn.type      = 'button';
     btn.className = 'btn btn-lg no-margin-bottom btn-block-xs';
-    btn.style.cssText = 'background:rgba(207, 124, 255, 0.3);color:rgb(200, 200, 200);border:1px solid #ccc;margin-top:4px;font-size:12px;opacity:0.75;';
-    btn.innerHTML = '📄 Orçamento';
+    btn.style.cssText = 'background: rgba(46, 204, 113, 0.25); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); margin-top: 4px; font-size: 12px; font-weight: bold; border-radius: 4px; backdrop-filter: blur(4px); transition: all 0.2s;';    btn.innerHTML = '📄 Orçamento';
     btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; btn.style.borderColor = '#1a7a1a'; btn.style.color = '#1a7a1a'; });
     btn.addEventListener('mouseleave', () => { btn.style.opacity = '0.75'; btn.style.borderColor = '#ccc'; btn.style.color = '#555'; });
     btn.addEventListener('click', abrirOrcamento);
@@ -1150,7 +1149,7 @@ function abrirOrcamento() {
 
   function _registrar() {
     if (window.__hiperUI) {
-      window.__hiperUI.registrar({ id: 'hiper-btn-orcamento', ordem: 10, render: _criarBotao });
+      window.__hiperUI.registrar({ id: 'hiper-btn-orcamento', ordem: 0, render: _criarBotao });
     } else {
       // hiper-ui.js ainda não carregou — tenta novamente em 50ms
       setTimeout(_registrar, 50);
