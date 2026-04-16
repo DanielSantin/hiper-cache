@@ -91,8 +91,16 @@
                 });
             }
             if (unico.size >= MIN_ITEMS_THRESHOLD) {
-                memMaster = Array.from(unico.values()).sort((a, b) => (a.Nome || '').localeCompare(b.Nome || '', 'pt-BR'));
-                window.__hiperMaster = memMaster;
+                memMaster = Array.from(unico.values()).sort((a, b) => {
+                    // Criamos versões para comparação ignorando os 7 primeiros caracteres
+                    // O .substring(7) pega do 8º caractere em diante
+                    const comparadorA = (a.Nome || '').substring(7).trim();
+                    const comparadorB = (b.Nome || '').substring(7).trim();
+
+                    // Comparamos as versões cortadas, mas o objeto 'a' e 'b' permanece intacto
+                    return comparadorA.localeCompare(comparadorB, 'pt-BR');
+                });  
+                window.__hiperMaster = memMaster;            
                 window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
                 reconfigurarSelect2sExistentes();
             }
