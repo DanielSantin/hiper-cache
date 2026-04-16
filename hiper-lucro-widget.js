@@ -99,7 +99,17 @@
         return;
       }
 
-      const totalNota  = itens.reduce((s, it) => s + it.vlUnit * it.qtd, 0);
+      const totalEl = document.querySelector('.totais-valor-total p strong, .valor-total strong');
+      
+      // Limpa a string (remove "R$", pontos de milhar e troca vírgula por ponto)
+      const totalTexto = totalEl ? totalEl.innerText : "0";
+      const totalNota = parseFloat(totalTexto.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+
+      if (totalNota === 0 || itens.length === 0) {
+        wrap.classList.remove('hlw-visivel');
+        return;
+      }
+      
       const pctImp     = parseFloat(document.getElementById('hlw-imp')?.value) || IMP_DEF;
       const imposto    = totalNota * pctImp / 100; // Imposto sobre o valor bruto da nota
       
@@ -147,7 +157,7 @@
     wrap.querySelector('#hlw-imp').addEventListener('input', _recalc);
 
     // Observer na tabela de itens
-    let _t = null;
+let _t = null;
     function _deb() { clearTimeout(_t); _t = setTimeout(_recalc, 400); }
 
     const tabela = document.getElementById('ItensPedidoDeVendaTabela');
@@ -157,9 +167,22 @@
       });
     }
 
-    // Input em campos de valor/quantidade da tabela
+    // 2. NOVO: Observer no container do Valor Total
+    // Monitora mudanças no texto do total (descontos, fretes, etc)
+    const containerTotal = document.querySelector('.totais-valor-total');
+    if (containerTotal) {
+      new MutationObserver(_deb).observe(containerTotal, {
+        childList: true, subtree: true, characterData: true
+      });
+    }
+
+    // 3. Evento de input geral para capturar mudanças manuais em campos de desconto
     document.addEventListener('input', ev => {
-      if (ev.target?.closest?.('#ItensPedidoDeVendaTabela')) _deb();
+      const target = ev.target;
+      // Se mudar qualquer input dentro da área de totais ou da tabela, recalcula
+      if (target?.closest('.totais') || target?.closest('#ItensPedidoDeVendaTabela')) {
+        _deb();
+      }
     }, true);
 
     // Atualiza quando custo é salvo na página do orçamento
