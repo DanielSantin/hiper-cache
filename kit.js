@@ -50,7 +50,7 @@ const ARREDONDAMENTO_CODIGOS = {
   "3058": (v) => Math.ceil(v / 50) * 50, // Parafuso 6mm
   "3020": (v) => Math.ceil(v / 50) * 50, // Bucha 6mm unitário
   "3163": (v) => Math.ceil(v / 50) * 50, // Parafuso cimentícia unitário
-  "3035": (v) => Math.ceil(v / 2) * 2,   // Sisal
+  "3035": (v) => Math.ceil(v / 0.5) * 0.5,   // Sisal
   "3022": (v) => Math.ceil(v),           // Arame 10
   "3023": (v) => Math.ceil(v),           // Arame 18
 };
