@@ -537,18 +537,33 @@ function _congelarInputsNumericos(scope) {
 
 // ── Clone helpers ─────────────────────────────────────────────────────────────
 function congelarSelectEmClone(clone) {
-  var selectOriginal = document.querySelector('.page select');
-  var selectNoClone  = clone.querySelector('select');
-  if (!selectOriginal || !selectNoClone) return;
-  var val     = selectOriginal.value;
-  var options = selectNoClone.querySelectorAll('option');
-  for (var i = 0; i < options.length; i++) {
-    if (options[i].value === val) {
-      options[i].setAttribute('selected', 'selected');
-      selectNoClone.value = val;
-      break;
+  var selects = document.querySelectorAll('.page select');
+  selects.forEach(function(selectOriginal) {
+    var id = selectOriginal.id;
+    if (!id) return;
+    var selectNoClone = clone.querySelector('#' + id);
+    if (!selectNoClone) return;
+    var val = selectOriginal.value;
+    var options = selectNoClone.querySelectorAll('option');
+    for (var i = 0; i < options.length; i++) {
+      options[i].removeAttribute('selected');
+      if (options[i].value === val) {
+        options[i].setAttribute('selected', 'selected');
+        selectNoClone.value = val;
+      }
     }
-  }
+  });
+}
+
+// ── Seletor empresa PIX ───────────────────────────────────────────────────────
+var _pixTextos = {
+  gs:  '56.240.315/0001-60 \u2013 Guimar\u00e3es & Santin',
+  tag: '18.282.959/0001-22 \u2013 TAG Comercio e Servico',
+};
+
+function onPixEmpresa() {
+  // Sem ação adicional necessária — o select já exibe o texto correto.
+  // A função existe para ser chamada no onchange sem erros.
 }
 
 // ── Copiar imagem ─────────────────────────────────────────────────────────────

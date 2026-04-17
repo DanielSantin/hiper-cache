@@ -7,9 +7,10 @@
     const TARGET_PATH = '/produtos/GetSelect2ParaPedido';
     const MASTER_KEY  = 'hc:master';
     const MIN_ITEMS_THRESHOLD = 100;
-    const VERSAO_CUSTOS = "16-04-2026";
+    const VERSAO_CUSTOS = "17-04-2026";
 
     const CUSTOS_PADRAO = {
+        3076: 24.128, 
         3068: 45.102, 
         3073: 61.332, 
         3111: 63.737, 

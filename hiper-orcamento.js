@@ -333,6 +333,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 
 .rodape{border:1px solid #000;border-top:none;padding:5px 8px;font-size:8pt;line-height:1.6}
 .rodape .entrega{color:#c00;font-weight:bold;font-size:9pt;margin-top:3px}
+.rodape-pix-wrap{display:flex;align-items:center;flex-wrap:wrap}
+.rodape-pix-wrap select{border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto;padding:0}
 
 @media print{
   .no-print{display:none!important}
@@ -488,7 +490,13 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   </div>
 
   <div>Av. Rio de Janeiro, 5075 A - Nova Porto Velho – Em frente ao Sindsef</div>
-  <div>Chave Pix CNPJ - 56.240.315/0001-60 – Guimarães &amp; Santin</div>
+  <div class="rodape-pix-wrap">
+    <span>Chave Pix CNPJ &ndash; </span>
+    <select id="selPixEmpresa" onchange="onPixEmpresa()" style="border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto">
+      <option value="gs" selected>56.240.315/0001-60 &ndash; Guimarães &amp; Santin</option>
+      <option value="tag">18.282.959/0001-22 &ndash; TAG Comercio e Servico</option>
+    </select>
+  </div>
   <div class="entrega">➡ ENTREGA SOMENTE NO TÉRREO</div>
 </div>
 
@@ -856,6 +864,11 @@ function onVendedor() {
   } catch(e) { console.error('[HiperOrc] ❌ BroadcastChannel vendedor falhou:', e); }
 }
 
+// ── Seletor empresa PIX ───────────────────────────────────────────────────────
+function onPixEmpresa() {
+  // Sem lógica adicional — o select exibe o texto correto diretamente.
+}
+
 (function() {
   const v = ${vendedorJSON};
   if (!v.text) return;
@@ -879,13 +892,17 @@ function ocultarDescontoZeroNoClone(clone) {
 }
 
 function congelarSelectEmClone(clone) {
-  const selectOriginal = document.querySelector('.page select');
-  const selectNoClone  = clone.querySelector('select');
-  if (selectOriginal && selectNoClone) {
+  document.querySelectorAll('.page select').forEach(function(selectOriginal) {
+    const id = selectOriginal.id;
+    if (!id) return;
+    const selectNoClone = clone.querySelector('#' + id);
+    if (!selectNoClone) return;
     const val = selectOriginal.value;
-    const opc = selectNoClone.querySelector('option[value="' + val + '"]');
-    if (opc) { opc.setAttribute('selected', 'selected'); selectNoClone.value = val; }
-  }
+    selectNoClone.querySelectorAll('option').forEach(function(opt) {
+      opt.removeAttribute('selected');
+      if (opt.value === val) { opt.setAttribute('selected', 'selected'); selectNoClone.value = val; }
+    });
+  });
 }
 
 function congelarInputsNoClone(clone) {

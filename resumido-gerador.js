@@ -44,6 +44,8 @@ function _resumido_css() {
     '.validade-row{padding:4px 8px;font-size:8.5pt;color:#c00;font-weight:bold;border-top:1px solid #000}',
     '.rodape{border:1px solid #000;border-top:none;padding:5px 8px;font-size:8pt;line-height:1.6}',
     '.rodape .entrega{color:#c00;font-weight:bold;font-size:9pt;margin-top:3px}',
+    '.rodape-pix-wrap{display:flex;align-items:center;flex-wrap:wrap}',
+    '.rodape-pix-wrap select{border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto;padding:0}',
     '.panel{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;background:#f4f8ff;border:1px solid #b3d4f5}',
     '.panel h4{font-size:12px;font-weight:bold;color:#1a3a6a;margin-bottom:8px}',
     '.panel-mo{background:#fff8f0;border-color:#f5c080}',
@@ -253,6 +255,9 @@ function resumido_gerarHtml(payload, opcoes) {
   var parcelas = (opcoes && opcoes.parcelas) || 3;
   var frete    = (opcoes && opcoes.frete)    || 0;
 
+  var IMG_TEL   = (typeof window !== 'undefined' && window.__hiperIconeTel)   || '';
+  var IMG_WHATS = (typeof window !== 'undefined' && window.__hiperIconeWhats) || '';
+
   var PIX    = 0.9523;
   var fmtN   = function(n) { return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
   var totalV = totalCartaoBase + frete;  // à vista é a base
@@ -384,9 +389,26 @@ function resumido_gerarHtml(payload, opcoes) {
     '</div>\n' +
 
     '<div class="rodape">\n' +
-    '<div>Contato Vendas: Luciana Santin \u2013 Fone / Watts: +55 (69) 99237-1547</div>\n' +
+    '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:5px">\n' +
+    '<div style="display:flex;align-items:center;gap:6px">\n' +
+    '<strong>Atendimento Loja: (69) 3213-1072</strong>' +
+    (IMG_TEL   ? '<img src="' + IMG_TEL   + '" style="width:12px;height:12px">' : '') +
+    (IMG_WHATS ? '<img src="' + IMG_WHATS + '" style="width:13px;height:13px">' : '') +
+    '</div>\n' +
+    '<div style="display:flex;align-items:center;gap:6px">\n' +
+    '<strong>Luciana Santin: (69) 99237-1547</strong>' +
+    (IMG_TEL   ? '<img src="' + IMG_TEL   + '" style="width:12px;height:12px">' : '') +
+    (IMG_WHATS ? '<img src="' + IMG_WHATS + '" style="width:13px;height:13px">' : '') +
+    '</div>\n' +
+    '</div>\n' +
     '<div>Av. Rio de Janeiro, 5075 A - Nova Porto Velho \u2013 Em frente ao Sindsef</div>\n' +
-    '<div>Chave Pix CNPJ - 56.240.315/0001-60 \u2013 Guimar\u00e3es &amp; Santin</div>\n' +
+    '<div class="rodape-pix-wrap">' +
+    '<span>Chave Pix CNPJ \u2013 </span>' +
+    '<select id="selPixEmpresa" onchange="onPixEmpresa()" style="border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto">' +
+    '<option value="gs" selected>56.240.315/0001-60 \u2013 Guimar\u00e3es &amp; Santin</option>' +
+    '<option value="tag">18.282.959/0001-22 \u2013 TAG Comercio e Servico</option>' +
+    '</select>' +
+    '</div>\n' +
     '<div class="entrega">\u27a1 ENTREGA SOMENTE NO T\u00c9RREO</div>\n' +
     '</div>\n' +
 
