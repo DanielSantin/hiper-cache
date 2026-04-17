@@ -77,8 +77,8 @@ function atualizarDescricoes() {
     var unid  = getUnid(i);
     var c2 = el('lm2c-' + i);
     var v2 = el('lm2v-' + i);
-    if (c2) c2.textContent = 'R$ ' + fN(m2c) + '/' + unid;
-    if (v2) v2.textContent = 'R$ ' + fN(m2c * _PIX) + '/' + unid;
+    if (c2) c2.textContent = 'R$ ' + fN(m2c / _PIX) + '/' + unid;  // cartão = à vista / 0.9523
+    if (v2) v2.textContent = 'R$ ' + fN(m2c) + '/' + unid;          // à vista é a base
   });
 }
 
@@ -336,8 +336,8 @@ function atualizarTotaisGlobaisComMo() {
     var totEl = r.querySelector('.custom-totc');
     if (totEl) s += parseFloat(totEl.value) || 0;
   });
-  var tc = s + getFrete();
-  var tv = tc * _PIX;
+  var tv = s + getFrete();  // à vista é a base
+  var tc = tv / _PIX;       // cartão = à vista / 0.9523
   if (el('valC')) el('valC').value = tc.toFixed(2);
   if (el('valV')) el('valV').value = tv.toFixed(2);
   if (el('valC-p')) el('valC-p').textContent = fN(tc);
@@ -352,16 +352,16 @@ function atualizarTotaisGlobaisComMo() {
 function onValC() {
   var novoTc   = numEl('valC');
   var fr       = getFrete();
-  var paraKits = Math.max(0, novoTc - fr);
+  var tv       = novoTc * _PIX;  // à vista = cartão * 0.9523
+  var paraKits = Math.max(0, tv - fr);  // distribui o valor à vista pelos kits
   _KI.forEach(function(kit, i) {
     var peso  = kit.custoRelativo / _SOMA_PESO;
-    var tcKit = paraKits * peso;
+    var tvKit = paraKits * peso;
     var area  = numEl('area-' + i);
-    var m2c   = area > 0 ? tcKit / area : 0;
-    if (el('totc-' + i)) el('totc-' + i).value = tcKit.toFixed(2);
+    var m2c   = area > 0 ? tvKit / area : 0;
+    if (el('totc-' + i)) el('totc-' + i).value = tvKit.toFixed(2);
     if (el('m2c-'  + i)) el('m2c-'  + i).value = m2c.toFixed(2);
   });
-  var tv = novoTc * _PIX;
   if (el('valV'))   el('valV').value   = tv.toFixed(2);
   if (el('valC-p')) el('valC-p').textContent = fN(novoTc);
   if (el('valV-p')) el('valV-p').textContent = fN(tv);
@@ -371,18 +371,18 @@ function onValC() {
 
 function onValV() {
   var novoTv = numEl('valV');
-  var novoTc = novoTv / _PIX;
+  var novoTc = novoTv / _PIX;  // cartão = à vista / 0.9523
   if (el('valC'))   el('valC').value   = novoTc.toFixed(2);
   if (el('valC-p')) el('valC-p').textContent = fN(novoTc);
   if (el('valV-p')) el('valV-p').textContent = fN(novoTv);
   var fr       = getFrete();
-  var paraKits = Math.max(0, novoTc - fr);
+  var paraKits = Math.max(0, novoTv - fr);  // distribui o valor à vista pelos kits
   _KI.forEach(function(kit, i) {
     var peso  = kit.custoRelativo / _SOMA_PESO;
-    var tcKit = paraKits * peso;
+    var tvKit = paraKits * peso;
     var area  = numEl('area-' + i);
-    var m2c   = area > 0 ? tcKit / area : 0;
-    if (el('totc-' + i)) el('totc-' + i).value = tcKit.toFixed(2);
+    var m2c   = area > 0 ? tvKit / area : 0;
+    if (el('totc-' + i)) el('totc-' + i).value = tvKit.toFixed(2);
     if (el('m2c-'  + i)) el('m2c-'  + i).value = m2c.toFixed(2);
   });
   atualizarDescricoes();
@@ -394,6 +394,40 @@ function recalcTotais() {
   sincronizarLabelsPrint();
   atualizarLblParc();
 }
+
+// ── Cliente e Vendedor ────────────────────────────────────────────────────────
+
+function onCliente() {
+  var nome = (el('iCliente') && el('iCliente').value.trim()) || '';
+  var subEl = el('subCliente');
+  if (subEl) {
+    subEl.textContent = nome ? 'Cliente: ' + nome : '';
+    subEl.style.display = nome ? '' : 'none';
+  }
+}
+
+function onVendedor() {
+  var nome = (el('iVendedor') && el('iVendedor').value.trim()) || '';
+  var subEl = el('subVendedor');
+  if (subEl) {
+    subEl.textContent = nome ? 'Vendedor: ' + nome : '';
+    subEl.style.display = nome ? '' : 'none';
+  }
+}
+
+// Inicializa o header com os valores vindos do hiper-orcamento
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof _CLIENTE !== 'undefined' && _CLIENTE) {
+    var cInp = el('iCliente');
+    if (cInp && !cInp.value) cInp.value = _CLIENTE;
+    onCliente();
+  }
+  if (typeof _VENDEDOR !== 'undefined' && _VENDEDOR) {
+    var vInp = el('iVendedor');
+    if (vInp && !vInp.value) vInp.value = _VENDEDOR;
+    onVendedor();
+  }
+});
 
 // ── Linhas personalizadas ─────────────────────────────────────────────────────
 var _customCount = 0;

@@ -20,6 +20,7 @@ function _resumido_css() {
     '.hdr-emp{flex:1;padding:6px 14px;display:flex;flex-direction:column;justify-content:center}',
     '.hdr-emp .nome{font-size:13pt;font-weight:bold}',
     '.hdr-emp .sub{font-size:9pt;color:#555;margin-top:2px}',
+    '.hdr-emp .sub-cliente{font-size:9pt;color:#555;margin-top:2px}',
     '.hdr-trevo{padding:4px 8px;border-left:2px solid #000;display:flex;align-items:center;justify-content:center}',
     '.tbl{width:100%;border-collapse:collapse}',
     '.tbl thead tr{background:#d0d0d0}',
@@ -63,6 +64,12 @@ function _resumido_css() {
     '.pdf-badge{display:none;align-items:center;gap:6px;padding:4px 12px;background:#d4edda;border:1px solid #6dbf8a;border-radius:20px;font-size:12px;font-weight:bold;color:#1a5c1a}',
     '.pdf-badge.visible{display:flex}',
     '.resumido-tag{display:inline-block;background:#1a5c8a;color:#fff;font-size:8pt;font-weight:bold;padding:2px 6px;border-radius:3px;vertical-align:middle;margin-left:6px}',
+    '.panel-sep{color:#ccc;font-size:14px}',
+    '.cliente-row{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid #d0ddf0}',
+    '.cliente-row label{font-size:12px;font-weight:bold;color:#1a3a6a;white-space:nowrap}',
+    '.cliente-inp{flex:1;padding:4px 8px;border:2px solid #7ab3e8;border-radius:4px;font-size:13px;font-weight:bold;color:#1a3a6a;min-width:180px;max-width:360px}',
+    '.cliente-inp:focus{outline:none;border-color:#1a73e8;background:#f0f6ff}',
+    '.cliente-badge{display:inline-block;font-size:9px;background:#d0e8ff;color:#1a3a6a;border-radius:3px;padding:1px 6px;font-weight:bold;letter-spacing:.3px}',
     /* MO column - hidden when printing */
     '.col-mo-base{background:#fff8f0}',
     '.mo-inp{width:62px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#7a3a00;cursor:text}',
@@ -190,7 +197,7 @@ function _calcVendaMo(custoBase, impostoNF, lucroMeta) {
 // ── Monta o bloco <script> embutido no HTML gerado ────────────────────────────
 // Todos os dados são serializados via JSON.stringify — sem escaping manual.
 // O runtime é concatenado como texto puro (já lido pelo loader).
-function _resumido_montarScript(kitsInfo, numeroOrcamento) {
+function _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedorTexto) {
     console.log('[debug] RESUMIDO_RUNTIME_SRC length:', typeof RESUMIDO_RUNTIME_SRC, 
     typeof RESUMIDO_RUNTIME_SRC === 'string' ? RESUMIDO_RUNTIME_SRC.length : 0);
 
@@ -208,6 +215,8 @@ function _resumido_montarScript(kitsInfo, numeroOrcamento) {
     'var _KI        = ' + JSON.stringify(kitsInfo) + ';',
     'var _SOMA_PESO = ' + JSON.stringify(somaPeso) + ';',
     'var _pdfOK     = false;',
+    'var _CLIENTE   = ' + JSON.stringify(clienteNome   || '') + ';',
+    'var _VENDEDOR  = ' + JSON.stringify(vendedorTexto || '') + ';',
     '// MO config (editável no painel)',
     'var _MO_IMPOSTO = 13.53;  // % NF serviço',
     'var _MO_LUCRO   = 30;     // % lucro desejado',
@@ -246,11 +255,11 @@ function resumido_gerarHtml(payload, opcoes) {
 
   var PIX    = 0.9523;
   var fmtN   = function(n) { return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
-  var totalC = totalCartaoBase + frete;
-  var totalV = totalC * PIX;
+  var totalV = totalCartaoBase + frete;  // à vista é a base
+  var totalC = totalV / PIX;             // cartão = à vista / 0.9523 (~5% a mais)
 
   var corpoTabela = _resumido_linhasTabela(kitsInfo, totalC, varianteTabica);
-  var scriptTag   = _resumido_montarScript(kitsInfo, numeroOrcamento);
+  var scriptTag   = _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedorTexto);
 
   var avisoHtml = avisoMisto
     ? '<div id="avisoMisto" style="background:#fff3cd;border:1px solid #e0c040;border-radius:4px;padding:7px 12px;margin-bottom:8px;font-size:10pt" class="no-print">' +
@@ -262,19 +271,33 @@ function resumido_gerarHtml(payload, opcoes) {
     return '<option value="' + n + '"' + (n === parcelas ? ' selected' : '') + '>CART\u00c3O ' + n + 'x</option>';
   }).join('');
 
-  var clienteDiv  = clienteNome   ? '<div class="sub"><strong>Cliente:</strong> ' + clienteNome + '</div>' : '';
-  var vendedorDiv = vendedorTexto ? '<div class="sub">' + vendedorTexto + '</div>' : '';
+  var clienteDiv  = '<div class="sub-cliente" id="subCliente"' + (clienteNome   ? '' : ' style="display:none"') + '>' + (clienteNome  ? 'Cliente: '  + clienteNome   : '') + '</div>';
+  var vendedorDiv = '<div class="sub" id="subVendedor"'        + (vendedorTexto ? '' : ' style="display:none"') + '>' + (vendedorTexto ? 'Vendedor: ' + vendedorTexto : '') + '</div>';
 
   var S = '<' + 'script';
   var E = '</' + 'script>';
 
-  // Painel de entrega + painel de MO
+  // Painel de entrega + cliente + vendedor (estrutura idêntica ao hiper-orcamento)
   var panelEntrega = '<div class="panel no-print">\n' +
     '<h4>\u2699\uFE0F Op\u00e7\u00f5es \u2014 <strong style="color:#1a5c1a">' + numeroOrcamento + '</strong> <span class="resumido-tag">RESUMIDO</span></h4>\n' +
-    '<div class="prow"><label>\n' +
-    '<input type="checkbox" id="chkE" onchange="recalcTotais()"' + (frete > 0 ? ' checked' : '') + '>\n' +
-    'Entrega R$ <input type="number" id="iE" value="' + (frete > 0 ? frete : 30) + '" min="0" step="0.01" style="width:72px" oninput="recalcTotais()">\n' +
-    '</label></div>\n</div>\n';
+    '<div class="prow">\n' +
+    '<label><input type="checkbox" id="chkE" onchange="recalcTotais()"' + (frete > 0 ? ' checked' : '') + '> Entrega R$</label>\n' +
+    '<input type="number" id="iE" value="' + (frete > 0 ? frete : 30) + '" min="0" step="0.01" style="width:72px" oninput="recalcTotais()">\n' +
+    '<span class="panel-sep">|</span>\n' +
+    '<label style="font-weight:bold;color:#1a3a6a;white-space:nowrap">Vendedor:</label>\n' +
+    '<input type="text" id="iVendedor" placeholder="ex: Daniel Santin" maxlength="80"\n' +
+    '  value="' + (vendedorTexto || '').replace(/"/g, '&quot;') + '"\n' +
+    '  style="flex:1;min-width:140px;padding:3px 6px;border:1px solid #aaa;border-radius:4px;font-size:12px"\n' +
+    '  oninput="onVendedor()">\n' +
+    '</div>\n' +
+    '<div class="cliente-row">\n' +
+    '<label for="iCliente">Cliente:</label>\n' +
+    '<input type="text" id="iCliente" class="cliente-inp" placeholder="Nome do cliente\u2026" maxlength="80"\n' +
+    '  value="' + (clienteNome || '').replace(/"/g, '&quot;') + '"\n' +
+    '  oninput="onCliente()" autocomplete="off">\n' +
+    '<span class="cliente-badge">aparece no cabe\u00e7alho e no PDF</span>\n' +
+    '</div>\n' +
+    '</div>\n';
 
   var panelMO = '<div class="panel panel-mo no-print">\n' +
     '<h4>\uD83D\uDEE0\uFE0F M\u00e3o de Obra \u2014 configura\u00e7\u00e3o de servi\u00e7o</h4>\n' +
@@ -476,9 +499,14 @@ function abrirOrcamentoResumido() {
                        : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
     };
   });
-  var clienteEl = document.getElementById('iCliente');
-  var chkV = document.getElementById('chkVendedor');
-  var inpV = document.getElementById('iVendedor');
+  var clienteEl  = document.getElementById('iCliente');
+  var vendedorEl = document.getElementById('iVendedor');
+  var _vend = window.__hiperVendedor || {};
+  // Prioriza o campo iVendedor digitado na aba do orçamento;
+  // cai para __hiperVendedor (storage) caso o campo não exista ou esteja vazio.
+  var vendedorTextoFinal = (vendedorEl && vendedorEl.value.trim())
+    ? vendedorEl.value.trim()
+    : ((_vend.checked && _vend.text) ? _vend.text.trim() : '');
   var payload = {
     kitsInfo: kitsInfo, totalCartaoBase: totalCartaoBase,
     varianteTabica: varianteTabica, avisoMisto: varianteTabica === 'misto',
@@ -486,7 +514,7 @@ function abrirOrcamentoResumido() {
     numeroOrcamento: opcoes.numeroOrcamento,
     dataHoje: new Date().toLocaleDateString('pt-BR'),
     clienteNome: (clienteEl && clienteEl.value.trim()) || '',
-    vendedorTexto: (chkV && chkV.checked && inpV && inpV.value.trim()) ? inpV.value.trim() : '',
+    vendedorTexto: vendedorTextoFinal,
   };
   var htmlResumido = resumido_gerarHtml(payload, { parcelas: 3, frete: 0 });
   var blobR = new Blob([htmlResumido], { type: 'text/html;charset=utf-8' });
@@ -548,9 +576,12 @@ function abrirOrcamentoResumido() {
                            : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
         };
       });
-      var clienteEl = document.getElementById('iCliente');
-      var chkV = document.getElementById('chkVendedor');
-      var inpV = document.getElementById('iVendedor');
+      var clienteEl  = document.getElementById('iCliente');
+      var vendedorEl = document.getElementById('iVendedor');
+      var _vend = window.__hiperVendedor || {};
+      var vendedorTextoFinal = (vendedorEl && vendedorEl.value.trim())
+        ? vendedorEl.value.trim()
+        : ((_vend.checked && _vend.text) ? _vend.text.trim() : '');
       var payloadR = {
         kitsInfo: kitsInfo, totalCartaoBase: totalBase,
         varianteTabica: varTab, avisoMisto: varTab === 'misto',
@@ -558,7 +589,7 @@ function abrirOrcamentoResumido() {
         numeroOrcamento: opcoes.numeroOrcamento,
         dataHoje: new Date().toLocaleDateString('pt-BR'),
         clienteNome: (clienteEl && clienteEl.value.trim()) || '',
-        vendedorTexto: (chkV && chkV.checked && inpV && inpV.value.trim()) ? inpV.value.trim() : '',
+        vendedorTexto: vendedorTextoFinal,
       };
 
       // Gera o HTML completo do resumido em memória e serializa com JSON.stringify.
@@ -573,7 +604,15 @@ function abrirOrcamentoResumido() {
         '(function() {\n' +
         '  var _HTML = ' + htmlResumidoJ + ';\n' +
         '  window.__gerarResumidoDaAba = function() {\n' +
-        '    var blob = new Blob([_HTML], { type: "text/html;charset=utf-8" });\n' +
+        '    // Relê cliente e vendedor da aba do orçamento no momento do clique\n' +
+        '    var cEl = document.getElementById("iCliente");\n' +
+        '    var vEl = document.getElementById("iVendedor");\n' +
+        '    var cliente  = cEl ? cEl.value.trim()  : "";\n' +
+        '    var vendedor = vEl ? vEl.value.trim()  : "";\n' +
+        '    var html = _HTML\n' +
+        '      .replace(/(var _CLIENTE\\s*=\\s*)"[^"]*"/, "$1" + JSON.stringify(cliente))\n' +
+        '      .replace(/(var _VENDEDOR\\s*=\\s*)"[^"]*"/, "$1" + JSON.stringify(vendedor));\n' +
+        '    var blob = new Blob([html], { type: "text/html;charset=utf-8" });\n' +
         '    var url  = URL.createObjectURL(blob);\n' +
         '    window.open(url, "_blank");\n' +
         '    setTimeout(function() { URL.revokeObjectURL(url); }, 120000);\n' +
