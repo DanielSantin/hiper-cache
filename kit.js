@@ -50,7 +50,7 @@ const ARREDONDAMENTO_CODIGOS = {
   "3058": (v) => Math.ceil(v / 50) * 50, // Parafuso 6mm
   "3020": (v) => Math.ceil(v / 50) * 50, // Bucha 6mm unitário
   "3163": (v) => Math.ceil(v / 50) * 50, // Parafuso cimentícia unitário
-  "3035": (v) => Math.ceil(v / 10) * 10, // Sisal
+  "3035": (v) => Math.ceil(v / 2) * 2,   // Sisal
   "3022": (v) => Math.ceil(v),           // Arame 10
   "3023": (v) => Math.ceil(v),           // Arame 18
 };
@@ -290,7 +290,7 @@ const FORMULAS_GESSO = {
   aramado: {
     "3076": (A, P) => A / 1.2,
     "3089": (A, P) => A * 0.45,
-    "3019": (A, P) => A / 1.2,
+    "3019": (A, P) => A * 4,
     "3023": (A, P) => A / 20,
     "3132": (A, P) => A * 2.6,
     "3035": (A, P) => A * 0.03,
