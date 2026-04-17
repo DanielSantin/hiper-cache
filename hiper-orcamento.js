@@ -17,9 +17,6 @@ function parseMoedaOrc(str) {
   return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0.00;
 }
 
-function formatMoeda(n) {
-  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 // ── Geração de número de orçamento sequencial ─────────────────────────────────
 // Formato: E1000, E1001 … E99999  (letra fixa por funcionário, definida no popup)
@@ -209,7 +206,8 @@ function gerarHtmlOrcamento(dados, opcoes) {
     const c   = key ? custosMap[key] : undefined;
     return '<div class="custo-row">'+
       '<input class="custo-inp '+(c!=null?'ok':'novo')+'"'+
-      ' type="number" min="0" step="0.01" placeholder="—"'+
+      ' type="number" min="0" step="0.001" placeholder="—"'+
+      ' onblur="if(this.value!==\'\')this.value=parseFloat(this.value).toFixed(3)"'+
       ' data-id="'+(key||'')+'" data-nome="'+item.nome.replace(/"/g,'&quot;')+'"'+
       (c!=null?' value="'+c+'"':'')+'>'+
     '</div>';
@@ -685,7 +683,7 @@ document.querySelectorAll('.custo-inp').forEach(inp=>{
 });
 
 function salvarCusto(inp) {
-  const v    = parseFloat(inp.value);
+  const v    = Math.round(parseFloat(inp.value) * 1000) / 1000;
   const id   = inp.dataset.id;
   const nome = inp.dataset.nome;
   if(!id) { console.warn('[HiperOrc] ⚠ Item sem código, custo não salvo. Nome:', nome); return; }
