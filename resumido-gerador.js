@@ -403,7 +403,7 @@ function resumido_gerarHtml(payload, opcoes) {
     '</div>\n' +
     '<div>Av. Rio de Janeiro, 5075 A - Nova Porto Velho \u2013 Em frente ao Sindsef</div>\n' +
     '<div class="rodape-pix-wrap">' +
-    '<span>Chave Pix CNPJ \u2013 </span>' +
+    '<span>Chave Pix CNPJ  \u2013 </span>' +
     '<select id="selPixEmpresa" onchange="onPixEmpresa()" style="border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto">' +
     '<option value="gs" selected>56.240.315/0001-60 \u2013 Guimar\u00e3es &amp; Santin</option>' +
     '<option value="tag">18.282.959/0001-22 \u2013 TAG Comercio e Servico</option>' +

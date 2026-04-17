@@ -491,7 +491,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 
   <div>Av. Rio de Janeiro, 5075 A - Nova Porto Velho – Em frente ao Sindsef</div>
   <div class="rodape-pix-wrap">
-    <span>Chave Pix CNPJ &ndash; </span>
+    <span>Chave Pix CNPJ  &ndash; </span>
     <select id="selPixEmpresa" onchange="onPixEmpresa()" style="border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto">
       <option value="gs" selected>56.240.315/0001-60 &ndash; Guimarães &amp; Santin</option>
       <option value="tag">18.282.959/0001-22 &ndash; TAG Comercio e Servico</option>
