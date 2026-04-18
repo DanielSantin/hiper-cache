@@ -269,34 +269,34 @@ function aplicarMO() {
           var tr2 = document.createElement('tr');
           tr2.className = 'row-mo';
           tr2.innerHTML =
-            '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;vertical-align:middle">' + (i + 1) + '</td>' +
-            '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
-              '<span style="font-size:9pt;font-weight:bold">' + fN(area) + '</span>' +
+            '<td class="td-num" style="text-align:center;border:1px solid #000;padding:3px 4px;font-size:8pt;vertical-align:middle">' + (i + 1) + '</td>' +
+            '<td style="text-align:center;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
+              '<span style="font-size:8.5pt;font-weight:bold">' + fN(area) + '</span>' +
             '</td>' +
-            '<td style="text-align:center;border:1px solid #000;padding:3px 4px;font-size:9pt;font-weight:bold;vertical-align:middle">' + unid + '</td>' +
-            '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
-              '<div contenteditable="true" style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+            '<td style="text-align:center;border:1px solid #000;padding:2px 3px;font-size:8.5pt;font-weight:bold;vertical-align:middle">' + unid + '</td>' +
+            '<td style="text-align:left;border:1px solid #000;padding:3px 5px;vertical-align:top">' +
+              '<div contenteditable="true" style="font-weight:bold;font-size:8.5pt;margin-bottom:2px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
                 'onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
                 'onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">Instala\u00e7\u00e3o \u2013 ' + tipoNome + '</div>' +
-              '<div contenteditable="true" style="font-size:8.5pt;color:#222;line-height:1.5;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+              '<div contenteditable="true" style="font-size:8pt;color:#222;line-height:1.4;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
                 'onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
                 'onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">' + moDescTexto + '</div>' +
-              '<div style="margin-top:5px;font-size:8pt;color:#555;display:flex;gap:12px;flex-wrap:wrap">' +
+              '<div style="margin-top:3px;font-size:8pt;color:#555;display:flex;gap:10px;flex-wrap:wrap">' +
                 '<span>Cart\u00e3o: <strong id="mo-lm2c-' + i + '">R$ ' + fN(venda) + '/' + unid + '</strong></span>' +
                 '<span>\u00c0 vista: <strong id="mo-lm2v-' + i + '">R$ ' + fN(venda * _PIX) + '/' + unid + '</strong></span>' +
               '</div>' +
             '</td>' +
-            '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
+            '<td style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
               '<input id="mo-m2c-' + i + '" type="number" min="0" step="0.01" value="' + venda.toFixed(2) + '"' +
-              ' style="width:70px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+              ' style="width:64px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
               ' oninput="onMoM2(' + i + ')">' +
             '</td>' +
-            '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
+            '<td style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
               '<input id="mo-totc-' + i + '" type="number" min="0" step="0.01" value="' + tot.toFixed(2) + '"' +
-              ' style="width:74px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+              ' style="width:68px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
               ' oninput="onMoTotc(' + i + ')">' +
             '</td>' +
-            '<td class="col-mo-base no-print" style="border:1px solid #000;padding:3px 6px;text-align:center">' +
+            '<td class="col-mo-base no-print" style="border:1px solid #000;padding:2px 5px;text-align:center">' +
               '<span style="font-size:8pt;color:#aaa">\u2014</span>' +
             '</td>';
           linhasSnapshot[i].parentNode.insertBefore(tr2, linhasSnapshot[i].nextSibling);
@@ -441,24 +441,24 @@ function adicionarLinhaCustom() {
   novaTr.dataset.customIdx = idx;
   
   novaTr.innerHTML =
-    '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 4px;font-size:8pt;font-weight:bold;vertical-align:middle"></td>' +
-    '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
-      '<input type="number" step="0.01" value="0" class="custom-area" style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold" oninput="onCustomArea(this)">' +
+    '<td class="td-num" style="text-align:center;border:1px solid #000;padding:3px 4px;font-size:8pt;font-weight:bold;vertical-align:middle"></td>' +
+    '<td style="text-align:center;border:1px solid #000;padding:2px 3px">' +
+      '<input type="number" step="0.01" value="0" class="custom-area" style="width:52px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold" oninput="onCustomArea(this)">' +
     '</td>' +
-    '<td style="text-align:center;border:1px solid #000;padding:3px 4px">' +
-      '<span contenteditable="true" style="font-size:9pt;font-weight:bold;outline:none">m²</span>' +
+    '<td style="text-align:center;border:1px solid #000;padding:2px 3px">' +
+      '<span contenteditable="true" style="font-size:8.5pt;font-weight:bold;outline:none">m²</span>' +
     '</td>' +
-    '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
-      '<div contenteditable="true" style="font-weight:bold;outline:none" onfocus="this.style.background=\\'#fffde7\\'" onblur="this.style.background=\\'\\'">Novo Item Personalizado</div>' +
-      '<div contenteditable="true" style="font-size:8.5pt;color:#222;outline:none" onfocus="this.style.background=\\'#fffde7\\'" onblur="this.style.background=\\'\\'">Descrição do item...</div>' +
+    '<td style="text-align:left;border:1px solid #000;padding:3px 5px;vertical-align:top">' +
+      '<div contenteditable="true" style="font-weight:bold;font-size:8.5pt;outline:none" onfocus="this.style.background=\\'#fffde7\\'" onblur="this.style.background=\\'\\'">Novo Item Personalizado</div>' +
+      '<div contenteditable="true" style="font-size:8pt;color:#222;outline:none" onfocus="this.style.background=\\'#fffde7\\'" onblur="this.style.background=\\'\\'">Descrição do item...</div>' +
     '</td>' +
-    '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
-      '<input type="number" step="0.01" value="0" class="custom-m2c" style="width:70px;border:none;background:transparent;text-align:right;font-size:9pt;font-weight:bold" oninput="onCustomM2(this)">' +
+    '<td style="text-align:right;border:1px solid #000;padding:2px 3px">' +
+      '<input type="number" step="0.01" value="0" class="custom-m2c" style="width:64px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-weight:bold" oninput="onCustomM2(this)">' +
     '</td>' +
-    '<td style="text-align:right;border:1px solid #000;padding:3px 4px">' +
-      '<input type="number" step="0.01" value="0" class="custom-totc" style="width:74px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold" oninput="atualizarTotaisGlobaisComMo()">' +
+    '<td style="text-align:right;border:1px solid #000;padding:2px 3px">' +
+      '<input type="number" step="0.01" value="0" class="custom-totc" style="width:68px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold" oninput="atualizarTotaisGlobaisComMo()">' +
     '</td>' +
-    '<td class="col-mo-base no-print" style="border:1px solid #000;padding:3px 6px;text-align:center">' +
+    '<td class="col-mo-base no-print" style="border:1px solid #000;padding:2px 5px;text-align:center">' +
       '<button onclick="this.closest(\\'tr\\').remove(); renumerarLinhas(); atualizarTotaisGlobaisComMo();" style="border:none;background:#e55;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">✕</button>' +
     '</td>';
 
@@ -525,6 +525,8 @@ function _congelarInputsNumericos(scope) {
     // Copia estilo relevante do input
     span.style.cssText = inp.style.cssText;
     span.style.display = 'inline-block';
+    span.style.textAlign = 'right';
+    span.style.width = '100%';
     inp.parentNode.insertBefore(span, inp);
     inp.style.display = 'none';
     restaurar.push(function() {
@@ -575,9 +577,11 @@ async function copiarImagem() {
   var ocultar = document.querySelectorAll('.no-print');
   ocultar.forEach(function(e) { e.dataset.prevDisplay = e.style.display; e.style.display = 'none'; });
   var page    = document.querySelector('.page');
+  var LAYOUT_W = typeof _LAYOUT_W !== 'undefined' ? _LAYOUT_W : 550;
   var wrapper = document.createElement('div');
-  wrapper.style.cssText = 'background:transparent;display:inline-block;width:' + page.offsetWidth + 'px';
-  var clone = page.cloneNode(true);
+  wrapper.style.cssText = 'position:fixed;top:0;left:-9999px;background:#fff;width:' + LAYOUT_W + 'px;box-sizing:border-box';  var clone = page.cloneNode(true);
+  clone.style.transform = 'none';
+  clone.style.transformOrigin = 'unset';  
   clone.style.padding = '0';
   clone.querySelectorAll('.no-print').forEach(function(e) { e.remove(); });
   congelarSelectEmClone(clone);
@@ -640,12 +644,15 @@ async function baixarPdf() {
   btn.disabled = true;
   btn.textContent = '\\u23F3 Gerando PDF...';
   var A4W = 210, A4H = 297, MG = 8, M2P = 3.7795275591;
-  var PXW = Math.round(A4W * M2P);
+  // Largura do wrapper = largura do layout definida em RESUMIDO_LARGURA_PX (gerador).
+  // A escala compensa a diferença para que o PDF ocupe o A4 com nitidez máxima.
+  var LAYOUT_W = typeof _LAYOUT_W !== 'undefined' ? _LAYOUT_W : 600;
+  var A4_PX    = Math.round(A4W * M2P);  // ~794px
   var ocultar = document.querySelectorAll('.no-print');
   ocultar.forEach(function(e) { e.dataset.prevDisplay = e.style.display; e.style.display = 'none'; });
   var page    = document.querySelector('.page');
   var wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:fixed;top:0;left:-9999px;background:#fff;width:' + PXW + 'px;padding:' + Math.round(MG * M2P) + 'px;box-sizing:border-box';
+  wrapper.style.cssText = 'position:fixed;top:0;left:-9999px;background:#fff;width:' + LAYOUT_W + 'px;padding:' + Math.round(MG * M2P) + 'px;box-sizing:border-box';
   var clone = page.cloneNode(true);
   clone.style.cssText = 'width:100%;max-width:none;padding:0;margin:0';
   clone.querySelectorAll('.no-print').forEach(function(e) { e.remove(); });
@@ -656,7 +663,7 @@ async function baixarPdf() {
   // Formata todos os inputs numéricos do clone antes de capturar
   var _restaurarInputsPdf = _congelarInputsNumericos(wrapper);
   try {
-    var SCALE  = 2;
+    var SCALE  = (A4_PX / LAYOUT_W) * 2;  // escala compensa largura menor → mesma nitidez no A4
     var canvas = await html2canvas(wrapper, {
       scale: SCALE, useCORS: true, backgroundColor: '#ffffff', logging: false,
       width: wrapper.offsetWidth, height: wrapper.offsetHeight, windowWidth: wrapper.offsetWidth,

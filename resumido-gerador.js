@@ -7,43 +7,49 @@
 //                           pelo resumido-loader.js (via fetch, não como <script>)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ── Largura do layout ────────────────────────────────────────────────────────
+// Ajuste este valor para controlar a largura da visualização e do PDF/WhatsApp.
+// O PDF é sempre gerado em A4 — o layout é escalado automaticamente para caber.
+// Valores testados: 600px (compacto), 700px (médio), 794px (largura A4 completa)
+var RESUMIDO_LARGURA_PX = 550;
+
 // ── CSS compartilhado ─────────────────────────────────────────────────────────
 function _resumido_css() {
   return [
     '*{box-sizing:border-box;margin:0;padding:0}',
-    'body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}',
-    '.page{width:100%;max-width:260mm;margin:0 auto;padding:8mm 10mm}',
+    'body{font-family:Arial,sans-serif;font-size:9pt;color:#000;background:#fff}',
+    '.page{width:100%;max-width:' + RESUMIDO_LARGURA_PX + 'px;margin:0 auto;padding:4mm 6mm}',
     '.header{display:flex;align-items:stretch;border:2px solid #000}',
-    '.header-logo{padding:6px 12px;border-right:2px solid #000;display:flex;align-items:center;flex-direction:column;gap:2px}',
-    '.tag-txt{font-size:32pt;font-weight:900;color:#1a5c1a;line-height:1}',
-    '.orc-num{font-size:9pt;font-weight:bold;color:#1a5c1a;text-align:center}',
-    '.hdr-emp{flex:1;padding:6px 14px;display:flex;flex-direction:column;justify-content:center}',
-    '.hdr-emp .nome{font-size:13pt;font-weight:bold}',
-    '.hdr-emp .sub{font-size:9pt;color:#555;margin-top:2px}',
-    '.hdr-emp .sub-cliente{font-size:9pt;color:#555;margin-top:2px}',
-    '.hdr-trevo{padding:4px 8px;border-left:2px solid #000;display:flex;align-items:center;justify-content:center}',
+    '.header-logo{padding:3px 8px;border-right:2px solid #000;display:flex;align-items:center;flex-direction:column;gap:1px}',
+    '.tag-txt{font-size:24pt;font-weight:900;color:#1a5c1a;line-height:1}',
+    '.orc-num{font-size:8pt;font-weight:bold;color:#1a5c1a;text-align:center}',
+    '.hdr-emp{flex:1;padding:3px 10px;display:flex;flex-direction:column;justify-content:center}',
+    '.hdr-emp .nome{font-size:11pt;font-weight:bold}',
+    '.hdr-emp .sub{font-size:8pt;color:#555;margin-top:1px}',
+    '.hdr-emp .sub-cliente{font-size:8pt;color:#555;margin-top:1px}',
+    '.hdr-trevo{padding:3px 6px;border-left:2px solid #000;display:flex;align-items:center;justify-content:center}',
     '.tbl{width:100%;border-collapse:collapse}',
     '.tbl thead tr{background:#d0d0d0}',
-    '.tbl th{padding:4px 5px;font-size:9pt;text-align:center;border:1px solid #000}',
+    '.tbl th{padding:3px 4px;font-size:8pt;text-align:center;border:1px solid #000}',
     '.totais-wrap{border:1px solid #000;border-top:none}',
-    '.trow{display:grid;grid-template-columns:1fr 110px 110px;border-bottom:1px solid #000}',
+    '.trow{display:grid;grid-template-columns:1fr 100px 100px;border-bottom:1px solid #000}',
     '.trow:last-child{border-bottom:none}',
-    '.trow .tlabel{padding:4px 8px;font-size:9pt;display:flex;align-items:center}',
-    '.trow .ttag{font-weight:bold;font-size:9.5pt;background:#e8e8e8;border-left:1px solid #000;display:flex;align-items:center;justify-content:center;padding:2px 4px;text-align:center}',
+    '.trow .tlabel{padding:3px 6px;font-size:8.5pt;display:flex;align-items:center}',
+    '.trow .ttag{font-weight:bold;font-size:8.5pt;background:#e8e8e8;border-left:1px solid #000;display:flex;align-items:center;justify-content:center;padding:2px 3px;text-align:center}',
     '.trow .ttag.pix{background:transparent}',
     '.trow .ttag.cartao{background:transparent}',
-    '.trow .ttag select{border:none;background:transparent;font-size:9pt;font-weight:bold;font-family:Arial;cursor:pointer;text-align:center;width:100%;-webkit-appearance:auto}',
-    '.trow .tval{border-left:1px solid #000;display:flex;align-items:center;justify-content:flex-end;padding:2px 8px;font-weight:bold;font-size:10pt}',
+    '.trow .ttag select{border:none;background:transparent;font-size:8.5pt;font-weight:bold;font-family:Arial;cursor:pointer;text-align:center;width:100%;-webkit-appearance:auto}',
+    '.trow .tval{border-left:1px solid #000;display:flex;align-items:center;justify-content:flex-end;padding:2px 6px;font-weight:bold;font-size:9.5pt;text-align:right}',
     '.trow-entrega{display:flex;border-bottom:1px solid #000}',
-    '.trow-entrega .tlabel{flex:1;padding:4px 8px;font-size:9pt;font-weight:bold;display:flex;align-items:center}',
-    '.trow-entrega .tval{padding:4px 10px;font-weight:bold;font-size:10pt;color:#c00;border-left:1px solid #000;width:110px;text-align:right;display:flex;align-items:center;justify-content:flex-end}',
-    '.val-inp{width:100%;border:none;background:transparent;text-align:right;font-weight:bold;font-size:10pt;font-family:Arial;padding:0;color:#000;cursor:text}',
+    '.trow-entrega .tlabel{flex:1;padding:3px 6px;font-size:8.5pt;font-weight:bold;display:flex;align-items:center}',
+    '.trow-entrega .tval{padding:3px 8px;font-weight:bold;font-size:9.5pt;color:#c00;border-left:1px solid #000;width:100px;text-align:right;display:flex;align-items:center;justify-content:flex-end}',
+    '.val-inp{width:100%;border:none;background:transparent;text-align:right;font-weight:bold;font-size:9.5pt;font-family:Arial;padding:0;color:#000;cursor:text}',
     '.val-inp:focus{outline:1px solid #1a73e8;background:#e8f0fe;border-radius:2px;padding:0 2px}',
-    '.val-prefix{font-size:9pt;color:#888;margin-right:2px;flex-shrink:0}',
-    '.val-print{display:none;font-weight:bold;font-size:10pt;color:#000}',
-    '.validade-row{padding:4px 8px;font-size:8.5pt;color:#c00;font-weight:bold;border-top:1px solid #000}',
-    '.rodape{border:1px solid #000;border-top:none;padding:5px 8px;font-size:8pt;line-height:1.6}',
-    '.rodape .entrega{color:#c00;font-weight:bold;font-size:9pt;margin-top:3px}',
+    '.val-prefix{font-size:8pt;color:#888;margin-right:2px;flex-shrink:0}',
+    '.val-print{display:none;font-weight:bold;font-size:9.5pt;color:#000;text-align:right}',
+    '.validade-row{padding:3px 6px;font-size:8pt;color:#c00;font-weight:bold;border-top:1px solid #000}',
+    '.rodape{border:1px solid #000;border-top:none;padding:3px 6px;font-size:7.5pt;line-height:1.5}',
+    '.rodape .entrega{color:#c00;font-weight:bold;font-size:8pt;margin-top:2px}',
     '.rodape-pix-wrap{display:flex;align-items:center;flex-wrap:wrap}',
     '.rodape-pix-wrap select{border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto;padding:0}',
     '.panel{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;background:#f4f8ff;border:1px solid #b3d4f5}',
@@ -79,15 +85,19 @@ function _resumido_css() {
     '.mo-tag{font-size:7.5pt;color:#e8510a;font-weight:bold;white-space:nowrap}',
     '.tbl-mo-header{background:#ffe4b5!important}',
     '.row-mo{}',
+    '@media screen{',
+    '  .page{max-width:700px}',   // <- largura desejada só na tela
+    '}',
     '@media print{',
     '  .no-print{display:none!important}',
     '  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}',
-    '  .page{max-width:210mm;padding:4mm 6mm}',
+    '  .page{max-width:' + RESUMIDO_LARGURA_PX + 'px;padding:3mm 5mm}',
     '  .val-inp,.val-prefix{display:none!important}',
     '  .val-print{display:inline!important}',
     '  .col-mo-base{display:none!important}',
     '  .tbl-mo-header{display:none!important}',
-    '}',
+    '}'
+    ,
   ].join('\n');
 }
 
@@ -129,39 +139,39 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
 
     // Linha principal (material ou agrupado)
     var tr = '<tr>' +
-      '<td class="td-num" style="text-align:center;border:1px solid #000;padding:5px 6px;vertical-align:middle">' + (i + 1) + '</td>' +
-      '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
+      '<td class="td-num" style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle;font-size:8pt">' + (i + 1) + '</td>' +
+      '<td style="text-align:center;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
         '<input id="area-' + i + '" type="number" min="0" step="0.01" value="' + areaExibida.toFixed(2) + '"' +
-        ' style="width:56px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+        ' style="width:52px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
         ' oninput="onArea(' + i + ')" title="Editar quantidade">' +
       '</td>' +
-      '<td style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
-        '<span id="und-' + i + '" contenteditable="true" style="font-size:9pt;font-weight:bold;outline:none;cursor:text;display:inline-block;min-width:20px;border-radius:2px;padding:1px 2px"' +
+      '<td style="text-align:center;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
+        '<span id="und-' + i + '" contenteditable="true" style="font-size:8.5pt;font-weight:bold;outline:none;cursor:text;display:inline-block;min-width:18px;border-radius:2px;padding:1px 2px"' +
         ' onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'"' +
         ' onblur="this.style.background=\'\';this.style.outline=\'none\'">' + unid + '</span>' +
       '</td>' +
-      '<td style="text-align:left;border:1px solid #000;padding:5px 6px;vertical-align:top">' +
+      '<td style="text-align:left;border:1px solid #000;padding:3px 5px;vertical-align:top">' +
         '<div contenteditable="true" id="nomeLabel-' + i + '" ' +
-        'style="font-weight:bold;margin-bottom:3px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+        'style="font-weight:bold;font-size:8.5pt;margin-bottom:2px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
         'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
         'onblur="this.style.background=\'\';this.style.outline=\'none\'">' + nomeLabelExibido + '</div>' +
-        '<div contenteditable="true" id="desc-' + i + '" style="font-size:8.5pt;color:#222;line-height:1.5;text-align:justify;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
+        '<div contenteditable="true" id="desc-' + i + '" style="font-size:8pt;color:#222;line-height:1.4;text-align:justify;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
         'onfocus="this.style.background=\'#fffde7\';this.style.outline=\'1px solid #f0c040\'" ' +
         'onblur="this.style.background=\'\';this.style.outline=\'none\'" ' +
         'class="no-print-border">' + texto + '</div>' +
       '</td>' +
-      '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
+      '<td style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
         '<input id="m2c-' + i + '" type="number" min="0" step="0.01" value="' + vlM2C.toFixed(2) + '"' +
-        ' style="width:70px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+        ' style="width:64px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
         ' oninput="onM2(' + i + ')" title="Editar R$/un">' +
       '</td>' +
-      '<td style="text-align:right;border:1px solid #000;padding:3px 4px;vertical-align:middle">' +
+      '<td style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
         '<input id="totc-' + i + '" type="number" min="0" step="0.01" value="' + tcKit.toFixed(2) + '"' +
-        ' style="width:74px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#000"' +
+        ' style="width:68px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
         ' oninput="onTotKit(' + i + ')" title="Editar total">' +
       '</td>' +
       // Coluna MO Base (oculta na impressão)
-      '<td class="col-mo-base no-print" style="text-align:right;border:1px solid #000;padding:3px 6px;vertical-align:middle;min-width:90px">' +
+      '<td class="col-mo-base no-print" style="text-align:right;border:1px solid #000;padding:2px 5px;vertical-align:middle;min-width:90px">' +
         '<input id="mobase-' + i + '" class="mo-inp" type="number" min="0" step="0.01" value="' + moBase.toFixed(2) + '"' +
         ' oninput="onMoBase(' + i + ')" title="Custo base MO">' +
         '<div class="mo-tag" id="mo-venda-' + i + '">Venda: R$ ' + fmtN(_calcVendaMo(moBase, 13.53, 30)) + '</div>' +
@@ -175,7 +185,7 @@ function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
   var linhasVazias = '';
   for (var v = 0; v < vazias; v++) {
     linhasVazias += '<tr>' +
-      '<td style="height:22px;border:1px solid #000"></td>' +
+      '<td style="height:16px;border:1px solid #000"></td>' +
       '<td style="border:1px solid #000"></td>' +
       '<td style="border:1px solid #000"></td>' +
       '<td style="border:1px solid #000"></td>' +
@@ -213,6 +223,7 @@ function _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedor
 
   var cabecalho = [
     'var _PIX       = 0.9523;',
+    'var _LAYOUT_W  = ' + JSON.stringify(RESUMIDO_LARGURA_PX) + ';',
     'var _NR        = ' + JSON.stringify(numeroOrcamento) + ';',
     'var _KI        = ' + JSON.stringify(kitsInfo) + ';',
     'var _SOMA_PESO = ' + JSON.stringify(somaPeso) + ';',
@@ -330,6 +341,25 @@ function resumido_gerarHtml(payload, opcoes) {
     S + ' src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">' + E + '\n' +
     '<style>\n' + _resumido_css() + '\n</style>\n' +
     '</head>\n<body>\n' +
+    S + '>\n' +
+    '(function() {\n' +
+    '  function ajustarEscala() {\n' +
+    '    var page = document.querySelector(".page");\n' +
+    '    if (!page) return;\n' +
+    '    var vw = window.innerWidth || document.documentElement.clientWidth;\n' +
+    '    var LAYOUT = ' + RESUMIDO_LARGURA_PX + ';\n' +
+    '    // Só escala se a janela for maior que o layout\n' +
+    '    var escala = vw > LAYOUT ? Math.min(vw / LAYOUT, 1.5) : 1;\n' +
+    '    page.style.transform = "scale(" + escala + ")";\n' +
+    '    page.style.transformOrigin = "top center";\n' +
+    '    // Compensa o espaço "perdido" pelo scale\n' +
+    '    var h = page.offsetHeight;\n' +
+    '    document.body.style.minHeight = Math.round(h * escala) + "px";\n' +
+    '  }\n' +
+    '  window.addEventListener("load", ajustarEscala);\n' +
+    '  window.addEventListener("resize", ajustarEscala);\n' +
+    '})();\n' +
+    E + '\n' +
     '<div class="page">\n' +
 
     '<div class="toolbar no-print">\n' +
@@ -350,16 +380,16 @@ function resumido_gerarHtml(payload, opcoes) {
     '<div class="sub">Or\u00e7amento gerado em ' + dataHoje + ' </div>\n' +
     clienteDiv + '\n' + vendedorDiv + '\n' +
     '</div>\n' +
-    '<div class="hdr-trevo"><img src="' + LOGO + '" width="64" height="64" style="object-fit:contain" alt="Trevo"></div>\n' +
+    '<div class="hdr-trevo"><img src="' + LOGO + '" width="48" height="48" style="object-fit:contain" alt="Trevo"></div>\n' +
     '</div>\n' +
 
     '<table class="tbl"><thead><tr>\n' +
-    '<th style="width:28px">ITEM</th>\n' +
-    '<th style="width:76px">\u00c1REA</th>\n' +
-    '<th style="width:36px">UND</th>\n' +
+    '<th style="width:24px">ITEM</th>\n' +
+    '<th style="width:68px">\u00c1REA</th>\n' +
+    '<th style="width:32px">UND</th>\n' +
     '<th>DESCRI\u00c7\u00c3O</th>\n' +
-    '<th style="width:84px">R$/M\u00b2</th>\n' +
-    '<th style="width:90px">VL TOTAL</th>\n' +
+    '<th style="width:76px">R$/M\u00b2</th>\n' +
+    '<th style="width:82px">VL TOTAL</th>\n' +
     '<th class="col-mo-base tbl-mo-header no-print" style="width:96px">\uD83D\uDEE0\uFE0F CUSTO BASE MO</th>\n' +
     '</tr></thead>\n' +
     '<tbody id="tblBody">' + corpoTabela + '</tbody>\n' +
