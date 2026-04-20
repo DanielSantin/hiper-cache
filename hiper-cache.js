@@ -4,81 +4,25 @@
     //   localStorage.removeItem('hc_debug')     →  desativa (recarregue a página)
     const DEBUG = localStorage.getItem('hc_debug') === '1';
 
-    const TARGET_PATH = '/produtos/GetSelect2ParaPedido';
-    const MASTER_KEY  = 'hc:master';
+    const TARGET_PATH  = '/produtos/GetSelect2ParaPedido';
+    const MASTER_KEY   = 'hc:master';
     const MIN_ITEMS_THRESHOLD = 100;
-    const VERSAO_CUSTOS = "17-04-2026";
 
-    const CUSTOS_PADRAO = {
-        3076: 24.128, 
-        3068: 45.102, 
-        3073: 61.332, 
-        3111: 63.737, 
-        3075: 84.983, 
-        3039: 78.412, 
-        3016: 99.580, 
-        3042: 13.914, 
-        3060: 11.649, 
-        3008: 16.453, 
-        3007: 14.190, 
-        3043: 20.316, 
-        3044: 19.254, 
-        3018: 10.735, 
-        3009: 6.699, 
-        3051: 5.623, 
-        3006: 11.389, 
-        3010: 11.197, 
-        3089: 20.600, 
-        3090: 51.149, 
-        3113: 78.446, 
-        3184: 74.791, 
-        3143: 30.025, 
-        3185: 84.928, 
-        3107: 98.480, 
-        3084: 64.054, 
-        3122: 179.245, 
-        3019: 0.240, 
-        3017: 0.918, 
-        3077: 1.020, 
-        3029: 0.690, 
-        3022: 10.360, 
-        3023: 14.610, 
-        3132: 6.210, 
-        3014: 12.146, 
-        3126: 16.515, 
-        3169: 15.210, 
-        3026: 37.454, 
-        3013: 44.637, 
-        3027: 26.545, 
-        3154: 12.507, 
-        3035: 9.787, 
-        3037: 43.712, 
-        3086: 4.990, 
-        3087: 19.970, 
-        3061: 250.887, 
-        3112: 42.080, 
-        3124: 50.110, 
-        3128: 55.740, 
-        3142: 3.289, 
-        3032: 21.529, 
-        3021: 0.022, 
-        3058: 0.061, 
-        3171: 30.575, 
-        3020: 0.019, 
-        3173: 18.576, 
-        3046: 33.230, 
-        3045: 0.042, 
-        3174: 34.330, 
-        3052: 0.037, 
-        3187: 23.418, 
-        3064: 0.047, 
-        3172: 32.385, 
-        3012: 0.032, 
-        3176: 36.470, 
-        3030: 0.045, 
-        3176: 45.060, 
-        3038: 0.082,
-    }
+    // ── Sincronização de custos com servidor ──────────────────────────────────
+    const SYNC_API_BASE       = 'https://db.superaserver.com/api';
+    const SYNC_INTERVAL_MS    = 20 * 60 * 1000;  // 20 minutos (intervalo normal)
+    const SYNC_RETRY_STEPS_MS = [5 * 60 * 1000, 15 * 60 * 1000]; // backoff offline
+    const CUSTOS_HASH_KEY     = 'hc:custos_hash';  // chave no chrome.storage
+
+    // ── Scheduler de preload diário ───────────────────────────────────────────
+    const MASTER_TS_KEY        = 'hc:master_ts';       // timestamp do último preload
+    const PRELOAD_INTERVAL_MS  = 24 * 60 * 60 * 1000;  // 24 horas
+    const PRELOAD_RETRY_MS     = 15 * 60 * 1000;        // retry em 15 min se falhar
+    let _preloadTimer          = null;
+
+    let _syncRetryIndex  = 0;   // índice no array de backoff (offline)
+    let _syncTimer       = null;
+    let _syncEmAndamento = false;
 
     const PRELOAD_TERMS = ["alçapão","arame","arremate","bucha","cantoneira","chapa","cola","fita","forro","gesso","lixa","manta","massa","metalon","painel","parafuso","perfil","pino","piso","placa","rodapé","suporte","junção","conector","sisal","cordão","portal","pendural","vidro","roda","alcool","eletrodo","broca","cimento","multichapisco","seladora","tinta","textura","presilha","kit","rebite","regulador","prego","fincapino","aumark","hgesso","xgesso"];
 
@@ -146,7 +90,7 @@
                 if (!Array.isArray(lista)) continue;
                 lista.forEach(item => {
                     const id = item.idProduto ?? item.id ?? item.Codigo;
-                    if (id && !unico.has(id)) {
+                    if (id && !unico.has(id) && item.Codigo !== 0) {
                         item.text = item.Nome;
                         const cod4 = (item.Nome || '').match(/^(\d{4})\b/)?.[1];
                         item.und = (cod4 && window.__hiperUnidades[cod4]) ? window.__hiperUnidades[cod4] : 'UN';
@@ -166,23 +110,123 @@
                 });  
                 window.__hiperMaster = memMaster;            
                 window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
+                // Salva timestamp do preload para o scheduler diário
+                window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_TS_KEY, data: Date.now(), ts: Date.now() }, '*');
                 reconfigurarSelect2sExistentes();
             }
         } finally { preloading = false; }
     }
 
-    // ── 3. Lógica de Custos ───────────────────────────────────────────────────
-    function aplicarCustosPadrao() {
-        const salva = localStorage.getItem('hc_versao_custos');
-        if (salva !== VERSAO_CUSTOS) {
-            console.log(`[HiperCache] Nova versão ${VERSAO_CUSTOS}. Atualizando base...`);
-            Object.entries(CUSTOS_PADRAO).forEach(([id, val]) => {
-                window.__hiperCustos[id] = val;
-                window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: val, ts: Date.now() }, '*');
+    // ── 3. Sincronização de Custos com Servidor ───────────────────────────────
+
+    /**
+     * Verifica metadados no servidor.
+     * Se hash mudou OU force_update == true → baixa dados completos.
+     * Se offline → agenda retry com backoff.
+     */
+    async function verificarAtualizacaoCustos() {
+        if (_syncEmAndamento) return;
+        _syncEmAndamento = true;
+
+        try {
+            const resp = await NATIVE_FETCH(`${SYNC_API_BASE}/custos/metadata`, {
+                cache: 'no-store',
+                signal: AbortSignal.timeout(8000),
             });
-            localStorage.setItem('hc_versao_custos', VERSAO_CUSTOS);
+
+            if (!resp.ok) throw new Error(`metadata status ${resp.status}`);
+
+            const meta         = await resp.json();
+            const hashRemoto   = meta.hash        || '';
+            const forceUpdate  = meta.force_update === true;
+
+            // Lê hash local (salvo no chrome.storage via interceptor)
+            const hashLocal = await _lerHashLocal();
+
+            DEBUG && console.log(`[HiperCache] 🔍 hash local: ${hashLocal} | remoto: ${hashRemoto} | force: ${forceUpdate}`);
+
+            if (forceUpdate || hashRemoto !== hashLocal) {
+                console.info(`[HiperCache] 🔄 Custos desatualizados — baixando dados completos...`);
+                await _baixarCustosCompletos(hashRemoto);
+            } else {
+                DEBUG && console.log('[HiperCache] ✅ Custos em dia — nenhuma atualização necessária.');
+            }
+
+            // Sucesso — volta ao intervalo normal
+            _syncRetryIndex = 0;
+            _agendarProximaVerificacao(SYNC_INTERVAL_MS);
+
+        } catch (e) {
+            // Offline ou falha de rede → backoff
+            const delay = SYNC_RETRY_STEPS_MS[_syncRetryIndex] ?? SYNC_INTERVAL_MS;
+            _syncRetryIndex = Math.min(_syncRetryIndex + 1, SYNC_RETRY_STEPS_MS.length);
+            console.warn(`[HiperCache] ⚠️ Sem conexão — retry em ${delay / 60000}min.`, e.message);
+            _agendarProximaVerificacao(delay);
+        } finally {
+            _syncEmAndamento = false;
         }
     }
+
+    async function _baixarCustosCompletos(hashEsperado) {
+        const resp = await NATIVE_FETCH(`${SYNC_API_BASE}/custos/data`, {
+            cache: 'no-store',
+            signal: AbortSignal.timeout(15000),
+        });
+        if (!resp.ok) throw new Error(`data status ${resp.status}`);
+
+        const payload = await resp.json();
+        const custos  = payload.custos || {};
+        const hash    = payload.hash   || hashEsperado;
+
+        // Atualiza memória imediatamente
+        // Suporta formato novo { nome, valor } e formato antigo (número direto)
+        Object.entries(custos).forEach(([id, val]) => {
+            window.__hiperCustos[id] = (typeof val === 'object' && val !== null) ? val.valor : val;
+        });
+
+        // Persiste cada custo no chrome.storage via interceptor (salva só o número)
+        Object.entries(custos).forEach(([id, val]) => {
+            const num = (typeof val === 'object' && val !== null) ? val.valor : val;
+            window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: num, ts: Date.now() }, '*');
+        });
+
+        // Salva o novo hash localmente
+        window.postMessage({ type: 'HIPER_CACHE_SET', key: CUSTOS_HASH_KEY, data: hash, ts: Date.now() }, '*');
+        window.__hiperCustosHash = hash;
+
+        // Notifica widgets (ex: hiper-lucro-widget) para recalcular
+        window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
+
+        console.info(`[HiperCache] ✅ ${Object.keys(custos).length} custos atualizados do servidor | hash: ${hash}`);
+    }
+
+    /** Lê o hash salvo localmente (memória > chrome.storage) */
+    async function _lerHashLocal() {
+        if (window.__hiperCustosHash) return window.__hiperCustosHash;
+
+        return new Promise(resolve => {
+            const timeout = setTimeout(() => resolve(''), 2000);
+            const handler = ev => {
+                if (ev.source !== window) return;
+                if (ev.data?.type === 'HIPER_CACHE_ALL') {
+                    clearTimeout(timeout);
+                    window.removeEventListener('message', handler);
+                    const entry = ev.data.entries?.[CUSTOS_HASH_KEY];
+                    resolve(entry?.data || '');
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
+        });
+    }
+
+    function _agendarProximaVerificacao(ms) {
+        clearTimeout(_syncTimer);
+        _syncTimer = setTimeout(verificarAtualizacaoCustos, ms);
+    }
+
+    /** Expõe para uso externo (botão manual no widget de lucro) */
+    window.__hiperSyncCustos = verificarAtualizacaoCustos;
 
     // ── 4. Interceptador de Rede (apenas Select2) ─────────────────────────────
     window.fetch = async function(input, init) {
@@ -282,10 +326,16 @@
             if (vendedorChecked != null) window.__hiperVendedor.checked = vendedorChecked === true || vendedorChecked === 'true';
 
             if (!inicializado) {
-                aplicarCustosPadrao();
+                // Lê hash de custos salvo (se houver)
+                const hashEntry = entries[CUSTOS_HASH_KEY];
+                if (hashEntry?.data) window.__hiperCustosHash = hashEntry.data;
+
                 inicializado = true;
                 console.info(`[HiperCache] ✅ Pronto: ${Object.keys(window.__hiperCustos).length} custos em cache.`);
                 DEBUG && console.log('%c 💡 DEBUG %c ativo — desative com localStorage.removeItem(\'hc_debug\') e recarregue', S+'background:#1c1917;color:#fef3c7', 'color:gray');
+
+                // Inicia ciclo de sincronização com servidor (primeira verificação imediata)
+                verificarAtualizacaoCustos();
             }
 
             window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
@@ -338,6 +388,55 @@
     iniciarObserver();
 
     setTimeout(() => { if (memMaster.length < MIN_ITEMS_THRESHOLD) executarPreload(); }, 3000);
+
+    // ── 7. Scheduler de preload diário ────────────────────────────────────────
+    // Roda executarPreload uma vez por dia. Se falhar, retry em 15 min.
+    // Nunca quebra o funcionamento normal — erros são silenciados.
+    async function _preloadAgendado() {
+        try {
+            // Lê o timestamp do último preload bem-sucedido
+            const tsEntry = await new Promise(resolve => {
+                const timeout = setTimeout(() => resolve(null), 2000);
+                const handler = ev => {
+                    if (ev.source !== window) return;
+                    if (ev.data?.type === 'HIPER_CACHE_ALL') {
+                        clearTimeout(timeout);
+                        window.removeEventListener('message', handler);
+                        resolve(ev.data.entries?.[MASTER_TS_KEY]?.data || null);
+                    }
+                };
+                window.addEventListener('message', handler);
+                window.postMessage({ type: 'HIPER_CACHE_LOAD_ALL' }, '*');
+            });
+
+            const agora    = Date.now();
+            const ultimoTs = tsEntry ? Number(tsEntry) : 0;
+            const idade    = agora - ultimoTs;
+
+            if (idade >= PRELOAD_INTERVAL_MS) {
+                DEBUG && console.log(`[HiperCache] 🔄 Preload diário — cache com ${Math.round(idade / 3600000)}h de idade.`);
+                await executarPreload();
+                _agendarPreload(PRELOAD_INTERVAL_MS);
+            } else {
+                // Ainda não venceu — agenda para quando vencer
+                const restante = PRELOAD_INTERVAL_MS - idade;
+                DEBUG && console.log(`[HiperCache] ⏰ Preload diário em ${Math.round(restante / 3600000)}h.`);
+                _agendarPreload(restante);
+            }
+        } catch(e) {
+            // Qualquer falha → retry em 15 min, cache continua funcionando
+            console.warn('[HiperCache] ⚠️ Preload diário falhou — retry em 15min.', e?.message);
+            _agendarPreload(PRELOAD_RETRY_MS);
+        }
+    }
+
+    function _agendarPreload(ms) {
+        clearTimeout(_preloadTimer);
+        _preloadTimer = setTimeout(_preloadAgendado, ms);
+    }
+
+    // Inicia o scheduler após 10s (deixa a página estabilizar primeiro)
+    setTimeout(_preloadAgendado, 10_000);
 
     window.__hiperReload = executarPreload;
     window.__nativeFetch = NATIVE_FETCH;

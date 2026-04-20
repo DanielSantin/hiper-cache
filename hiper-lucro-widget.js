@@ -22,7 +22,7 @@
         background: #f0fff4;
         border: 1px solid #6dbf8a;
         border-radius: 5px;
-        font-size: 10px; /* Reduzi um pouco para caber as duas linhas */
+        font-size: 10px;
         font-family: Arial, sans-serif;
         align-items: center;
         gap: 8px;
@@ -57,6 +57,26 @@
       #hiper-lucro-widget .hlw-ok   { background: #d4f0dc; color: #1a7a1a; }
       #hiper-lucro-widget .hlw-warn { background: #fff0cc; color: #c07000; }
       #hiper-lucro-widget .hlw-neg  { background: #fdd;    color: #c00;    }
+
+      /* ── Botão de sync de custos ── */
+      #hiper-lucro-widget .hlw-sync-btn {
+        margin-left: auto;
+        padding: 1px 6px;
+        border: 1px solid #aaa;
+        border-radius: 3px;
+        background: #fff;
+        font-size: 10px;
+        color: #555;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.15s;
+        white-space: nowrap;
+      }
+      #hiper-lucro-widget .hlw-sync-btn:hover:not(:disabled) { background: #e8f5e9; border-color: #6dbf8a; }
+      #hiper-lucro-widget .hlw-sync-btn:disabled { opacity: 0.5; cursor: default; }
+      #hiper-lucro-widget .hlw-sync-btn.hlw-sync-ok   { border-color: #6dbf8a; color: #1a7a1a; }
+      #hiper-lucro-widget .hlw-sync-btn.hlw-sync-err  { border-color: #e57373; color: #c00; }
+      #hiper-lucro-widget .hlw-sync-btn.hlw-sync-spin { border-color: #90caf9; color: #1565c0; }
     `;
     document.head.appendChild(s);
   }
@@ -73,7 +93,47 @@
       <span class="hlw-sep">|</span>
       <span class="hlw-label">margem</span>
       <span class="hlw-badge" id="hlw-badge">—</span>
+      <button class="hlw-sync-btn" id="hlw-sync-btn" title="Verificar atualização de custos">↻ custos</button>
     `;
+
+    // ── Botão de atualização manual de custos ─────────────────────────────────
+    const syncBtn = wrap.querySelector('#hlw-sync-btn');
+
+    function _setSyncStatus(estado) {
+      // estado: 'idle' | 'loading' | 'ok' | 'err'
+      syncBtn.className = 'hlw-sync-btn';
+      syncBtn.disabled  = false;
+      if (estado === 'loading') {
+        syncBtn.classList.add('hlw-sync-spin');
+        syncBtn.disabled  = true;
+        syncBtn.textContent = '⟳ buscando…';
+      } else if (estado === 'ok') {
+        syncBtn.classList.add('hlw-sync-ok');
+        syncBtn.textContent = '✓ atualizado';
+        setTimeout(() => _setSyncStatus('idle'), 3000);
+      } else if (estado === 'err') {
+        syncBtn.classList.add('hlw-sync-err');
+        syncBtn.textContent = '✗ sem conexão';
+        setTimeout(() => _setSyncStatus('idle'), 4000);
+      } else {
+        syncBtn.textContent = '↻ custos';
+      }
+    }
+
+    syncBtn.addEventListener('click', async () => {
+      if (typeof window.__hiperSyncCustos !== 'function') {
+        _setSyncStatus('err');
+        return;
+      }
+      _setSyncStatus('loading');
+      try {
+        await window.__hiperSyncCustos();
+        _setSyncStatus('ok');
+        _deb(); // recalcula margens com custos novos
+      } catch (e) {
+        _setSyncStatus('err');
+      }
+    });
 
     function _recalc() {
       const dados = (typeof extrairDadosPedido === 'function')
@@ -95,7 +155,14 @@
       });
 
       if (!todosTêmCusto) {
-        wrap.classList.remove('hlw-visivel');
+        // Mostra widget mesmo sem custos — só para o botão de sync ficar acessível
+        wrap.classList.add('hlw-visivel');
+        const badge = document.getElementById('hlw-badge');
+        if (badge) {
+          badge.style.cssText = '';
+          badge.className = 'hlw-badge hlw-warn';
+          badge.textContent = 'sem custos';
+        }
         return;
       }
 
