@@ -677,7 +677,7 @@ async function aplicarKitGesso(nomeKit) {
 
   const estadoInicial = nomeKit === 'portas'
     ? { tipo: 'portas', nomeKit, A: 0, grupos: [{ id: Date.now(), qtd: 1, larg: 0.70, alt: 2.10 }], linhas: linhasDoKit }
-    : { tipo: 'kit', nomeKit, A: 0, P: 0, cant: 3.15, linhas: linhasDoKit };
+    : { tipo: 'kit', nomeKit, A: 0, P: 0, ...(nomeKit === 'cortineiro' ? { cant: 3.15 } : {}), linhas: linhasDoKit };
 
   kitsAtivos.set(id, estadoInicial);
   console.log(`[HiperCache] ✅ Kit "${id}" ativo`);
