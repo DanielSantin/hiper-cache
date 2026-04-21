@@ -19,35 +19,19 @@ function parseMoedaOrc(str) {
 
 
 // ── Geração de número de orçamento sequencial ─────────────────────────────────
-// Formato: E1000, E1001 … E99999  (letra fixa por funcionário, definida no popup)
-// Ao atingir 99999 volta para 1000 (wrap-around).
-// Letra: chrome.storage.local → 'hiper_orc_letra'  (padrão: 'A')
-// Contador: chrome.storage.local → 'hiper_orc_counter'  (padrão: 999 → primeiro será 1000)
-//
-// __hiperOrcConfig é a cópia em memória, carregada via postMessage do content script
-// bridge (hiper-cache.js / hiper-db.js). gerarNumeroOrcamento() é a ÚNICA função
-// que incrementa o contador — hiper-db.js apenas chama esta.
-
-// ── Boot: carrega config do storage via postMessage e escuta mudanças ──────────
 (function _bootOrcConfig() {
-  // Solicita ao bridge (content script) os valores salvos
   window.addEventListener('message', function _onOrcConfig(ev) {
     if (ev.source !== window) return;
     const msg = ev.data;
 
-    // Bridge responde com todos os dados do storage
     if (msg?.type === 'HIPER_CACHE_ALL') {
       const entries = msg.entries || {};
-      // hiper_orc_* chegam como primitivos (sem wrapper { data, ts })
       const letra   = entries['hiper_orc_letra']   || 'A';
       const counter = entries['hiper_orc_counter'] ?? 999;
       window.__hiperOrcConfig = {
         letra:   String(letra).toUpperCase(),
         counter: parseInt(counter, 10) || 999,
       };
-      // Carrega vendedor persistido.
-      // Atualiza campo a campo (sem recriar o objeto) para não sobrescrever
-      // escrita concorrente do hiper-cache.js que processa o mesmo HIPER_CACHE_ALL.
       const vendedorText    = entries['vendedor']?.text    ?? null;
       const vendedorChecked = entries['vendedor']?.checked ?? null;
       if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
@@ -55,7 +39,6 @@ function parseMoedaOrc(str) {
       if (vendedorChecked != null) window.__hiperVendedor.checked = vendedorChecked === true || vendedorChecked === 'true';
     }
 
-    // O popup alterou a config — atualiza imediatamente em memória
     if (msg?.type === 'HIPER_ORC_CONFIG_CHANGED') {
       if (!window.__hiperOrcConfig) window.__hiperOrcConfig = { letra: 'A', counter: 999 };
       if (msg.letra   != null) window.__hiperOrcConfig.letra   = String(msg.letra).toUpperCase();
@@ -63,7 +46,6 @@ function parseMoedaOrc(str) {
     }
   });
 
-  // Fallback: lê direto do chrome.storage se disponível (quando rodando como content script)
   if (typeof chrome !== 'undefined' && chrome.storage?.local) {
     chrome.storage.local.get(['hiper_orc_letra', 'hiper_orc_counter', 'hiper_vendedor_text', 'hiper_vendedor_checked'], (r) => {
       window.__hiperOrcConfig = {
@@ -89,12 +71,11 @@ function parseMoedaOrc(str) {
 function gerarNumeroOrcamento() {
   const cfg = window.__hiperOrcConfig || { letra: 'A', counter: 999 };
   let next = cfg.counter + 1;
-  if (next > 999999) next = 1000; // wrap-around
+  if (next > 999999) next = 1000;
 
   cfg.counter = next;
   window.__hiperOrcConfig = cfg;
 
-  // Persiste via postMessage para o bridge (evita chamar chrome.storage direto)
   window.postMessage({ type: 'HIPER_CACHE_SET', key: 'hiper_orc_counter', data: next, ts: Date.now() }, '*');
 
   return cfg.letra + String(next);
@@ -124,7 +105,6 @@ function extrairDadosPedido() {
     if (!nome || qtd === 0) return;
     const codigo = extrairCodigoProduto(nome);
 
-    // Busca sigla no cache, com fallback para DOM e depois 'UN'
     let unidade = unidadeDoItem(linha);
     if (window.__hiperMaster?.length) {
       const found = window.__hiperMaster.find(p => {
@@ -201,16 +181,13 @@ function gerarHtmlOrcamento(dados, opcoes) {
     '<tr class="vazia"><td></td><td></td><td></td><td></td><td></td><td></td></tr>'
   ).join('');
 
+  // ── Coluna de custo — somente leitura ────────────────────────────────────────
   const linhasCusto = itens.map(item => {
     const key = item.idProduto;
-    const c   = key ? custosMap[key] : undefined;
-    return '<div class="custo-row">'+
-      '<input class="custo-inp '+(c!=null?'ok':'novo')+'"'+
-      ' type="number" min="0" step="0.001" placeholder="—"'+
-      ' onblur="if(this.value!==\'\')this.value=parseFloat(this.value).toFixed(3)"'+
-      ' data-id="'+(key||'')+'" data-nome="'+item.nome.replace(/"/g,'&quot;')+'"'+
-      (c!=null?' value="'+c+'"':'')+'>'+
-    '</div>';
+    const c   = key != null ? custosMap[key] : undefined;
+    const txt = c != null ? parseFloat(c).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—';
+    const cls = c != null ? 'custo-val ok' : 'custo-val vazio';
+    return '<div class="custo-row"><span class="' + cls + '">' + txt + '</span></div>';
   }).join('');
 
   const linhasVaziasC = Array(vazias).fill('<div class="custo-row"></div>').join('');
@@ -254,15 +231,15 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .tbl td.c{text-align:center}.tbl td.r{text-align:right}.tbl td.desc{text-align:left}
 .tbl tr.vazia td{height:20px}
 
-/* Coluna de custo */
+/* Coluna de custo — somente leitura */
 .custo-col{width:88px;flex-shrink:0;border:1px solid #e0c040;background:#fffbe6}
 .custo-header{background:#fffbe6;border-bottom:1px solid #e0c040;padding:4px 4px;font-size:9pt;text-align:center;font-weight:bold;color:#7a6000;display:flex;align-items:center;justify-content:center;}
 .custo-body{display:flex;flex-direction:column}
-.custo-row{border-bottom:1px solid #e0c040;display:flex;align-items:center;padding:2px 3px;overflow:hidden;}
+.custo-row{border-bottom:1px solid #e0c040;display:flex;align-items:center;padding:2px 6px;overflow:hidden;}
 .custo-row:last-child{border-bottom:none}
-.custo-inp{width:100%;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;padding:0 2px;color:#333}
-.custo-inp:focus{outline:1px solid #b8940a;background:#fff8dc;border-radius:2px}
-.custo-inp.ok{color:#1a7a1a}.custo-inp.novo{color:#c07000}
+.custo-val{width:100%;text-align:right;font-size:9pt;font-family:Arial;color:#333}
+.custo-val.ok{color:#1a7a1a}
+.custo-val.vazio{color:#bbb}
 
 /* Totais */
 .totais-wrap{border:1px solid #000;border-top:none}
@@ -330,6 +307,14 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .btn-pdf{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#e8510a}
 .btn-pdf:hover{background:#c44208}
 .btn-pdf:disabled{background:#aaa;cursor:default}
+.btn-sync-custos{padding:8px 14px;border:1px solid #6dbf8a;border-radius:6px;font-size:13px;cursor:pointer;color:#1a5c1a;font-weight:bold;background:#f0fff4;transition:background 0.15s}
+.btn-sync-custos:hover:not(:disabled){background:#d4f0dc}
+.btn-sync-custos:disabled{opacity:0.5;cursor:default}
+.btn-sync-custos.sync-spin{border-color:#90caf9;color:#1565c0;background:#e8f0fe}
+.btn-sync-custos.sync-ok{border-color:#6dbf8a;color:#1a7a1a;background:#d4f0dc}
+.btn-sync-custos.sync-err{border-color:#e57373;color:#c00;background:#fdd}
+.btn-edit-custos{padding:8px 14px;border:1px solid #e0c040;border-radius:6px;font-size:13px;cursor:pointer;color:#7a6000;font-weight:bold;background:#fffbe6;transition:background 0.15s}
+.btn-edit-custos:hover{background:#fff0b3}
 
 .rodape{border:1px solid #000;border-top:none;padding:5px 8px;font-size:8pt;line-height:1.6}
 .rodape .entrega{color:#c00;font-weight:bold;font-size:9pt;margin-top:3px}
@@ -361,6 +346,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     style="padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#1a5c8a">
     📝 Resumido
   </button>
+  <button class="btn-sync-custos" id="btnSyncCustos" onclick="syncCustos()">↻ Custos</button>
+  <button class="btn-edit-custos" onclick="window.open('https://db.superaserver.com/custos/', '_blank')">✏️ Editar Custos</button>
   <div class="pdf-badge" id="pdfBadge">✅ PDF baixado</div>
 </div>
 
@@ -528,12 +515,8 @@ let _descMaxCartao = NaN;
 let _pdfBaixado = false;
 
 // ── Salva no banco via opener (hiper-db.js) ───────────────────────────────────
-// Chamada por todos os 4 botões da toolbar antes de sua ação principal.
-// Coleta os valores atuais da janela (já editados pelo usuário) e envia.
 function _parseTdMoeda(txt) {
-  // Remove tudo exceto dígitos, vírgula e ponto, depois normaliza separadores BR
   const s = (txt || '').replace(/[^\d,.]/g, '');
-  // Formato BR: último separador é vírgula decimal → "1.234,56"
   if (/,/.test(s)) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
   return parseFloat(s) || 0;
 }
@@ -543,9 +526,6 @@ function _dbSalvar() {
     const rows = document.querySelectorAll('.tbl tbody tr:not(.vazia)');
     const itens = [];
 
-    // Monta índice pelo nome para aproveitar os valores já calculados em ITENS
-    // (ITENS é serializado no momento da geração do orçamento, antes de qualquer
-    //  problema de timing com o DOM do Hiper ERP)
     const itensIdx = {};
     (ITENS || []).forEach(function(it) { itensIdx[it.nome] = it; });
 
@@ -555,7 +535,6 @@ function _dbSalvar() {
       const nome = tds[3].textContent.trim();
       if (!nome) return;
 
-      // Tenta ler do DOM primeiro; se vier zerado, usa o valor de ITENS
       let vlUnit   = _parseTdMoeda(tds[4].textContent);
       let subtotal = _parseTdMoeda(tds[5].textContent);
       const ref = itensIdx[nome];
@@ -565,7 +544,6 @@ function _dbSalvar() {
       }
 
       const qtd = parseFloat(tds[1].textContent.replace(',', '.')) || 0;
-      // Garante consistência: se subtotal ainda zerado, recalcula
       if (!subtotal && vlUnit && qtd) subtotal = qtd * vlUnit;
 
       itens.push({
@@ -582,13 +560,11 @@ function _dbSalvar() {
     const totalC   = parseFloat(el('valC')?.value   || '0') || 0;
     const totalV   = parseFloat(el('valV')?.value   || '0') || 0;
     const desconto = parseFloat(el('iDescC')?.value || '0') || 0;
-    const total    = totalC > 0 ? totalC : totalV;  // prioriza valor cartão
+    const total    = totalC > 0 ? totalC : totalV;
 
-    // Lê as parcelas do select interno da janela
     const selParcelas = el('select-parcelas-input');
     const parcelas    = selParcelas ? (parseInt(selParcelas.value, 10) || 1) : 1;
 
-    // Lê o nome do cliente digitado na janela
     const clienteInp = el('iCliente');
     const cliente    = clienteInp ? clienteInp.value.trim() : '';
 
@@ -649,8 +625,6 @@ function syncPrint(id, n){
 }
 
 // ── Nome do cliente ───────────────────────────────────────────────────────────
-let _clienteAnterior = '';
-
 function onCliente() {
   const inp  = el('iCliente');
   const span = el('subCliente');
@@ -665,47 +639,77 @@ function onCliente() {
   }
 }
 
-// Retorna o primeiro nome do cliente (para o nome do arquivo PDF)
 function primeiroNomeCliente() {
   const inp = el('iCliente');
   if (!inp || !inp.value.trim()) return 'Cliente';
   const primeiro = inp.value.trim().split(/\s+/)[0];
-  // Normaliza: remove acentos, caracteres especiais e espaços
   return primeiro
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9]/g, '');
 }
 
-// ── Custos ────────────────────────────────────────────────────────────────────
-function debounce(fn, delay=500){
-  let t;
-  return (...args)=>{
-    clearTimeout(t);
-    t = setTimeout(()=>fn(...args), delay);
-  };
+// ── Sync de custos ────────────────────────────────────────────────────────────
+async function syncCustos() {
+  const btn = el('btnSyncCustos');
+  if (!btn) return;
+
+  function _setStatus(estado) {
+    btn.className = 'btn-sync-custos';
+    btn.disabled  = false;
+    if (estado === 'loading') {
+      btn.classList.add('sync-spin');
+      btn.disabled = true;
+      btn.textContent = '⟳ buscando…';
+    } else if (estado === 'ok') {
+      btn.classList.add('sync-ok');
+      btn.textContent = '✓ atualizado';
+      setTimeout(() => _setStatus('idle'), 3000);
+    } else if (estado === 'err') {
+      btn.classList.add('sync-err');
+      btn.textContent = '✗ sem conexão';
+      setTimeout(() => _setStatus('idle'), 4000);
+    } else {
+      btn.textContent = '↻ Custos';
+    }
+  }
+
+  if (typeof window.opener?.__hiperSyncCustos !== 'function' &&
+      typeof window.__hiperSyncCustos !== 'function') {
+    _setStatus('err');
+    return;
+  }
+
+  _setStatus('loading');
+  try {
+    const fn = window.__hiperSyncCustos ?? window.opener.__hiperSyncCustos;
+    await fn();
+    // Atualiza o mapa local de custos com o cache atualizado
+    const novo = window.__hiperCustos ?? window.opener?.__hiperCustos ?? {};
+    Object.assign(custos, novo);
+    // Re-renderiza a coluna de custo
+    _atualizarColunaCusto();
+    recalcMargem();
+    _setStatus('ok');
+  } catch (e) {
+    _setStatus('err');
+  }
 }
 
-document.querySelectorAll('.custo-inp').forEach(inp=>{
-  const salvarDebounced = debounce(()=>salvarCusto(inp), 500);
-  inp.addEventListener('input', salvarDebounced);
-});
-
-function salvarCusto(inp) {
-  const v    = Math.round(parseFloat(inp.value) * 1000) / 1000;
-  const id   = inp.dataset.id;
-  const nome = inp.dataset.nome;
-  if(!id) { console.warn('[HiperOrc] ⚠ Item sem código, custo não salvo. Nome:', nome); return; }
-  if(isNaN(v) || v < 0) { console.warn('[HiperOrc] ⚠ Valor inválido:', inp.value); return; }
-  custos[id] = v;
-  inp.className = 'custo-inp ok';
-  const msg = { type:'HIPER_CUSTO_SAVE', id, nome, val:v };
-  try {
-    const bc = new BroadcastChannel('hiper_custo_channel');
-    bc.postMessage(msg);
-    bc.close();
-    console.log('[HiperOrc] 💾 Custo enviado — código:', id, '| valor:', v);
-  } catch(e) { console.error('[HiperOrc] ❌ BroadcastChannel falhou:', e); }
-  recalcMargem();
+// Re-renderiza os valores da coluna de custo após sync
+function _atualizarColunaCusto() {
+  const body = el('custoBody');
+  if (!body) return;
+  const rows = body.querySelectorAll('.custo-row');
+  ITENS.forEach((item, i) => {
+    const row = rows[i];
+    if (!row) return;
+    const c   = item.idProduto != null ? custos[item.idProduto] : undefined;
+    const txt = c != null
+      ? parseFloat(c).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+      : '—';
+    const cls = c != null ? 'custo-val ok' : 'custo-val vazio';
+    row.innerHTML = '<span class="' + cls + '">' + txt + '</span>';
+  });
 }
 
 // ── Base dinâmica ──────────────────────────────────────────────────────────────
@@ -856,7 +860,6 @@ function onVendedor() {
     span.style.display = texto ? '' : 'none';
     span.textContent   = texto ? 'Vendedor: ' + texto : '';
   }
-  // Persiste via BroadcastChannel → interceptor → chrome.storage
   try {
     const bc = new BroadcastChannel('hiper_custo_channel');
     bc.postMessage({ type: 'HIPER_VENDEDOR_SAVE', text: inp.value, checked: !!texto });
@@ -878,7 +881,7 @@ function onPixEmpresa() {
 
 // ── Gera nome do arquivo PDF ───────────────────────────────────────────────────
 function nomePdf() {
-  const data  = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+  const data  = new Date().toISOString().slice(0,10);
   const nome  = primeiroNomeCliente();
   return 'orcamento-' + NUM_ORC + '-' + nome + '-' + data + '.pdf';
 }
@@ -913,16 +916,13 @@ function congelarInputsNoClone(clone) {
         const spanNoClone = clone.querySelector('#' + id + '-print');
         
         if (inputOriginal && spanNoClone) {
-            // Pegamos o valor, limpamos qualquer lixo e garantimos que é número
             let valor = parseFloat(inputOriginal.value) || 0;
             
-            // Inserimos no SPAN do CLONE com a formatação correta
             spanNoClone.textContent = valor.toLocaleString('pt-BR', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             });
             
-            // Garante que o input original no PDF fique invisível
             const inputNoClone = clone.querySelector('#' + id);
             if (inputNoClone) inputNoClone.style.display = 'none';
             spanNoClone.style.display = 'inline-block';
@@ -1027,7 +1027,6 @@ async function baixarPdf() {
   congelarInputsNoClone(clone);
   ocultarDescontoZeroNoClone(clone);
 
-  // ── Header e footer do PDF ────────────────────────────────────────────────
   const clienteNome  = el('iCliente')?.value.trim()  || '';
   const vendedorNome = el('iVendedor')?.value.trim() || '';
 
@@ -1052,7 +1051,6 @@ async function baixarPdf() {
   document.body.appendChild(wrapper);
   await new Promise(r => setTimeout(r, 150));
 
-  // Mede altura real do header apos renderizacao no DOM (antes do html2canvas)
   const headerPxReal = pdfHeader.offsetHeight;
 
   try {
@@ -1074,11 +1072,6 @@ async function baixarPdf() {
     const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:[A4_MM_W, pageH] });
     pdf.addImage(canvas.toDataURL('image/png',1.0),'PNG',MARGIN_MM,MARGIN_MM,finalMmW,finalMmH,undefined,'FAST');
 
-    // ── Link clicável sobre "Orçamento XXXX" no header do PDF ────────────────
-    // O header tem ~8px de altura no canvas (em px lógicos antes do SCALE).
-    // Calcula a posição Y do header em mm no PDF: ele começa logo após a margem.
-    // Largura estimada do texto "Orçamento XXXXX" ≈ 38mm (fonte ~10pt, ~6 chars + label).
-    // Converte altura real do header (px DOM) para mm no PDF pela mesma proporcao da imagem
     const wrapperPxH = canvas.height / SCALE;
     const headerMmH  = (headerPxReal / wrapperPxH) * finalMmH;
     const linkUrl    = 'https://tagdrywall.hiper.com.br/v1/#/pedido-venda/novo?recuperar=' + NUM_ORC;
@@ -1086,7 +1079,6 @@ async function baixarPdf() {
 
     pdf.save(nomePdf());
 
-    // Marca como baixado e atualiza UI
     _pdfBaixado = true;
     const badge = el('pdfBadge');
     if (badge) badge.classList.add('visible');
@@ -1145,16 +1137,14 @@ function abrirOrcamento() {
 
 
 // ── Registro no centralizador de UI (hiper-ui.js) ────────────────────────────
-// ordem 10 — botão de orçamento fica logo após o btn-gerar-pedido nativo
 (function _registrarOrcamento() {
   function _criarBotao() {
-    // Posiciona após o btn-gerar-pedido nativo, se existir.
-    // O hiper-ui.js cuida de inserir no anchor; aqui só criamos o elemento.
     const btn = document.createElement('button');
     btn.id        = 'hiper-btn-orcamento';
     btn.type      = 'button';
     btn.className = 'btn btn-lg no-margin-bottom btn-block-xs';
-    btn.style.cssText = 'background: rgba(46, 204, 113, 0.25); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); margin-top: 4px; font-size: 12px; font-weight: bold; border-radius: 4px; backdrop-filter: blur(4px); transition: all 0.2s;';    btn.innerHTML = '📄 Orçamento';
+    btn.style.cssText = 'background: rgba(46, 204, 113, 0.25); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); margin-top: 4px; font-size: 12px; font-weight: bold; border-radius: 4px; backdrop-filter: blur(4px); transition: all 0.2s;';
+    btn.innerHTML = '📄 Orçamento';
     btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; btn.style.borderColor = '#1a7a1a'; btn.style.color = '#1a7a1a'; });
     btn.addEventListener('mouseleave', () => { btn.style.opacity = '0.75'; btn.style.borderColor = '#ccc'; btn.style.color = '#555'; });
     btn.addEventListener('click', abrirOrcamento);
@@ -1166,7 +1156,6 @@ function abrirOrcamento() {
     if (window.__hiperUI) {
       window.__hiperUI.registrar({ id: 'hiper-btn-orcamento', ordem: 0, render: _criarBotao });
     } else {
-      // hiper-ui.js ainda não carregou — tenta novamente em 50ms
       setTimeout(_registrar, 50);
     }
   }
