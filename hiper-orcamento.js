@@ -299,6 +299,19 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .pdf-badge{display:none;align-items:center;gap:6px;padding:4px 12px;background:#d4edda;border:1px solid #6dbf8a;border-radius:20px;font-size:12px;font-weight:bold;color:#1a5c1a}
 .pdf-badge.visible{display:flex}
 
+/* Observações */
+.obs-label{font-size:11px;font-weight:bold;color:#1a3a6a;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;display:block}
+.obs-box{border:1px solid #000;padding:6px 8px;margin-bottom:10px;background:transparent}
+.obs-textarea{width:100%;min-height:36px;max-height:240px;resize:vertical;border:none;outline:none;padding:0;font-size:10pt;font-family:Arial,sans-serif;color:#222;background:transparent;line-height:1.5;overflow-y:auto;box-sizing:border-box;display:block}
+.obs-textarea::placeholder{color:#aaa;font-style:italic}
+.obs-print{display:none;font-size:9.5pt;color:#333;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+@media print{
+  .obs-label{display:none!important}
+  .obs-textarea{display:none!important}
+  .obs-print{display:block!important}
+  .obs-box{border-color:#000;background:transparent!important}
+}
+
 .toolbar{display:flex;gap:10px;justify-content:center;margin-bottom:10px;align-items:center;flex-wrap:wrap}
 .btn-print{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#1a73e8}
 .btn-copy{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#25d366}
@@ -370,6 +383,14 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
            oninput="onCliente()" autocomplete="off">
     <span class="cliente-badge">aparece no cabeçalho e no PDF</span>
   </div>
+</div>
+
+<span class="obs-label no-print">📝 Observações</span>
+<div class="obs-box" id="obsBox">
+  <textarea class="obs-textarea" id="obsTexto" rows="2"
+    placeholder="Ex: Produto sob consulta, prazo de entrega previsto para 5 dias úteis…"
+    oninput="onObs()" onkeydown="obsAutoResize(this)"></textarea>
+  <div class="obs-print" id="obsPrint"></div>
 </div>
 
 <div class="header">
@@ -867,6 +888,20 @@ function onVendedor() {
   } catch(e) { console.error('[HiperOrc] ❌ BroadcastChannel vendedor falhou:', e); }
 }
 
+// ── Observações ──────────────────────────────────────────────────────────────
+function onObs() {
+  const ta  = el('obsTexto');
+  const pre = el('obsPrint');
+  if (!ta || !pre) return;
+  pre.textContent = ta.value;
+  obsAutoResize(ta);
+}
+
+function obsAutoResize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
+}
+
 // ── Seletor empresa PIX ───────────────────────────────────────────────────────
 function onPixEmpresa() {
   // Sem lógica adicional — o select exibe o texto correto diretamente.
@@ -928,6 +963,25 @@ function congelarInputsNoClone(clone) {
             spanNoClone.style.display = 'inline-block';
         }
     });
+
+    // Congela o campo de observações: oculta textarea, mostra texto estático
+    const obsOriginal = document.getElementById('obsTexto');
+    const taClone     = clone.querySelector('#obsTexto');
+    const preClone    = clone.querySelector('#obsPrint');
+    if (obsOriginal && taClone && preClone) {
+        const txt = obsOriginal.value.trim();
+        if (txt) {
+            preClone.textContent  = txt;
+            preClone.style.display = 'block';
+        } else {
+            // Se não há obs, esconde o bloco inteiro para não gerar espaço em branco
+            const boxClone = clone.querySelector('#obsBox');
+            if (boxClone) boxClone.style.display = 'none';
+        }
+        taClone.style.display = 'none';
+        // Oculta o header "edição" (badge) no clone
+        // label fica fora do box e já tem classe no-print — removido do clone antes desta função
+    }
 }
 
 // ── Copiar imagem ─────────────────────────────────────────────────────────────
