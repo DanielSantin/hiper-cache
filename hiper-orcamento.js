@@ -1152,6 +1152,64 @@ async function baixarPdf() {
     setTimeout(() => { btn.textContent = '⬇️ Baixar PDF'; btn.style.background = '#e8510a'; }, 3000);
   }
 }
+
+// ── Toast de status do DB (recebido via postMessage do hiper-db.js) ───────────
+(function() {
+  const _toastMap = new Map();
+
+  function mostrarToastDB(codigo, estado) {
+    const cfg = {
+      enviando: { icon: '⏳', msg: 'Salvando ' + codigo + '…',        cor: '#2563eb', bg: '#eff6ff' },
+      ok:       { icon: '✓',  msg: codigo + ' salvo',                 cor: '#15803d', bg: '#f0fdf4' },
+      retry:    { icon: '⚠️', msg: codigo + ' — nova tentativa',      cor: '#b45309', bg: '#fffbeb' },
+    }[estado];
+    if (!cfg) return;
+
+    let entry = _toastMap.get(codigo);
+    if (!entry) {
+      const el = document.createElement('div');
+      el.style.cssText = [
+        'position:fixed', 'bottom:20px', 'right:20px',
+        'padding:9px 14px', 'border-radius:10px',
+        'font-size:13px', 'font-family:sans-serif',
+        'border:1px solid rgba(0,0,0,.07)',
+        'box-shadow:0 4px 14px rgba(0,0,0,.10)',
+        'display:flex', 'align-items:center', 'gap:8px',
+        'opacity:0', 'transform:translateY(8px) scale(.97)',
+        'transition:opacity .2s ease,transform .2s ease,background .3s ease',
+        'z-index:99999', 'pointer-events:none',
+      ].join(';');
+      document.body.appendChild(el);
+      entry = { el, timer: null };
+      _toastMap.set(codigo, entry);
+      requestAnimationFrame(() => {
+        el.style.opacity   = '1';
+        el.style.transform = 'translateY(0) scale(1)';
+      });
+    }
+
+    if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+
+    const { el } = entry;
+    el.style.background = cfg.bg;
+    el.style.color      = cfg.cor;
+    el.innerHTML = '<span style="font-size:14px;line-height:1">' + cfg.icon + '</span><span>' + cfg.msg + '</span>';
+
+    if (estado === 'ok' || estado === 'retry') {
+      entry.timer = setTimeout(() => {
+        el.style.opacity   = '0';
+        el.style.transform = 'translateY(8px) scale(.97)';
+        setTimeout(() => { el.remove(); _toastMap.delete(codigo); }, 220);
+      }, estado === 'ok' ? 3000 : 4000);
+    }
+  }
+
+  window.addEventListener('message', function(ev) {
+    if (ev.data?.type === 'HIPER_DB_TOAST') {
+      mostrarToastDB(ev.data.codigo, ev.data.estado);
+    }
+  });
+})();
 <\/script>
 </body>
 </html>
@@ -1188,7 +1246,7 @@ function abrirOrcamento() {
   const html = gerarHtmlOrcamento(dados, opcoes);
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
-  window.open(url, '_blank');
+  window.__hiperBlobWindow = window.open(url, '_blank');
   setTimeout(() => URL.revokeObjectURL(url), 120000);
 }
 

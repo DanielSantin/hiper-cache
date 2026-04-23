@@ -97,6 +97,75 @@
     return resultado;
   }
 
+  // ── Fila de retries pendentes ─────────────────────────────────────────────────
+  // Map<codigo, timeoutId> — garante no máximo 1 retry agendado por código.
+  // Se o mesmo código for enviado de novo antes do retry disparar, o timer
+  // antigo é cancelado e o novo envio ocorre imediatamente (preserva a ordem).
+
+  const _retrysPendentes = new Map();
+  const RETRY_DELAY_MS   = 15_000; // 15 s antes de tentar novamente
+
+  function _cancelarRetry(codigo) {
+    if (_retrysPendentes.has(codigo)) {
+      clearTimeout(_retrysPendentes.get(codigo));
+      _retrysPendentes.delete(codigo);
+      console.info(`[HiperDB] 🔄 Retry cancelado para ${codigo} — novo envio imediato.`);
+    }
+  }
+
+  function _agendarRetry(codigo, payload) {
+    _cancelarRetry(codigo); // nunca empilha dois retries do mesmo código
+    const id = setTimeout(async () => {
+      _retrysPendentes.delete(codigo);
+      console.info(`[HiperDB] 🔁 Retry disparado para ${codigo}…`);
+      await _enviarPayload(codigo, payload, /* isRetry */ true);
+    }, RETRY_DELAY_MS);
+    _retrysPendentes.set(codigo, id);
+    console.info(`[HiperDB] ⏳ Retry agendado para ${codigo} em ${RETRY_DELAY_MS / 1000}s.`);
+  }
+
+  // ── Toast de status do envio ──────────────────────────────────────────────────
+  // Manda postMessage pra janela blob (guardada em window.__hiperBlobWindow por
+  // hiper-orcamento.js). O listener dentro do blob renderiza o toast lá.
+
+  function _mostrarToastEnvio(codigo, estado) {
+    const blobWin = window.__hiperBlobWindow;
+    if (!blobWin || blobWin.closed) return;
+    blobWin.postMessage({ type: 'HIPER_DB_TOAST', codigo, estado }, '*');
+  }
+
+    // ── Envio atômico (usado tanto no envio inicial quanto no retry) ──────────────
+
+  async function _enviarPayload(codigo, payload, isRetry = false) {
+    _mostrarToastEnvio(codigo, 'enviando');
+    try {
+      const res = await fetchComTimeout(`${API_BASE}/pedido`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        console.info(`[HiperDB] ✅ Pedido ${codigo} salvo${isRetry ? ' (retry)' : ''} (${payload.kits?.length ?? 0} kit(s)).`);
+        _mostrarToastEnvio(codigo, 'ok');
+        return true;
+      }
+
+      // Erro HTTP — agenda retry (o servidor pode estar sobrecarregado)
+      console.warn(`[HiperDB] ⚠️ Servidor retornou ${res.status} para ${codigo}${isRetry ? ' (retry)' : ''} — agendando nova tentativa.`);
+      _mostrarToastEnvio(codigo, 'retry');
+      _agendarRetry(codigo, payload);
+      return false;
+
+    } catch (e) {
+      // Falha de rede / timeout
+      console.info(`[HiperDB] 📡 API indisponível para ${codigo}${isRetry ? ' (retry)' : ''} — agendando nova tentativa.`);
+      _mostrarToastEnvio(codigo, 'retry');
+      _agendarRetry(codigo, payload);
+      return false;
+    }
+  }
+
   // ── Salvar pedido na API ──────────────────────────────────────────────────────
 
   async function salvarPedido(codigo, dados) {
@@ -109,6 +178,10 @@
       console.warn('[HiperDB] ❌ Nenhum item encontrado para salvar', dados);
       return;
     }
+
+    // Se havia retry pendente para este código, cancela — este envio é o mais recente
+    _cancelarRetry(codigo);
+
     const kits = serializarKits();
 
     const payload = {
@@ -129,17 +202,8 @@
       })),
       kits,
     };
-    try {
-      const res = await fetchComTimeout(`${API_BASE}/pedido`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-      });
-      if (res.ok) console.info(`[HiperDB] ✅ Pedido ${codigo} salvo (${kits.length} kit(s)).`);
-      else        console.warn(`[HiperDB] Servidor retornou ${res.status}.`);
-    } catch(e) {
-      console.info('[HiperDB] API indisponível — continuando offline.');
-    }
+
+    await _enviarPayload(codigo, payload);
   }
 
   // ── Save público — chamado pelos botões da janela do orçamento ───────────────
