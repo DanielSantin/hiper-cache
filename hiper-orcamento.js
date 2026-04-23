@@ -586,10 +586,13 @@ function _dbSalvar() {
     const selParcelas = el('select-parcelas-input');
     const parcelas    = selParcelas ? (parseInt(selParcelas.value, 10) || 1) : 1;
 
-    const clienteInp = el('iCliente');
-    const cliente    = clienteInp ? clienteInp.value.trim() : '';
+    const clienteInp  = el('iCliente');
+    const cliente     = clienteInp ? clienteInp.value.trim() : '';
 
-    const dados = { itens, total, desconto, parcelas, cliente };
+    const obsInp   = el('obsTexto');
+    const descricao = obsInp ? obsInp.value.trim() : '';
+
+    const dados = { itens, total, desconto, parcelas, cliente, descricao };
 
     if (window.opener && typeof window.opener.__hiperDBSave === 'function') {
       window.opener.__hiperDBSave(NUM_ORC, dados);

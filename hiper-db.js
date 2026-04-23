@@ -113,11 +113,12 @@
 
     const payload = {
       codigo,
-      vendedor: getVendedor(),
-      total:    dados.total    || 0,
-      desconto: dados.desconto || 0,
-      parcelas: dados.parcelas || 1,
-      cliente:  dados.cliente  || '',
+      vendedor:  getVendedor(),
+      total:     dados.total     || 0,
+      desconto:  dados.desconto  || 0,
+      parcelas:  dados.parcelas  || 1,
+      cliente:   dados.cliente   || '',
+      descricao: dados.descricao || '',
       itens: dados.itens.map(it => ({
         idProduto: it.idProduto || null,
         nome:      it.nome,
@@ -417,6 +418,9 @@
       });
 
       const nItens = pedido.itens.length;
+      const descricaoHtml = pedido.descricao
+        ? `<div style="background:#f6f7f9;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#444;line-height:1.5;word-break:break-word;"><div style="font-size:11px;color:#888;margin-bottom:4px;">Observações</div><div style="white-space:pre-wrap;">${pedido.descricao.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div>`
+        : '';
 
       const overlay = document.createElement('div');
       overlay.style.cssText = `
@@ -462,6 +466,8 @@
             <div style="font-size:15px;font-weight:500;">${nItens}</div>
           </div>
         </div>
+
+        ${descricaoHtml}
 
         <div style="display:flex;gap:8px;justify-content:flex-end;">
           <button id="cancelar"
