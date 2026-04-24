@@ -249,7 +249,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .trow .ttag{font-weight:bold;font-size:9.5pt;background:#e8e8e8;border-left:1px solid #000;display:flex;align-items:center;justify-content:center;padding:2px 4px;text-align:center}
 .trow .ttag.pix{background:transparent}
 .trow .ttag.cartao{background:transparent}
-.trow .ttag select{border:none;background:transparent;font-size:9pt;font-weight:bold;font-family:Arial;cursor:pointer;text-align:center;width:100%;-webkit-appearance:auto}
+.trow .ttag select{border:none;background:transparent;font-size:9pt;font-weight:bold;font-family:Arial;cursor:pointer;text-align:right;width:auto;-webkit-appearance:auto}
 .trow .tval{border-left:1px solid #000;display:flex;align-items:center;justify-content:flex-end;padding:2px 8px;font-weight:bold;font-size:10pt;}
 
 .val-inp{width:100%;border:none;background:transparent;text-align:right;font-weight:bold;font-size:10pt;font-family:Arial;padding:0;color:#000;cursor:text}
@@ -430,7 +430,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 <div class="totais-wrap">
   <div class="trow" id="rowDesc">
     <div class="tlabel"></div>
-    <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold">Desconto</div>
+    <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold;padding-left:20px;padding-right:20px;justify-content:flex-end;white-space:nowrap">Desconto</div>
     <div class="tval">
       <span class="val-prefix">R$</span>
     <input class="val-inp" type="number" id="iDescC" value="0.00" min="0" step="0.01"
@@ -439,17 +439,9 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
       <span class="val-print" id="iDescC-print">0,00</span>
     </div>
   </div>
-  <div class="trow" id="rowE" style="display:none">
-    <div class="tlabel">Taxa de Entrega</div>
-    <div class="ttag" style="background:transparent;font-size:9pt;font-weight:bold">Entrega</div>
-    <div class="tval">
-      <span class="val-prefix">R$</span>
-      <input class="val-inp" id="valE" type="number" step="0.01" style="width:75px" readonly>
-    </div>
-  </div>
   <div class="trow">
     <div class="tlabel" id="lblC">Valor Total – Parcelado em até ${parcelas}x no Cartão de Crédito</div>
-    <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold">
+    <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold;justify-content:flex-end;padding-left:20px;padding-right:20px">
       <select id="select-parcelas-input" style="...">
         ${[1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
             `<option value="${n}" ${n === parcelas ? 'selected' : ''}>
@@ -468,13 +460,21 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   </div>
   <div class="trow">
     <div class="tlabel">Valor Total – À vista (PIX)</div>
-    <div class="ttag pix">À VISTA pix</div>
+    <div class="ttag pix" style="justify-content:flex-end;padding-left:20px;padding-right:20px;white-space:nowrap">À VISTA pix</div>
     <div class="tval">
       <span class="val-prefix">R$</span>
       <input class="val-inp" type="number" id="valV" step="0.01" 
             oninput="onValV()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)" 
             style="width:75px">
       <span class="val-print" id="valV-print">0,00</span>
+    </div>
+  </div>
+  <div id="rowE" class="trow" style="display:none">
+    <div class="tlabel" style="grid-column:1/3;text-align:right;font-weight:bold;font-size:10pt;text-transform:uppercase;letter-spacing:0.5px;justify-content:flex-end;padding-left:20px;padding-right:20px;color:#c00">TAXA DE ENTREGA</div>
+    <div class="tval" style="color:#c00">
+      <span class="val-prefix" style="color:#c00">R$</span>
+      <input class="val-inp" id="valE" type="number" step="0.01" style="width:75px;color:#c00;font-weight:bold" readonly>
+      <span class="val-print" id="valE-print" style="color:#c00;font-weight:bold">0,00</span>
     </div>
   </div>
   <div class="validade-row">* ORÇAMENTO VÁLIDO POR 10 (DEZ) DIAS</div>
@@ -738,7 +738,7 @@ function _atualizarColunaCusto() {
 
 // ── Base dinâmica ──────────────────────────────────────────────────────────────
 function getBase(){
-  return BASE_ITEM+(el('chkE').checked?num('iE'):0);
+  return BASE_ITEM;
 }
 
 // ── Recalcula totais ───────────────────────────────────────────────────────────
@@ -754,6 +754,8 @@ function recalc(){
   syncPrint('valV',   totalV);
   el('rowE').style.display = el('chkE').checked ? 'grid' : 'none';
   el('valE').value = num('iE').toFixed(2);
+  const valEPrint = el('valE-print');
+  if (valEPrint) valEPrint.textContent = fmtNum(num('iE'));
   recalcMargem(totalC, totalV);
 }
 
