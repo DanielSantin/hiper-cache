@@ -161,6 +161,9 @@ function gerarHtmlOrcamento(dados, opcoes) {
   const custosJSON = JSON.stringify(custosMap);
   const itensJSON  = JSON.stringify(itens);
   const numOrcJSON = JSON.stringify(numeroOrcamento);
+  // Total cartão do sistema = soma dos vlUnitBruto × qtd (valor antes do desconto PIX)
+  // Usado para corrigir a diferença causada pelo arredondamento item a item.
+  const totalSistemaCartao = itens.reduce((s, it) => s + it.vlUnitBruto * it.qtd, 0);
 
   const fmtN = (n) => n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 
@@ -433,7 +436,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold;padding-left:20px;padding-right:20px;justify-content:flex-end;white-space:nowrap">Desconto</div>
     <div class="tval">
       <span class="val-prefix">R$</span>
-    <input class="val-inp" type="number" id="iDescC" value="0.00" min="0" step="0.01"
+    <input class="val-inp" type="number" id="iDescC" value="0.00" step="0.01"
           oninput="onDescC()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)" 
           placeholder="0,00" title="Clique para editar" style="width:75px">
       <span class="val-print" id="iDescC-print">0,00</span>
@@ -544,6 +547,8 @@ const ITENS     = ${itensJSON};
 const CUSTOS_IN = ${custosJSON};
 const custos    = Object.assign({}, CUSTOS_IN);
 const NUM_ORC   = ${numOrcJSON};
+// Soma dos vlUnitBruto × qtd: total cartão exato do sistema (sem arredondamento PIX)
+const TOTAL_SISTEMA_CARTAO = ${totalSistemaCartao.toFixed(4)};
 let _descMaxCartao = NaN;
 let _pdfBaixado = false;
 
@@ -757,7 +762,7 @@ function getBase(){
 function recalc(){
   const base   = getBase();
   const descC  = num('iDescC');
-  const totalV = Math.max(0, base - descC);
+  const totalV = base - descC;
   const totalC = totalV / PIX;
   silent('valC', totalC.toFixed(2));
   silent('valV', totalV.toFixed(2));
@@ -857,6 +862,28 @@ function aplicarDescMax(){
 
 if(${frete0>0?'true':'false'}) el('chkE').checked=true;
 recalc();
+
+// ── Ajuste inicial de arredondamento ─────────────────────────────────────────
+// Após aplicar vlUnit = round(vlUnitBruto × PIX, 2) em cada item, o total
+// cartão do orçamento (BASE_ITEM / PIX) pode ficar diferente do total do
+// sistema (TOTAL_SISTEMA_CARTAO). Se o orçamento ficou MAIOR que o sistema,
+// aplica um desconto mínimo no valor à vista para igualar os totais.
+(function _ajustarArredondamento() {
+  if (TOTAL_SISTEMA_CARTAO <= 0) return;
+  const totalCAtual = BASE_ITEM / PIX;
+  // Só corrige se o orçamento ficou acima do sistema (situação problemática)
+  if (totalCAtual <= TOTAL_SISTEMA_CARTAO + 0.005) return;
+
+  // Queremos: (BASE_ITEM - descC) / PIX = TOTAL_SISTEMA_CARTAO
+  // Logo:      descC = BASE_ITEM - TOTAL_SISTEMA_CARTAO × PIX
+  const descNecessario = BASE_ITEM - TOTAL_SISTEMA_CARTAO * PIX;
+  const iDescEl = el('iDescC');
+  if (!iDescEl) return;
+  iDescEl.value = descNecessario.toFixed(2);
+  recalc();
+  console.info('[HiperOrc] Ajuste arredondamento aplicado: desconto à vista =',
+    descNecessario.toFixed(2), '→ totalC =', (BASE_ITEM - descNecessario) / PIX);
+})();
 
 el('select-parcelas-input').addEventListener('change', function() {
   const n = parseInt(this.value, 10) || 1;
