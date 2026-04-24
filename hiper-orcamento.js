@@ -470,7 +470,19 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     </div>
   </div>
   <div id="rowE" class="trow" style="display:none">
-    <div class="tlabel" style="grid-column:1/3;text-align:right;font-weight:bold;font-size:10pt;text-transform:uppercase;letter-spacing:0.5px;justify-content:flex-end;padding-left:20px;padding-right:20px;color:#c00">TAXA DE ENTREGA</div>
+  <div class="tlabel" 
+      style="grid-column:1/3;
+              text-align:right;
+              font-weight:bold;
+              font-size:10pt;
+              text-transform:uppercase;
+              letter-spacing:0.5px;
+              justify-content:flex-end;
+              padding-left:20px;
+              padding-right:20px;
+              color:#000;">
+      TAXA DE ENTREGA
+  </div>
     <div class="tval" style="color:#c00">
       <span class="val-prefix" style="color:#c00">R$</span>
       <input class="val-inp" id="valE" type="number" step="0.01" style="width:75px;color:#c00;font-weight:bold" readonly>
