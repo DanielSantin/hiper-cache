@@ -224,12 +224,23 @@
       console.warn('[HiperDB] faturarOrcamentoAtual: nenhum pedido aberto.');
       return;
     }
+
+    // Lê o total atual diretamente do DOM do Hiper
+    const totalEl = document.querySelector('.totais-valor-total strong.valor-total, .valor-total');
+    const totalStr = totalEl ? totalEl.textContent.replace(/[^\d,]/g, '').replace(',', '.') : '0';
+    const totalAtual = parseFloat(totalStr) || 0;
+
     try {
       const res = await fetchComTimeout(`${API_BASE}/pedido/${encodeURIComponent(codigo)}/faturar`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ total_atual: totalAtual }),
       });
       if (res.ok) {
         console.info(`[HiperDB] ✅ Orçamento ${codigo} marcado como faturado.`);
+      } else if (res.status === 409) {
+        const err = await res.json().catch(() => ({}));
+        console.warn(`[HiperDB] ⚠️ Faturamento recusado para ${codigo}: ${err.detail || res.status}`);
       } else {
         console.warn(`[HiperDB] ⚠️ Faturar ${codigo} retornou ${res.status}.`);
       }
