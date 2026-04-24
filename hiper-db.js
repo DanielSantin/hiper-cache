@@ -214,6 +214,44 @@
     if (codigo && dados) salvarPedido(codigo, dados);
   };
 
+  // ── Marcar orçamento como faturado ───────────────────────────────────────────
+  // Chamado quando o operador clica em "Salvar orçamento" ou "Salvar e gerar pedido"
+  // no sistema Hiper. O número do orçamento atual fica em __hiperNumeroOrcamentoAtual.
+
+  async function faturarOrcamentoAtual() {
+    const codigo = window.__hiperPedidoAberto;
+    if (!codigo) {
+      console.warn('[HiperDB] faturarOrcamentoAtual: nenhum pedido aberto.');
+      return;
+    }
+    try {
+      const res = await fetchComTimeout(`${API_BASE}/pedido/${encodeURIComponent(codigo)}/faturar`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        console.info(`[HiperDB] ✅ Orçamento ${codigo} marcado como faturado.`);
+      } else {
+        console.warn(`[HiperDB] ⚠️ Faturar ${codigo} retornou ${res.status}.`);
+      }
+    } catch (e) {
+      console.warn('[HiperDB] ⚠️ Erro ao marcar faturado:', e);
+    }
+  }
+
+  // Intercepta os dois botões de salvar do Hiper e dispara o faturamento.
+  // Usa captura no document para funcionar mesmo se os botões forem renderizados
+  // depois do carregamento do módulo.
+  (function _hookBotoesSalvar() {
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.btn-save');
+      if (!btn) return;
+      // Só age se houver um orçamento ativo gerado pela extensão
+      if (!window.__hiperPedidoAberto) return;
+      faturarOrcamentoAtual();
+    }, /* capture */ true);
+    console.info('[HiperDB] 🎯 Hook de faturamento registrado nos botões de salvar.');
+  })();
+
   // ── Recuperação de pedido ─────────────────────────────────────────────────────
 
   async function recuperarPedido(codigo) {
@@ -666,6 +704,8 @@
     }
 
     mostrarToastRecuperacao(pedido);
+    window.__hiperPedidoAberto = pedido.codigo;
+    console.info(`[HiperDB] 📂 Pedido aberto: ${pedido.codigo}`);
   }
 
   // ── Cria o painel de recuperação ──────────────────────────────────────────────

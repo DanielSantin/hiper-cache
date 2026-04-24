@@ -488,7 +488,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   </div>
     <div class="tval" style="color:#c00">
       <span class="val-prefix" style="color:#c00">R$</span>
-      <input class="val-inp" id="valE" type="number" step="0.01" style="width:75px;color:#c00;font-weight:bold" readonly>
+      <input class="val-inp" id="valE" type="number" step="0.01" style="width:75px;color:#c00;font-weight:bold" oninput="onValE()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)">
       <span class="val-print" id="valE-print" style="color:#c00;font-weight:bold">0,00</span>
     </div>
   </div>
@@ -770,7 +770,10 @@ function recalc(){
   syncPrint('valC',   totalC);
   syncPrint('valV',   totalV);
   el('rowE').style.display = el('chkE').checked ? 'grid' : 'none';
-  el('valE').value = num('iE').toFixed(2);
+  const valEEl = el('valE');
+  if (valEEl && document.activeElement !== valEEl) {
+    valEEl.value = num('iE').toFixed(2);
+  }
   const valEPrint = el('valE-print');
   if (valEPrint) valEPrint.textContent = fmtNum(num('iE'));
   recalcMargem(totalC, totalV);
@@ -801,6 +804,15 @@ function onValV(){
 }
 
 function onDescC(){ recalc(); }
+
+// ── Frete editado diretamente na tabela → sincroniza com o painel ─────────────
+function onValE(){
+  const v = parseFloat(el('valE')?.value) || 0;
+  const iEEl = el('iE');
+  if (iEEl && document.activeElement !== iEEl) iEEl.value = v.toFixed(2);
+  const valEPrint = el('valE-print');
+  if (valEPrint) valEPrint.textContent = fmtNum(v);
+}
 
 // ── Margem ─────────────────────────────────────────────────────────────────────
 function recalcMargem(totalC, totalV){
@@ -884,6 +896,13 @@ recalc();
   console.info('[HiperOrc] Ajuste arredondamento aplicado: desconto à vista =',
     descNecessario.toFixed(2), '→ totalC =', (BASE_ITEM - descNecessario) / PIX);
 })();
+
+// ── Enter desfoca o campo ativo ───────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') {
+    document.activeElement.blur();
+  }
+});
 
 el('select-parcelas-input').addEventListener('change', function() {
   const n = parseInt(this.value, 10) || 1;
@@ -1277,6 +1296,7 @@ function abrirOrcamento() {
 
   const numeroOrcamento = gerarNumeroOrcamento();
   window.__hiperNumeroOrcamentoAtual = numeroOrcamento;
+  window.__hiperPedidoAberto = numeroOrcamento;
 
   const opcoes = {
     parcelas: parcelasSelecionadas,
