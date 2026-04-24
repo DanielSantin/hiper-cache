@@ -102,14 +102,14 @@ function _resumido_css() {
 }
 
 // ── Linhas da tabela de kits ──────────────────────────────────────────────────
-function _resumido_linhasTabela(kitsInfo, totalC, varianteTabica) {
+function _resumido_linhasTabela(kitsInfo, totalV, varianteTabica) {
   var PIX   = 0.9523;
   var somaC = kitsInfo.reduce(function(s, k) { return s + k.custoRelativo; }, 0) || 1;
   var fmtN  = function(n) { return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
 
   var linhas = kitsInfo.map(function(kit, i) {
     var prop  = kit.custoRelativo / somaC;
-    var tcKit = totalC * prop;
+    var tcKit = totalV * prop;  // tcKit aqui = valor à vista por kit (nome histórico mantido)
     var area  = kit.A;
 
     // Para portas: exibe qtd total de portas como "área" e unidade "un."
@@ -274,7 +274,7 @@ function resumido_gerarHtml(payload, opcoes) {
   var totalV = totalCartaoBase + frete;  // à vista é a base
   var totalC = totalV / PIX;             // cartão = à vista / 0.9523 (~5% a mais)
 
-  var corpoTabela = _resumido_linhasTabela(kitsInfo, totalC, varianteTabica);
+  var corpoTabela = _resumido_linhasTabela(kitsInfo, totalV, varianteTabica);
   var scriptTag   = _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedorTexto);
 
   var avisoHtml = avisoMisto
