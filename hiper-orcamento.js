@@ -69,16 +69,37 @@ function parseMoedaOrc(str) {
 })();
 
 function gerarNumeroOrcamento() {
+  // ATENÇÃO: mantido apenas para compatibilidade — use gerarNumeroOrcamentoAsync()
+  // Este caminho local pode gerar duplicatas em múltiplas abas simultâneas.
   const cfg = window.__hiperOrcConfig || { letra: 'A', counter: 999 };
   let next = cfg.counter + 1;
   if (next > 999999) next = 1000;
-
   cfg.counter = next;
   window.__hiperOrcConfig = cfg;
-
   window.postMessage({ type: 'HIPER_CACHE_SET', key: 'hiper_orc_counter', data: next, ts: Date.now() }, '*');
-
   return cfg.letra + String(next);
+}
+
+// ── Geração atômica via background (serializada, sem colisão entre abas) ─────
+function gerarNumeroOrcamentoAsync() {
+  return new Promise((resolve) => {
+    const onAck = (ev) => {
+      if (ev.source !== window) return;
+      if (ev.data?.type !== 'HIPER_ORC_NEXT_NUM_ACK') return;
+      window.removeEventListener('message', onAck);
+      resolve(ev.data.numero);
+    };
+    window.addEventListener('message', onAck);
+    window.postMessage({ type: 'HIPER_ORC_NEXT_NUM' }, '*');
+
+    // Fallback: se o interceptor não responder em 1s (ex: fora do contexto da extensão)
+    // cai no gerador local para não travar o fluxo
+    setTimeout(() => {
+      window.removeEventListener('message', onAck);
+      console.warn('[HiperOrc] Timeout no background — usando gerador local como fallback.');
+      resolve(gerarNumeroOrcamento());
+    }, 1000);
+  });
 }
 
 function extrairDadosPedido() {
@@ -1294,17 +1315,16 @@ function calcularParcelasPadrao(total) {
   return 1;
 }
 
-function abrirOrcamento() {
+async function abrirOrcamento() {
   const dados = extrairDadosPedido();
   const parcelasSelecionadas = calcularParcelasPadrao(dados.total || dados.itens.reduce((s, it) => s + it.qtd * it.vlUnit, 0));
-
 
   if (dados.itens.length === 0) {
     alert('Nenhum item encontrado. Adicione pelo menos um produto.');
     return;
   }
 
-  const numeroOrcamento = gerarNumeroOrcamento();
+  const numeroOrcamento = await gerarNumeroOrcamentoAsync();
   window.__hiperNumeroOrcamentoAtual = numeroOrcamento;
   window.__hiperPedidoAberto = numeroOrcamento;
 

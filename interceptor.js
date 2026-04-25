@@ -147,6 +147,19 @@ window.addEventListener('message', async (event) => {
     });
   }
 
+  // ── Geração atômica de número de orçamento via background (serial) ──────────
+  if (msg.type === 'HIPER_ORC_NEXT_NUM') {
+    chrome.runtime.sendMessage({ type: 'HIPER_ORC_NEXT_NUM' }, (resp) => {
+      if (chrome.runtime.lastError) {
+        console.warn('[Interceptor] Erro ao gerar número de orçamento:', chrome.runtime.lastError.message);
+        return;
+      }
+      // Mantém __hiperOrcConfig sincronizado na aba
+      if (window.__hiperOrcConfig) window.__hiperOrcConfig.counter = resp.counter;
+      window.postMessage({ type: 'HIPER_ORC_NEXT_NUM_ACK', numero: resp.numero, counter: resp.counter }, '*');
+    });
+  }
+
   if (msg.type === 'HIPER_CUSTO_EXPORT_REQ') {
     await safeStorage(async () => {
       const all    = await chrome.storage.local.get(null);
