@@ -184,13 +184,19 @@ function gerarHtmlOrcamento(dados, opcoes) {
     '<tr class="vazia"><td></td><td></td><td></td><td></td><td></td><td></td></tr>'
   ).join('');
 
-  // ── Coluna de custo — somente leitura ────────────────────────────────────────
+  // ── Coluna de custo — clicável, abre custos.html com código preenchido ───────
   const linhasCusto = itens.map(item => {
     const key = item.idProduto;
     const c   = key != null ? custosMap[key] : undefined;
     const txt = c != null ? parseFloat(c).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—';
     const cls = c != null ? 'custo-val ok' : 'custo-val vazio';
-    return '<div class="custo-row"><span class="' + cls + '">' + txt + '</span></div>';
+    const url = key != null ? 'https://db.superaserver.com/custos/?q=' + encodeURIComponent(key) : 'https://db.superaserver.com/custos/';
+    return '<div class="custo-row">' +
+      '<a class="custo-link" href="' + url + '" target="_blank" title="Editar custo do produto">' +
+        '<span class="' + cls + '">' + txt + '</span>' +
+        '<span class="custo-edit-icon">✏️</span>' +
+      '</a>' +
+    '</div>';
   }).join('');
 
   const linhasVaziasC = Array(vazias).fill('<div class="custo-row"></div>').join('');
@@ -240,9 +246,13 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .custo-body{display:flex;flex-direction:column}
 .custo-row{border-bottom:1px solid #e0c040;display:flex;align-items:center;padding:2px 6px;overflow:hidden;}
 .custo-row:last-child{border-bottom:none}
-.custo-val{width:100%;text-align:right;font-size:9pt;font-family:Arial;color:#333}
+.custo-link{display:flex;align-items:center;gap:4px;width:100%;text-decoration:none;cursor:pointer;border-radius:3px;transition:background 0.12s}
+.custo-link:hover{background:#fff0b3}
+.custo-val{flex:1;text-align:right;font-size:9pt;font-family:Arial;color:#333}
 .custo-val.ok{color:#1a7a1a}
 .custo-val.vazio{color:#bbb}
+.custo-edit-icon{flex-shrink:0;font-size:9pt;opacity:0.45;transition:opacity 0.12s;line-height:1}
+.custo-link:hover .custo-edit-icon{opacity:1}
 
 /* Totais */
 .totais-wrap{border:1px solid #000;border-top:none}
