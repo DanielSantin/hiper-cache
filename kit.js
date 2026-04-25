@@ -139,14 +139,13 @@ const PAREDE_FORMULAS_FACE_ST = {
 };
 
 // Fórmulas base POR FACE RU (A = m² total da parede)
-// Chapa RU: 1,20×1,80 m = 2,16 m²
 const PAREDE_FORMULAS_FACE_RU = {
-  "3075": (A) => A / 2.16,            // chapa RU (un)
+  "3075": (A) => A / 2.88,            // chapa RU (un)
   "3089": (A) => A * 0.45,            // massa drywall (kg) — código base
   "3090": (A) => A * 0.45,            // massa drywall (kg) — balde 14kg
   "3113": (A) => A * 0.45,            // massa drywall (kg) — saco 25kg
-  "3021": (A) => (A / 2.16) * 35,     // parafuso TA-25 (bruto — arredondamento via ARREDONDAMENTO_CODIGOS)
-  "3032": (A) => (A / 2.16) * 35,     // parafuso TA-25 caixa 1000 (bruto)
+  "3021": (A) => (A / 2.88) * 35,     // parafuso TA-25 (bruto — arredondamento via ARREDONDAMENTO_CODIGOS)
+  "3032": (A) => (A / 2.88) * 35,     // parafuso TA-25 caixa 1000 (bruto)
   "3132": (A) => A * 1.5,             // fita telada (m) — rolo 45m
   "3014": (A) => A * 1.5,             // fita telada (m) — rolo 90m
 };
