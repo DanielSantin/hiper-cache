@@ -355,7 +355,9 @@
         console.warn(`[HiperDB] Produto não encontrado para item "${it.nome}" — linha ficará em branco.`);
       }
 
-      // Seta quantidade com o valor salvo no banco (sem usar fórmulas)
+      // Seta quantidade com o valor salvo no banco (sem usar fórmulas).
+      // Usa MutationObserver para re-aplicar caso o Hiper sobrescreva com 1
+      // enquanto ainda está carregando o produto (internet lenta).
       const $qtd = $linha.find(
         '.quantidade-produto input, input.quantidade-unitaria, input[ng-model*="quantidade"]'
       ).first();
@@ -363,18 +365,53 @@
       if ($qtd.length) {
         const pronto = await _aguardarHabilitado($qtd);
         if (pronto) {
-          const nativeInput = $qtd[0];
-          const campoDecimal = (nativeInput.value || '').includes(',') || (nativeInput.value || '').includes('.');
-          const valorStr = campoDecimal
-            ? it.qtd.toFixed(2).replace('.', ',')
-            : String(Math.ceil(it.qtd));
+          const qtdAlvo = it.qtd;
 
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-          setter ? setter.call(nativeInput, valorStr) : (nativeInput.value = valorStr);
-          nativeInput.dispatchEvent(new Event('input',  { bubbles: true }));
-          nativeInput.dispatchEvent(new Event('change', { bubbles: true }));
-          nativeInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-          nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
+          function _aplicarQtd(nativeInput) {
+            const campoDecimal = (nativeInput.value || '').includes(',') || (nativeInput.value || '').includes('.');
+            const valorStr = campoDecimal
+              ? qtdAlvo.toFixed(2).replace('.', ',')
+              : String(Math.ceil(qtdAlvo));
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            setter ? setter.call(nativeInput, valorStr) : (nativeInput.value = valorStr);
+            nativeInput.dispatchEvent(new Event('input',  { bubbles: true }));
+            nativeInput.dispatchEvent(new Event('change', { bubbles: true }));
+            nativeInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+            nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
+          }
+
+          const nativeInput = $qtd[0];
+          _aplicarQtd(nativeInput);
+
+          // Guarda o valor que aplicamos para detectar sobrescrita do Hiper
+          const valorAplicado = nativeInput.value;
+          let _reaplicas = 0;
+
+          // Observa mudanças no atributo value (Angular pode alterar assim)
+          const _obs = new MutationObserver(() => {
+            if (nativeInput.value !== valorAplicado && _reaplicas < 3) {
+              _reaplicas++;
+              console.info(`[HiperDB] Quantidade sobrescrita pelo Hiper (tentativa ${_reaplicas}) — re-aplicando ${qtdAlvo}`);
+              _aplicarQtd(nativeInput);
+            }
+          });
+          _obs.observe(nativeInput, { attributes: true, attributeFilter: ['value'] });
+
+          // Também vigia via evento input, caso Angular altere via setter sem tocar no atributo
+          const _onExternalInput = () => {
+            if (nativeInput.value !== valorAplicado && _reaplicas < 3) {
+              _reaplicas++;
+              console.info(`[HiperDB] Quantidade alterada via input (tentativa ${_reaplicas}) — re-aplicando ${qtdAlvo}`);
+              _aplicarQtd(nativeInput);
+            }
+          };
+          nativeInput.addEventListener('input', _onExternalInput);
+
+          // Para de vigiar após 3s — tempo suficiente pro Hiper terminar de carregar o produto
+          setTimeout(() => {
+            _obs.disconnect();
+            nativeInput.removeEventListener('input', _onExternalInput);
+          }, 3000);
         }
       }
     }
