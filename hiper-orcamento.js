@@ -1016,8 +1016,10 @@ function nomePdf() {
 }
 
 function ocultarDescontoZeroNoClone(clone) {
-  const descVal = parseFloat(document.getElementById('iDescC')?.value || '0');
-  if (!descVal || isNaN(descVal)) {
+  const descVal  = parseFloat(document.getElementById('iDescC')?.value || '0');
+  const totalVal = parseFloat(document.getElementById('valV')?.value   || '0');
+  const pctDesc  = totalVal > 0 ? (descVal / (totalVal + descVal)) * 100 : 0;
+  if (!descVal || isNaN(descVal) || pctDesc < 0.5) {
     const rowDesc = clone.querySelector('#rowDesc');
     if (rowDesc) rowDesc.style.display = 'none';
   }
