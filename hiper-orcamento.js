@@ -313,6 +313,13 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 /* Validade */
 .validade-row{padding:4px 8px;font-size:8.5pt;color:#c00;font-weight:bold;border-top:1px solid #000}
 
+/* Checkbox de desconto */
+.desc-chk-wrap{display:inline-flex;align-items:center}
+.desc-chk-wrap input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:#1a73e8;flex-shrink:0}
+#rowDesc.desc-oculto{opacity:0.45;position:relative}
+.trow{position:relative}
+@media print{.desc-chk-wrap{display:none!important}}
+
 /* Painel topo */
 .panel{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;background:#f4f8ff;border:1px solid #b3d4f5}
 .panel h4{font-size:12px;font-weight:bold;color:#1a3a6a;margin-bottom:8px}
@@ -464,7 +471,12 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 <div class="totais-wrap">
   <div class="trow" id="rowDesc">
     <div class="tlabel"></div>
-    <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold;padding-left:20px;padding-right:20px;justify-content:flex-end;white-space:nowrap">Desconto</div>
+    <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold;padding-left:20px;padding-right:20px;justify-content:flex-end;white-space:nowrap;gap:6px">
+      <span class="desc-chk-wrap no-print">
+        <input type="checkbox" id="chkDesc" onchange="onChkDesc()" title="Exibir desconto no PDF">
+      </span>
+      Desconto
+    </div>
     <div class="tval">
       <span class="val-prefix">R$</span>
     <input class="val-inp" type="number" id="iDescC" value="0.00" step="0.01"
@@ -820,6 +832,7 @@ function onValC(){
   syncPrint('valC',   totalC);
   syncPrint('valV',   totalV);
   recalcMargem(totalC, totalV);
+  atualizarChkDesc();
 }
 
 function onValV(){
@@ -832,9 +845,38 @@ function onValV(){
   syncPrint('valC',   totalC);
   syncPrint('valV',   totalV);
   recalcMargem(totalC, totalV);
+  atualizarChkDesc();
 }
 
-function onDescC(){ recalc(); }
+function onDescC(){ recalc(); atualizarChkDesc(); }
+
+// ── Checkbox de desconto ───────────────────────────────────────────────────────
+function atualizarChkDesc() {
+  const chk    = el('chkDesc');
+  const row    = el('rowDesc');
+  if (!chk || !row) return;
+  const descC  = num('iDescC');
+  const base   = getBase();
+  const pct    = base > 0 ? (descC / base) * 100 : 0;
+  const visivel = pct >= 0.5;
+  chk.checked = visivel;
+  if (visivel) {
+    row.classList.remove('desc-oculto');
+  } else {
+    row.classList.add('desc-oculto');
+  }
+}
+
+function onChkDesc() {
+  const chk = el('chkDesc');
+  const row = el('rowDesc');
+  if (!chk || !row) return;
+  if (chk.checked) {
+    row.classList.remove('desc-oculto');
+  } else {
+    row.classList.add('desc-oculto');
+  }
+}
 
 // ── Frete editado diretamente na tabela → sincroniza com o painel ─────────────
 function onValE(){
@@ -901,10 +943,12 @@ function aplicarDescMax(){
   if(isNaN(_descMaxCartao)) return;
   el('iDescC').value = _descMaxCartao.toFixed(2);
   recalc();
+  atualizarChkDesc();
 }
 
 if(${frete0>0?'true':'false'}) el('chkE').checked=true;
 recalc();
+atualizarChkDesc();
 
 // ── Ajuste inicial de arredondamento ─────────────────────────────────────────
 // Após aplicar vlUnit = round(vlUnitBruto × PIX, 2) em cada item, o total
@@ -924,6 +968,7 @@ recalc();
   if (!iDescEl) return;
   iDescEl.value = descNecessario.toFixed(2);
   recalc();
+  atualizarChkDesc();
   console.info('[HiperOrc] Ajuste arredondamento aplicado: desconto à vista =',
     descNecessario.toFixed(2), '→ totalC =', (BASE_ITEM - descNecessario) / PIX);
 })();
@@ -1016,10 +1061,9 @@ function nomePdf() {
 }
 
 function ocultarDescontoZeroNoClone(clone) {
-  const descVal  = parseFloat(document.getElementById('iDescC')?.value || '0');
-  const totalVal = parseFloat(document.getElementById('valV')?.value   || '0');
-  const pctDesc  = totalVal > 0 ? (descVal / (totalVal + descVal)) * 100 : 0;
-  if (!descVal || isNaN(descVal) || pctDesc < 0.5) {
+  const chkDesc  = document.getElementById('chkDesc');
+  const mostrar  = chkDesc && chkDesc.checked;
+  if (!mostrar) {
     const rowDesc = clone.querySelector('#rowDesc');
     if (rowDesc) rowDesc.style.display = 'none';
   }
