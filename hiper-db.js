@@ -82,15 +82,19 @@
 
       } else {
         // kit normal: aramado, estruturado, cortineiro…
-        resultado.push({
+        const nomeKit = estado.nomeKit ?? id;
+        const entry = {
           id,
           tipo:    'kit',
-          nomeKit: estado.nomeKit ?? id,
-          A:       estado.A    || 0,
-          P:       estado.P    || 0,
-          cant:    estado.cant ?? 3.15,
+          nomeKit,
+          A:       estado.A      || 0,
+          P:       estado.P      || 0,
+          altPend: estado.altPend ?? 0.6,
           margem:  estado.margem != null ? estado.margem : 0,
-        });
+        };
+        // cant é exclusivo do cortineiro (sanca) — não serializar nos demais
+        if (nomeKit === 'cortineiro') entry.cant = estado.cant ?? 3.15;
+        resultado.push(entry);
       }
     });
 
@@ -366,8 +370,9 @@
         const pronto = await _aguardarHabilitado($qtd);
         if (pronto) {
           const qtdAlvo = it.qtd;
+          const nativeInput = $qtd[0];
 
-          function _aplicarQtd(nativeInput) {
+          function _aplicarQtd() {
             const campoDecimal = (nativeInput.value || '').includes(',') || (nativeInput.value || '').includes('.');
             const valorStr = campoDecimal
               ? qtdAlvo.toFixed(2).replace('.', ',')
@@ -380,10 +385,13 @@
             nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
           }
 
-          const nativeInput = $qtd[0];
-          _aplicarQtd(nativeInput);
+          // Aguarda o Hiper terminar de preencher o campo com o valor padrão (1)
+          // antes de sobrescrever — resolve a race condition em conexões lentas.
+          await _aguardarEstabilizarQtd(nativeInput);
+          _aplicarQtd();
+          console.info(`[HiperDB] Quantidade aplicada: ${qtdAlvo}`);
 
-          // Guarda o valor que aplicamos para detectar sobrescrita do Hiper
+          // Guarda o valor que aplicamos para detectar sobrescrita posterior do Hiper
           const valorAplicado = nativeInput.value;
           let _reaplicas = 0;
 
@@ -392,7 +400,7 @@
             if (nativeInput.value !== valorAplicado && _reaplicas < 3) {
               _reaplicas++;
               console.info(`[HiperDB] Quantidade sobrescrita pelo Hiper (tentativa ${_reaplicas}) — re-aplicando ${qtdAlvo}`);
-              _aplicarQtd(nativeInput);
+              _aplicarQtd();
             }
           });
           _obs.observe(nativeInput, { attributes: true, attributeFilter: ['value'] });
@@ -402,16 +410,16 @@
             if (nativeInput.value !== valorAplicado && _reaplicas < 3) {
               _reaplicas++;
               console.info(`[HiperDB] Quantidade alterada via input (tentativa ${_reaplicas}) — re-aplicando ${qtdAlvo}`);
-              _aplicarQtd(nativeInput);
+              _aplicarQtd();
             }
           };
           nativeInput.addEventListener('input', _onExternalInput);
 
-          // Para de vigiar após 3s — tempo suficiente pro Hiper terminar de carregar o produto
+          // Para de vigiar após 2s — o Hiper já terminou nesse ponto
           setTimeout(() => {
             _obs.disconnect();
             nativeInput.removeEventListener('input', _onExternalInput);
-          }, 3000);
+          }, 2000);
         }
       }
     }
@@ -427,6 +435,30 @@
       await delay(50);
     }
     return false;
+  }
+
+  // Aguarda o Hiper terminar de preencher o campo de quantidade com o valor padrão (1).
+  // Retorna quando o valor parar de mudar por ao menos `estavel` ms, ou quando
+  // o timeout for atingido. Isso garante que só aplicamos o valor correto DEPOIS
+  // que o Hiper terminou de inicializar o campo — evitando a race condition em
+  // conexões lentas onde o Hiper sobrescreve nossa quantidade com 1.
+  async function _aguardarEstabilizarQtd(nativeInput, timeout = 5000, estavel = 300) {
+    const inicio = Date.now();
+    let ultimoValor = nativeInput.value;
+    let igualDesde  = Date.now();
+
+    while (Date.now() - inicio < timeout) {
+      await delay(50);
+      const atual = nativeInput.value;
+      if (atual !== ultimoValor) {
+        ultimoValor = atual;
+        igualDesde  = Date.now();
+      } else if (Date.now() - igualDesde >= estavel) {
+        // Valor estável por `estavel` ms — Hiper terminou de preencher
+        return;
+      }
+    }
+    // Timeout: prossegue mesmo assim
   }
 
   // ── Restaurar kits (sem recalcular — usa quantidades do banco) ────────────────
@@ -481,15 +513,18 @@
         const codigos = window.KITS_GESSO?.[kit.nomeKit] ?? [];
         const linhasDoKit = _resolverLinhasPorCodigos(codigos);
 
-        kitsAtivos.set(kit.id, {
+        const estadoKit = {
           tipo:    'kit',
           nomeKit: kit.nomeKit,
-          A:       kit.A      || 0,
-          P:       kit.P      || 0,
-          cant:    kit.cant   ?? 3.15,
-          margem:  kit.margem || 0,
+          A:       kit.A       || 0,
+          P:       kit.P       || 0,
+          altPend: kit.altPend ?? 0.6,
+          margem:  kit.margem  || 0,
           linhas:  linhasDoKit,
-        });
+        };
+        // cant é exclusivo do cortineiro (sanca)
+        if (kit.nomeKit === 'cortineiro') estadoKit.cant = kit.cant ?? 3.15;
+        kitsAtivos.set(kit.id, estadoKit);
       }
     }
 

@@ -287,32 +287,32 @@ function paredeMoBase(cfg) {
 // ── 4. FÓRMULAS (não-parede) ──────────────────────────────────────────
 const FORMULAS_GESSO = {
   aramado: {
-    "3076": (A, P) => A / 1.2,
-    "3089": (A, P) => A * 0.45,
-    "3019": (A, P) => A * 4 / 1.2,
-    "3023": (A, P) => A / 20,
-    "3132": (A, P) => A * 2.6,
-    "3035": (A, P) => A * 0.03,
-    "3037": (A, P) => A / 30,
-    "3010": (A, P) => P / 3,
-    "3006": (A, P) => P / 3,
-    "3021": (A, P) => P * 5,
-    "3058": (A, P) => 11 * P / 3,
-    "3020": (A, P) => 11 * P / 3,
+    "3076": (A, P, cant, altPend) => A / 1.2,
+    "3089": (A, P, cant, altPend) => A * 0.45,
+    "3019": (A, P, cant, altPend) => A * 4 / 1.2,
+    "3023": (A, P, cant, altPend) => A * altPend / 10,  // arame 18: área × alt pendural (m)
+    "3132": (A, P, cant, altPend) => A * 2.6,
+    "3035": (A, P, cant, altPend) => A * 0.03,
+    "3037": (A, P, cant, altPend) => A / 30,
+    "3010": (A, P, cant, altPend) => P / 3,
+    "3006": (A, P, cant, altPend) => P / 3,
+    "3021": (A, P, cant, altPend) => P * 5,
+    "3058": (A, P, cant, altPend) => 11 * P / 3,
+    "3020": (A, P, cant, altPend) => 11 * P / 3,
   },
   estruturado: {
-    "3073": (A, P) => A / 2.88,
-    "3089": (A, P) => A * 0.45,
-    "3018": (A, P) => A * 1.68 / 3,
-    "3017": (A, P) => A * 1.4,
-    "3029": (A, P) => A * 0.3,
-    "3022": (A, P) => A * 0.06,
-    "3132": (A, P) => A * 1.5,
-    "3021": (A, P) => (A / 2.88) * 35 + (P / 3) * 11,
-    "3006": (A, P) => P / 3,
-    "3010": (A, P) => P / 3,
-    "3058": (A, P) => (P / 3) * 11,
-    "3020": (A, P) => (P / 3) * 11,
+    "3073": (A, P, cant, altPend) => A / 2.88,
+    "3089": (A, P, cant, altPend) => A * 0.45,
+    "3018": (A, P, cant, altPend) => A * 1.68 / 3,
+    "3017": (A, P, cant, altPend) => A * 1.4,
+    "3029": (A, P, cant, altPend) => A * 0.3,
+    "3022": (A, P, cant, altPend) => A * altPend / 10,  // arame 10: área × alt pendural (m)
+    "3132": (A, P, cant, altPend) => A * 1.5,
+    "3021": (A, P, cant, altPend) => (A / 2.88) * 35 + (P / 3) * 11,
+    "3006": (A, P, cant, altPend) => P / 3,
+    "3010": (A, P, cant, altPend) => P / 3,
+    "3058": (A, P, cant, altPend) => (P / 3) * 11,
+    "3020": (A, P, cant, altPend) => (P / 3) * 11,
   },
   cortineiro: {
     "3073": (ML, _, cant) => ML * 0.4 / 2.88,
@@ -336,8 +336,8 @@ const FORMULAS_GESSO = {
 
 // ── 5. CONFIG DE INPUTS E LABELS (não-parede) ─────────────────────────
 const KIT_INPUTS = {
-  aramado:     [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }],
-  estruturado: [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }],
+  aramado:     [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }, { key: "altPend", label: "Alt Pend (m)", title: "Altura do pendural em metros (padrão: 0,60 m)" }],
+  estruturado: [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }, { key: "altPend", label: "Alt Pend (m)", title: "Altura do pendural em metros (padrão: 0,60 m)" }],
   cortineiro:  [{ key: "A", label: "ML" }, { key: "cant", label: "Cant/3ml", title: "Cantoneiras por metro linear (padrão: 3,15)" }],
   // portas e paredes não usam KIT_INPUTS — têm painéis próprios
 };
@@ -527,13 +527,14 @@ function recalcularTudo() {
       formulas = FORMULAS_GESSO[estado.nomeKit ?? id] ?? {};
     }
 
+    const altPend    = num(estado.altPend ?? 0.6);
     const fatorMargem = 1 + (num(estado.margem ?? 0) / 100);
 
     estado.linhas.forEach(({ codigo, $linha }) => {
       if (!$.contains(document, $linha[0])) return;
 
       const fn       = formulas[codigo];
-      const qtdBruta = fn ? fn(A, P, cant) * fatorMargem : 0;
+      const qtdBruta = fn ? fn(A, P, cant, altPend) * fatorMargem : 0;
 
       // Chave = elemento DOM: dois kits que compartilham a mesma $linha
       // (mesmo código base resolvido para o mesmo produto) acumulam na
@@ -676,7 +677,10 @@ async function aplicarKitGesso(nomeKit) {
 
   const estadoInicial = nomeKit === 'portas'
     ? { tipo: 'portas', nomeKit, A: 0, grupos: [{ id: Date.now(), qtd: 1, larg: 0.70, alt: 2.10 }], linhas: linhasDoKit }
-    : { tipo: 'kit', nomeKit, A: 0, P: 0, ...(nomeKit === 'cortineiro' ? { cant: 3.15 } : {}), linhas: linhasDoKit };
+    : { tipo: 'kit', nomeKit, A: 0, P: 0,
+        ...(nomeKit === 'cortineiro'  ? { cant: 3.15 } : {}),
+        ...((nomeKit === 'aramado' || nomeKit === 'estruturado') ? { altPend: 0.6 } : {}),
+        linhas: linhasDoKit };
 
   kitsAtivos.set(id, estadoInicial);
   console.log(`[HiperCache] ✅ Kit "${id}" ativo`);
@@ -901,7 +905,7 @@ function renderizarPainel(painelRef) {
       item.className = 'hp-item';
 
       const inputsHTML = campos.map(({ key, label, title }, idx) => {
-        const val = estado[key] !== undefined ? estado[key] : (key === 'cant' ? 3.15 : '');
+        const val = estado[key] !== undefined ? estado[key] : (key === 'altPend' ? 0.6 : '');
         const sep = idx > 0 ? '<div class="hp-sep"></div>' : '';
         return `${sep}
           <span class="hp-lbl"${title ? ` title="${title}" style="cursor:help;text-decoration:underline dotted"` : ''}>${label}</span>
