@@ -149,16 +149,37 @@ window.addEventListener('message', async (event) => {
   }
 
   // ── Geração atômica de número de orçamento via background (serial) ──────────
+  // O service worker pode estar dormindo na primeira chamada — fazemos até
+  // MAX_TENTATIVAS tentativas com intervalo crescente antes de desistir.
+  // Nunca usamos fallback local: o background é a única fonte da verdade,
+  // garantindo que nenhum par de abas receba o mesmo número de orçamento.
   if (msg.type === 'HIPER_ORC_NEXT_NUM') {
-    chrome.runtime.sendMessage({ type: 'HIPER_ORC_NEXT_NUM' }, (resp) => {
-      if (chrome.runtime.lastError) {
-        console.warn('[Interceptor] Erro ao gerar número de orçamento:', chrome.runtime.lastError.message);
-        return;
-      }
-      // Mantém __hiperOrcConfig sincronizado na aba
-      if (window.__hiperOrcConfig) window.__hiperOrcConfig.counter = resp.counter;
-      window.postMessage({ type: 'HIPER_ORC_NEXT_NUM_ACK', numero: resp.numero, counter: resp.counter }, '*');
-    });
+    const MAX_TENTATIVAS = 5;
+    const DELAY_BASE_MS  = 300; // 300 ms → 600 ms → 900 ms → …
+
+    const _tentarGerarNumero = (tentativa) => {
+      chrome.runtime.sendMessage({ type: 'HIPER_ORC_NEXT_NUM' }, (resp) => {
+        if (!chrome.runtime.lastError && resp?.numero) {
+          // Sucesso — mantém __hiperOrcConfig sincronizado na aba
+          if (window.__hiperOrcConfig) window.__hiperOrcConfig.counter = resp.counter;
+          window.postMessage({ type: 'HIPER_ORC_NEXT_NUM_ACK', numero: resp.numero, counter: resp.counter }, '*');
+          return;
+        }
+
+        const erro = chrome.runtime.lastError?.message || 'sem resposta';
+        if (tentativa < MAX_TENTATIVAS) {
+          const delay = DELAY_BASE_MS * tentativa;
+          console.warn(`[Interceptor] ⚠️ Background indisponível (tentativa ${tentativa}/${MAX_TENTATIVAS}) — retry em ${delay}ms. Erro: ${erro}`);
+          setTimeout(() => _tentarGerarNumero(tentativa + 1), delay);
+        } else {
+          console.error(`[Interceptor] ❌ Não foi possível gerar número de orçamento após ${MAX_TENTATIVAS} tentativas. Erro: ${erro}`);
+          // Notifica a página para que possa exibir feedback ao usuário
+          window.postMessage({ type: 'HIPER_ORC_NEXT_NUM_ERR', erro }, '*');
+        }
+      });
+    };
+
+    _tentarGerarNumero(1);
   }
 
   if (msg.type === 'HIPER_CUSTO_EXPORT_REQ') {

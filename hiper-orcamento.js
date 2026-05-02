@@ -81,24 +81,37 @@ function gerarNumeroOrcamento() {
 }
 
 // ── Geração atômica via background (serializada, sem colisão entre abas) ─────
+// O interceptor faz até 5 retries com backoff (~3 s no total) para acordar o
+// service worker. Aguardamos 5 s aqui para cobrir esse ciclo com folga.
+// Não há fallback local — o background é a única fonte da verdade.
 function gerarNumeroOrcamentoAsync() {
-  return new Promise((resolve) => {
-    const onAck = (ev) => {
+  return new Promise((resolve, reject) => {
+    const onMsg = (ev) => {
       if (ev.source !== window) return;
-      if (ev.data?.type !== 'HIPER_ORC_NEXT_NUM_ACK') return;
-      window.removeEventListener('message', onAck);
-      resolve(ev.data.numero);
-    };
-    window.addEventListener('message', onAck);
-    window.postMessage({ type: 'HIPER_ORC_NEXT_NUM' }, '*');
 
-    // Fallback: se o interceptor não responder em 1s (ex: fora do contexto da extensão)
-    // cai no gerador local para não travar o fluxo
-    setTimeout(() => {
-      window.removeEventListener('message', onAck);
-      console.warn('[HiperOrc] Timeout no background — usando gerador local como fallback.');
-      resolve(gerarNumeroOrcamento());
-    }, 1000);
+      if (ev.data?.type === 'HIPER_ORC_NEXT_NUM_ACK') {
+        cleanup();
+        resolve(ev.data.numero);
+      }
+
+      if (ev.data?.type === 'HIPER_ORC_NEXT_NUM_ERR') {
+        cleanup();
+        reject(new Error('Não foi possível gerar o número de orçamento. Verifique a extensão e tente novamente.'));
+      }
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Tempo esgotado ao gerar número de orçamento. Tente novamente.'));
+    }, 5000); // cobre os ~3 s de retries do interceptor com folga
+
+    function cleanup() {
+      window.removeEventListener('message', onMsg);
+      clearTimeout(timer);
+    }
+
+    window.addEventListener('message', onMsg);
+    window.postMessage({ type: 'HIPER_ORC_NEXT_NUM' }, '*');
   });
 }
 
@@ -1370,7 +1383,14 @@ async function abrirOrcamento() {
     return;
   }
 
-  const numeroOrcamento = await gerarNumeroOrcamentoAsync();
+  let numeroOrcamento;
+  try {
+    numeroOrcamento = await gerarNumeroOrcamentoAsync();
+  } catch (e) {
+    console.error('[HiperOrc] ❌', e.message);
+    alert(e.message);
+    return;
+  }
   window.__hiperNumeroOrcamentoAtual = numeroOrcamento;
   window.__hiperPedidoAberto = numeroOrcamento;
 
