@@ -89,8 +89,16 @@
             for (const lista of resultados) {
                 if (!Array.isArray(lista)) continue;
                 lista.forEach(item => {
-                    const id = item.idProduto ?? item.id ?? item.Codigo;
-                    if (id && !unico.has(id) && item.Codigo !== 0) {
+                    const codNome = (item.Nome || '').match(/^(\d+)/)?.[1];
+
+                    const id =
+                        item.idProduto ??
+                        item.id ??
+                        (item.Codigo && item.Codigo !== 0 ? item.Codigo : null) ??
+                        codNome ??
+                        item.Nome;
+
+                    if (id && !unico.has(id)) {
                         item.text = item.Nome;
                         const cod4 = (item.Nome || '').match(/^(\d{4})\b/)?.[1];
                         item.und = (cod4 && window.__hiperUnidades[cod4]) ? window.__hiperUnidades[cod4] : 'UN';
