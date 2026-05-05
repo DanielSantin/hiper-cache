@@ -246,6 +246,11 @@
                     const term = new URL(url, location.origin).searchParams.get('Filtro') || '';
                     const res = normalizar(term).split(/\s+/).filter(Boolean)
                         .reduce((acc, t) => acc.filter(p => normalizar(p.Nome || p.text).includes(t)), memMaster);
+                    // Resultado vazio → cai no nativo (produto novo não preloadado)
+                    if (res.length === 0) {
+                        DEBUG && console.log('[HiperCache] 🔍 Cache sem resultado para "' + term + '" — usando API nativa.');
+                        return NATIVE_FETCH(input, init);
+                    }
                     return new Response(JSON.stringify(res), { status: 200, headers: { 'Content-Type': 'application/json' } });
                 } catch(e) { dbg.erro(e); }
             } else if (!preloading) {
@@ -274,6 +279,11 @@
                     const term = new URL(_url, location.origin).searchParams.get('Filtro') || '';
                     const res = normalizar(term).split(/\s+/).filter(Boolean)
                         .reduce((acc, t) => acc.filter(p => normalizar(p.Nome || p.text).includes(t)), memMaster);
+                    // Resultado vazio → cai no nativo (produto novo não preloadado)
+                    if (res.length === 0) {
+                        DEBUG && console.log('[HiperCache] 🔍 Cache sem resultado para "' + term + '" — usando API nativa (XHR).');
+                        return origSend.apply(this, arguments);
+                    }
                     Object.defineProperty(this, 'readyState',   { get: () => 4,                   configurable: true });
                     Object.defineProperty(this, 'status',       { get: () => 200,                 configurable: true });
                     Object.defineProperty(this, 'responseText', { get: () => JSON.stringify(res), configurable: true });
