@@ -6,10 +6,12 @@
   "permissions": [
     "storage",
     "scripting",
-    "tabs"
+    "tabs",
+    "webRequest"
   ],
   "host_permissions": [
-    "https://tagdrywall.hiper.com.br/*"
+    "https://tagdrywall.hiper.com.br/*",
+    "https://api.hiper.com.br/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -30,6 +32,7 @@
     {
       "resources": [
         "unidades_padrao.js",
+        "hiper-sync.js",
         "hiper-icones.js",
         "hiper-cache.js",
         "hiper-widgets.js",

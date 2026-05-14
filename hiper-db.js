@@ -252,180 +252,7 @@
     }
   }
 
-  // ── Snapshot dos itens da tela ───────────────────────────────────────────────
-  // Captura os itens no momento do clique em salvar.
-  // Retorna array pronto para enviar ao estoque, ou [] se não houver itens válidos.
-  function _snapshotItensEstoque() {
-    if (typeof extrairDadosPedido !== 'function') {
-      console.warn('[HiperDB] ⚠️ extrairDadosPedido não disponível — estoque não poderá ser debitado.');
-      return [];
-    }
-    const { itens } = extrairDadosPedido();
-    if (!itens?.length) return [];
 
-    return itens
-      .map(it => {
-        const cod4 = it.idProduto || (it.nome || '').match(/^(\d{4})\b/)?.[1] || null;
-        if (!cod4) return null;
-        return { codigo: String(cod4), nome: it.nome || '', qtd: it.qtd, unidade: it.unidade || 'UN' };
-      })
-      .filter(Boolean);
-  }
-
-  // ── Debitar estoque ───────────────────────────────────────────────────────────
-  // Recebe os itens já capturados (snapshot no momento do clique).
-  // SÓ chamado após confirmação de sucesso da API do Hiper.
-  async function _registrarEstoque(ref, itensEstoque) {
-    if (!itensEstoque?.length) {
-      console.warn(`[HiperDB] ⚠️ Nenhum item para debitar estoque (ref: ${ref}).`);
-      return;
-    }
-    try {
-      console.info(`[HiperDB] 📦 Debitando ${itensEstoque.length} item(s) no estoque (ref: ${ref})…`, itensEstoque);
-      const res = await fetchComTimeout(`${API_BASE}/estoque/faturar`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ pedido_codigo: ref, itens: itensEstoque }),
-      });
-      if (res.ok) {
-        console.info(`[HiperDB] ✅ Estoque debitado — ref: ${ref}, ${itensEstoque.length} item(s).`);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        console.warn(`[HiperDB] ⚠️ Estoque retornou ${res.status} para ${ref}:`, err);
-      }
-    } catch(e) {
-      console.warn('[HiperDB] ⚠️ Falha ao debitar estoque:', e);
-    }
-  }
-
-  // ── Fila de venda pendente ────────────────────────────────────────────────────
-  // Guardada no clique do botão, consumida pelo interceptor XHR ou fetch.
-  let _pendingVenda = null;
-
-  // Processa a resposta da API do Hiper (texto JSON) e decide se debita estoque.
-  function _processarRespostaHiper(responseText, pending) {
-    if (!pending) {
-      console.warn('[HiperDB] ⚠️ Venda detectada mas sem snapshot de itens — estoque não debitado.');
-      return;
-    }
-    try {
-      const json = JSON.parse(responseText);
-      const temErro = Array.isArray(json?.erros) && json.erros.length > 0;
-      if (temErro) {
-        const msg = json.erros[0]?.mensagem || 'erro desconhecido';
-        console.warn(`[HiperDB] ❌ Venda rejeitada pelo Hiper — estoque NÃO debitado. Motivo: ${msg}`);
-        return;
-      }
-    } catch(_) {
-      // JSON inválido → assume sucesso e continua
-    }
-    console.info(`[HiperDB] ✅ Venda confirmada — debitando estoque (ref: ${pending.ref})`);
-    _tentarMarcarFaturado(pending.ref);
-    _registrarEstoque(pending.ref, pending.itens);
-  }
-
-  function _ehUrlPedidoVenda(url) {
-    return url.includes('api.hiper.com.br') && url.includes('pedido-venda');
-  }
-
-  // ── Interceptor XHR ───────────────────────────────────────────────────────────
-  // O Angular usa XMLHttpRequest (application/x-www-form-urlencoded) para salvar
-  // pedidos — não fetch. Interceptamos aqui para capturar sucesso/erro da venda.
-  // O hiper-cache.js já wrappou window.XMLHttpRequest para o Select2; usamos
-  // window.XMLHttpRequest como base para encadear corretamente.
-  (function _hookXhrHiper() {
-    const _OrigXHR = window.XMLHttpRequest;
-
-    window.XMLHttpRequest = function() {
-      const xhr = new _OrigXHR();
-      let _method = '';
-      let _url    = '';
-
-      const origOpen = xhr.open;
-      xhr.open = function(method, url, ...rest) {
-        _method = (method || '').toUpperCase();
-        _url    = url || '';
-        return origOpen.apply(this, [method, url, ...rest]);
-      };
-
-      const origSend = xhr.send;
-      xhr.send = function(...args) {
-        if (_method === 'POST' && _ehUrlPedidoVenda(_url)) {
-          const pending = _pendingVenda;
-          _pendingVenda = null;
-
-          // Usa addEventListener para não conflitar com handlers que o Angular
-          // já registrou ou vai registrar via onload/onreadystatechange.
-          // { once: true } garante disparo único mesmo se os dois eventos chegarem.
-          let _processado = false;
-          const _handler = function() {
-            if (_processado || xhr.readyState !== 4) return;
-            _processado = true;
-            _processarRespostaHiper(xhr.responseText, pending);
-          };
-          xhr.addEventListener('load',  _handler, { once: true });
-          xhr.addEventListener('error', function() {
-            console.warn('[HiperDB] ⚠️ XHR pedido-venda erro de rede — estoque não debitado.');
-          }, { once: true });
-        }
-        return origSend.apply(this, args);
-      };
-
-      return xhr;
-    };
-
-    // Copia propriedades estáticas (prototype, DONE, etc.) para manter compatibilidade
-    Object.setPrototypeOf(window.XMLHttpRequest, _OrigXHR);
-    window.XMLHttpRequest.prototype = _OrigXHR.prototype;
-
-    console.info('[HiperDB] 🔌 Interceptor XHR de pedido-venda ativo.');
-  })();
-
-  // ── Interceptor fetch (fallback) ──────────────────────────────────────────────
-  // Cobre o caso improvável de o Angular usar fetch para pedido-venda no futuro.
-  (function _hookFetchHiper() {
-    const _originalFetch = window.fetch.bind(window);
-
-    window.fetch = function(input, init) {
-      const url    = typeof input === 'string' ? input : (input?.url || '');
-      const method = (init?.method || 'GET').toUpperCase();
-
-      if (method === 'POST' && _ehUrlPedidoVenda(url)) {
-        const pending = _pendingVenda;
-        _pendingVenda = null;
-
-        const promise = _originalFetch.call(this, input, init);
-        promise.then(res => res.clone().text().then(txt => _processarRespostaHiper(txt, pending))).catch(() => {
-          console.warn('[HiperDB] ⚠️ Fetch pedido-venda falhou na rede — estoque não debitado.');
-        });
-        return promise;
-      }
-
-      return _originalFetch.call(this, input, init);
-    };
-
-    console.info('[HiperDB] 🔌 Interceptor fetch de pedido-venda ativo (fallback).');
-  })();
-
-  // ── Hook nos botões de salvar do Hiper ────────────────────────────────────────
-  // Não debita o estoque diretamente — apenas faz o snapshot dos itens da tela
-  // e guarda em _pendingVenda para ser consumido pelo interceptor do fetch acima.
-  (function _hookBotoesSalvar() {
-    document.addEventListener('click', function(e) {
-      const btn = e.target.closest('.btn-save');
-      if (!btn) return;
-
-      const ref = window.__hiperPedidoAberto || ('VENDA-' + Date.now());
-      const itens = _snapshotItensEstoque();
-
-      console.info(`[HiperDB] 🖱️ Botão .btn-save clicado — ref: ${ref}, ${itens.length} item(s) capturados. Aguardando confirmação do Hiper…`);
-
-      // Salva o snapshot — o interceptor do fetch vai consumir após confirmar sucesso
-      _pendingVenda = { ref, itens };
-
-    }, /* capture */ true);
-    console.info('[HiperDB] 🎯 Hook de snapshot registrado nos botões de salvar.');
-  })();
 
   // ── Recuperação de pedido ─────────────────────────────────────────────────────
 
@@ -545,8 +372,6 @@
             nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
           }
 
-          // Aguarda o Hiper terminar de preencher o campo com o valor padrão (1)
-          // antes de sobrescrever — resolve a race condition em conexões lentas.
           await _aguardarEstabilizarQtd(nativeInput);
           _aplicarQtd();
           console.info(`[HiperDB] Quantidade aplicada: ${qtdAlvo}`);
@@ -1034,5 +859,6 @@
     _registrar();
   })();
 
+  window._tentarMarcarFaturado = _tentarMarcarFaturado;
   console.info('[HiperDB] ✅ Módulo DB carregado. API:', API_BASE);
 })();

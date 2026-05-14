@@ -13,6 +13,7 @@ const MODULES = [
   { src: 'unidades_padrao.js' },
   { src: 'hiper-icones.js' },
   { src: 'hiper-cache.js' },
+  { src: 'hiper-sync.js' },
   { src: 'hiper-widgets.js' },
   { src: 'hiper-ui.js' },
   { src: 'hiper-orcamento.js' },
@@ -205,4 +206,62 @@ window.addEventListener('message', async (event) => {
     });
   }
 
+  if (msg.type === 'HIPER_STORAGE_GET') {
+    await safeStorage(async () => {
+      const result = await chrome.storage.local.get(msg.keys);
+      // Garante que enviamos um objeto, mesmo que vazio
+      window.postMessage({ 
+        _hiperStorageSeq: msg._hiperStorageSeq, 
+        result: result || {} 
+      }, '*');
+    });
+  }
+
+  if (msg.type === 'HIPER_STORAGE_SET') {
+    await safeStorage(async () => {
+      await chrome.storage.local.set(msg.obj);
+      window.postMessage({ _hiperStorageSeq: msg._hiperStorageSeq, result: undefined }, '*');
+    });
+  }
+
+  if (msg.type === 'HIPER_STORAGE_REMOVE') {
+    await safeStorage(async () => {
+      await chrome.storage.local.remove(msg.keys);
+      window.postMessage({ _hiperStorageSeq: msg._hiperStorageSeq, result: undefined }, '*');
+    });
+  }
+
+  if (msg.type === 'HIPER_EVENTO_SEND') {
+    try {
+      const res = await fetch(`https://db.superaserver.com/api/hiper-evento`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(msg.payload),
+      });
+      if (res.ok) {
+        console.log('[Interceptor] ✅ Evento registrado via bridge');
+      }
+    } catch (e) {
+      console.warn('[Interceptor] ❌ Falha ao registrar evento:', e);
+    }
+  }
+  
+});
+// ── Recebe atualizar-situacao do background (webRequest) ─────────────────────
+// O background detecta o PUT via chrome.webRequest e notifica o content script.
+// Aqui repassamos para a página como se fosse um evento normal do hiper-sync.js.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type !== 'HIPER_ATUALIZAR_SITUACAO') return;
+
+  const { pedidoId, situacaoCod } = msg;
+  console.log('[Interceptor] 📡 atualizar-situacao recebido do background:', pedidoId, situacaoCod);
+
+  // Injeta um evento sintético na página para o hiper-sync.js processar
+  window.postMessage({
+    type:        'HIPER_ATUALIZAR_SITUACAO_PAGE',
+    pedidoId,
+    situacaoCod,
+  }, '*');
+
+  sendResponse({ ok: true });
 });
