@@ -197,12 +197,17 @@
       cliente:   dados.cliente   || '',
       descricao: dados.descricao || '',
       itens: dados.itens.map(it => ({
-        idProduto: it.idProduto || null,
-        nome:      it.nome,
-        qtd:       it.qtd,
-        unidade:   it.unidade  || 'UN',
-        vlUnit:    it.vlUnit   || 0,
-        subtotal:  it.subtotal || it.qtd * it.vlUnit,
+        idProduto:       it.idProduto      || null,
+        idProdutoGrade:  it.idProdutoGrade ?? null,
+        codigo:          it.codigo         || null,
+        nome:            it.nome,
+        quantidade:      it.qtd ?? it.quantidade ?? 0,   // aceita legado 'qtd' e novo 'quantidade'
+        unidade:         it.unidade        || 'UN',
+        vlUnit:          it.vlUnit         || 0,
+        vlUnitBruto:     it.vlUnitBruto    ?? it.vlUnit ?? 0,
+        subtotal:        it.subtotal       || (it.qtd ?? it.quantidade ?? 0) * (it.vlUnit || 0),
+        precoVendaFinal: it.precoVendaFinal ?? null,
+        ehKit:           it.ehKit          ?? false,
       })),
       kits,
     };
@@ -316,12 +321,19 @@
       const $linha = $(linhasNovas[i]);
       if (!$linha.length) continue;
 
-      // Resolve o produto: tenta pelo idProduto, depois pelo código no início do nome
-      const codigoBusca = it.idProduto || (it.nome || '').match(/^(\d{4})\b/)?.[1] || '';
-      const produto = codigoBusca
-        ? (window.__hiperMaster.find(p => String(p.id ?? p.idProduto) === String(codigoBusca)) ||
-           window.__hiperMaster.find(p => (p.Nome || '').startsWith(codigoBusca + ' ')))
-        : null;
+      // Resolve o produto: tenta pelo idProduto real, depois pelo código 4 dígitos do nome
+      // idProduto pode ser o ID numérico real (registros novos) ou código 4 dígitos (registros antigos)
+      const idRaw   = it.idProduto ? String(it.idProduto) : '';
+      const isCod4  = /^\d{4}$/.test(idRaw);  // registros antigos gravavam o código curto aqui
+      const idReal  = idRaw && !isCod4 ? idRaw : '';
+      const cod4    = it.codigo || (isCod4 ? idRaw : '') || (it.nome || '').match(/^(\d{4})\b/)?.[1] || '';
+      const produto = idReal
+        ? (window.__hiperMaster.find(p => String(p.idProduto) === idReal) ||
+           window.__hiperMaster.find(p => String(p.id) === idReal))
+        : cod4
+          ? (window.__hiperMaster.find(p => String(p.idProduto) === cod4) ||
+             window.__hiperMaster.find(p => p.Nome.startsWith(cod4 + ' - ')))
+          : null;
 
       if (produto) {
         const $input = $linha.find('input.produto');
@@ -356,7 +368,7 @@
       if ($qtd.length) {
         const pronto = await _aguardarHabilitado($qtd);
         if (pronto) {
-          const qtdAlvo = it.qtd;
+          const qtdAlvo = it.quantidade ?? it.qtd;  // aceita formato novo e legado
           const nativeInput = $qtd[0];
 
           function _aplicarQtd() {

@@ -115,72 +115,81 @@ function gerarNumeroOrcamentoAsync() {
   });
 }
 
-function extrairDadosPedido() {
-  const itens = [];
-  const NOME_FANTASMA = 'nome, código de barras, código do produto ou referência interna';
+function obterItensPedido() {
+  return $('.linha-produto').map((i, linhaEl) => {
+    const linha = $(linhaEl);
+    const produto =
+      linha.data('produtoAtualizado') ||
+      linha.data('produtoAtualizadoEdit');
+    // ignora linhas inválidas
+    if (!produto?.idProduto) return null;
 
-  function unidadeDoItem(linha) {
-    const sel = linha.querySelector('[class*="unidade"] .select2-chosen, [class*="unidade"] option:checked');
-    if (sel) return sel.textContent.trim();
-    const inp = linha.querySelector('[class*="unidade"] input');
-    if (inp && inp.value.length <= 4) return inp.value.trim().toUpperCase();
-    return 'UN';
-  }
+    const quantidadeInput = linha.find('input.form-control.text-right')
+      .filter((i, el) => el.placeholder === '0' || el.placeholder === '0,00')
+      .first();
+    const valorUnitarioInput = linha.find('.input-valor-unitario-produto').first();
+    const nome = linha.find('.select2-chosen').first().text().trim();
 
-  function adicionarItem(linha) {
-    const nomeEl = linha.querySelector('.select2-chosen');
-    const qtdEl  = linha.querySelector('[class*="quantidade-produto"] input');
-    const vlEl   = linha.querySelector('[class*="valor-unitario-produto"] input');
-    const stEl   = linha.querySelector('[class*="subtotal-produto"] input');
-    if (!nomeEl || !qtdEl) return;
-    const nome = nomeEl.textContent.trim();
-    if (nome.toLowerCase() === NOME_FANTASMA) return;
-    const qtd = parseMoedaOrc(qtdEl.value);
-    if (!nome || qtd === 0) return;
-    const codigo = extrairCodigoProduto(nome);
-
-    let unidade = unidadeDoItem(linha);
-    if (window.__hiperMaster?.length) {
-      const found = window.__hiperMaster.find(p => {
-          const c = (p.Nome || '').match(/^(\d{4})\b/)?.[1];
-          return c === codigo;
-      });
-      if (found?.und) unidade = found.und;
-    }
-
-    const vlUnitBruto = parseMoedaOrc(vlEl?.value);
-    const vlUnit      = Math.round(vlUnitBruto * 0.9523 * 100) / 100;
-    itens.push({
+    return {
+      quantidade:      quantidadeInput.val(),
+      valorUnitario:   valorUnitarioInput.val(),
       nome,
-      qtd,
-      unidade,
+      produtoCompleto: structuredClone(produto),
+    };
+  }).get().filter(Boolean);
+}
+
+function obterTotalPedido() {
+  const el = document.querySelector('.valor-total');
+  if (!el) return 0;
+  return Number(
+    el.innerText
+      .replace(/[^\d,]/g, '')
+      .replace(/\./g, '')
+      .replace(',', '.')
+  );
+}
+
+function extrairDadosPedido() {
+  return _extrairDadosPedidoV2(obterItensPedido());
+}
+
+function _extrairDadosPedidoV2(linhas) {
+  const itens = linhas.map(linha => {
+    const p           = linha.produtoCompleto;
+    const qtd         = parseMoedaOrc(linha.quantidade);
+    const vlUnitBruto = parseMoedaOrc(linha.valorUnitario);
+    const vlUnit      = Math.round(vlUnitBruto * 0.9523 * 100) / 100;
+
+    return {
+      idProduto:       String(p.idProduto),
+      idProdutoGrade:  p.idProdutoGrade ?? null,
+      codigo:          String(p.idProduto).match(/^\d{4}$/)?.[0] ?? null,
+      nome:            linha.nome || p.Nome || p.text || '',
+      qtd,             // mantido para o template gerarHtmlOrcamento
+      quantidade:      qtd,    // campo canônico para a API e estoque
+      unidade:         p.siglaDaUnidadeDeMedida ?? 'UN',
       vlUnit,
       vlUnitBruto,
-      subtotal:  parseMoedaOrc(stEl?.value),
-      idProduto: codigo,
-    });
-  }
+      subtotal:        qtd * vlUnitBruto,
+      precoVendaFinal: p.precoVendaFinal ?? null,
+      ehKit:           p.ehKit ?? false,
+    };
+  });
 
-  const primeiraLinha = document.querySelector('#ItensPedidoDeVendaTabela .produto-pedido-meli');
-  if (primeiraLinha) adicionarItem(primeiraLinha);
-  document.querySelectorAll('#ItensPedidoDeVendaTabela .linha-produto:not(.produto-pedido-meli)').forEach(adicionarItem);
-
-  const descontoEl = document.querySelector('.totais-desconto .col-xs-9.col-sm-6.col-md-2');
-  const freteEl    = document.querySelector('.totais-frete .col-xs-9.col-sm-6.col-md-2 p');
-  const totalEl    = document.querySelector('.totais-valor-total .col-xs-9.col-sm-6.col-md-2 p, .valor-total');
-
-  const selectParcelas = document.getElementById('hiper-select-parcelas');
-  const parcelasStr    = selectParcelas ? selectParcelas.value : 'Cartão 3X';
-  const parcelasNum    = parseInt((parcelasStr || '').replace(/\D/g, ''), 10) || 1;
+  const descontoEl  = document.querySelector('.totais-desconto .col-xs-9.col-sm-6.col-md-2');
+  const freteEl     = document.querySelector('.totais-frete .col-xs-9.col-sm-6.col-md-2 p');
+  const parcelasStr = document.getElementById('hiper-select-parcelas')?.value ?? 'Cartão 3X';
 
   return {
     itens,
     desconto: parseMoedaOrc(descontoEl?.textContent),
     frete:    parseMoedaOrc(freteEl?.textContent),
-    total:    parseMoedaOrc(totalEl?.textContent),
-    parcelas: parcelasNum,
+    total:    obterTotalPedido(),
+    parcelas: parseInt((parcelasStr || '').replace(/\D/g, ''), 10) || 1,
   };
 }
+
 
 function gerarHtmlOrcamento(dados, opcoes) {
   const { itens } = dados;

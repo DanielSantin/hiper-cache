@@ -19,9 +19,11 @@
 //   cancelado→ pedido    : POST /estoque/faturar          (re-debita)
 //   qualquer → orc/canc  : nenhuma ação de estoque
 //
-// Deduplicação multi-aba:
-//   Lock via chrome.storage.local com TTL de 8s.
-//   Chave: `sync_lock_{pedidoId}_{eventoHash}`
+// Deduplicação (ETAPA 3):
+//   Movida para o backend via idempotency_key (hash do pedido + estado + itens).
+//   Se o mesmo evento chegar 2x em menos de 30s, o servidor retorna 200 ok 
+//   e marca como duplicado — transparente para o cliente.
+//   O cliente dispara sem barreira — o servidor garante idempotência.
 //
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -32,7 +34,6 @@
 
   const API_BASE   = 'https://db.superaserver.com/api';
   const TIMEOUT_MS = 8_000;
-  const LOCK_TTL   = 8_000;  // ms — janela de deduplicação multi-aba
 
   // Regex que reconhece endpoints relevantes do Hiper
   // Captura grupo 1 = pedidoId, grupo 2 = cod de situacao (atualizar-situacao/{cod})
@@ -61,13 +62,6 @@
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     return _nativeFetch(url, { ...opts, signal: ctrl.signal })
       .finally(() => clearTimeout(timer));
-  }
-
-  /** Hash djb2 simples — usado para gerar chave de lock de deduplicação */
-  function _hash(str) {
-    let h = 5381;
-    for (let i = 0; i < str.length; i++) h = (h * 33) ^ str.charCodeAt(i);
-    return (h >>> 0).toString(36);
   }
 
   /** Extrai params de um body application/x-www-form-urlencoded */
@@ -111,13 +105,19 @@
         const nomeRaw = it.NomeProduto || nomesPorId[it.IdProduto] || '';
         // Extrai código do padrão "3112 - Alçapão..." → "3112"
         const codigoMatch = nomeRaw.match(/^(\S+)\s+-\s+/);
+        const vlUnitBruto = parseFloat((it.ValorUnitario || '').replace(',', '.')) || 0;
         return {
-          idProduto:  it.IdProduto,
-          codigo:     codigoMatch ? codigoMatch[1] : '',
-          nome:       nomeRaw,
-          quantidade: parseFloat(it.Quantidade) || 0,
-          unidade:    'UN',
-          vlUnit:     parseFloat(it.ValorUnitario) || 0,
+          // campos canônicos (ItemPedido)
+          idProduto:       String(it.IdProduto),
+          idProdutoGrade:  it.IdProdutoGrade ? parseInt(it.IdProdutoGrade, 10) : null,
+          codigo:          codigoMatch ? codigoMatch[1] : '',
+          nome:            nomeRaw,
+          quantidade:      parseFloat(it.Quantidade) || 0,
+          unidade:         it.SiglaDaUnidadeDeMedida || 'UN',
+          vlUnit:          Math.round(vlUnitBruto * 0.9523 * 100) / 100,
+          vlUnitBruto,
+          subtotal:        (parseFloat(it.Quantidade) || 0) * vlUnitBruto,
+          ehKit:           false,
         };
       })
       .filter(it => it.quantidade > 0);
