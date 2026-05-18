@@ -321,19 +321,12 @@
       const $linha = $(linhasNovas[i]);
       if (!$linha.length) continue;
 
-      // Resolve o produto: tenta pelo idProduto real, depois pelo código 4 dígitos do nome
-      // idProduto pode ser o ID numérico real (registros novos) ou código 4 dígitos (registros antigos)
+      // Resolve o produto apenas pelo idProduto real.
       const idRaw   = it.idProduto ? String(it.idProduto) : '';
-      const isCod4  = /^\d{4}$/.test(idRaw);  // registros antigos gravavam o código curto aqui
-      const idReal  = idRaw && !isCod4 ? idRaw : '';
-      const cod4    = it.codigo || (isCod4 ? idRaw : '') || (it.nome || '').match(/^(\d{4})\b/)?.[1] || '';
-      const produto = idReal
-        ? (window.__hiperMaster.find(p => String(p.idProduto) === idReal) ||
-           window.__hiperMaster.find(p => String(p.id) === idReal))
-        : cod4
-          ? (window.__hiperMaster.find(p => String(p.idProduto) === cod4) ||
-             window.__hiperMaster.find(p => p.Nome.startsWith(cod4 + ' - ')))
-          : null;
+      const produto = idRaw
+        ? (window.__hiperMaster.find(p => String(p.idProduto) === idRaw) ||
+           window.__hiperMaster.find(p => String(p.id) === idRaw))
+        : null;
 
       if (produto) {
         const $input = $linha.find('input.produto');
