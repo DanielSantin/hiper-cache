@@ -205,7 +205,7 @@
         unidade:         it.unidade        || 'UN',
         vlUnit:          it.vlUnit         || 0,
         vlUnitBruto:     it.vlUnitBruto    ?? it.vlUnit ?? 0,
-        subtotal:        it.subtotal       || (it.qtd ?? it.quantidade ?? 0) * (it.vlUnit || 0),
+        subtotal:        it.subtotal != null ? it.subtotal : (it.qtd ?? it.quantidade ?? 0) * (it.vlUnit || 0),
         precoVendaFinal: it.precoVendaFinal ?? null,
         ehKit:           it.ehKit          ?? false,
       })),

@@ -4,6 +4,26 @@
     //   localStorage.removeItem('hc_debug')     →  desativa (recarregue a página)
     const DEBUG = localStorage.getItem('hc_debug') === '1';
 
+    // ── Namespace global ──────────────────────────────────────────────────────
+    // Todos os dados compartilhados vivem em window.__hiper.
+    // Os nomes legados (window.__hiperCustos, etc.) são mantidos como
+    // getters/setters para que kit.js, hiper-orcamento.js e outros módulos
+    // continuem funcionando sem alteração.
+    if (!window.__hiper) {
+        window.__hiper = {
+            custos:     {},
+            master:     [],
+            vendedor:   { checked: false, text: '' },
+            custosHash: '',
+        };
+    }
+    Object.defineProperties(window, {
+        __hiperCustos:     { get() { return window.__hiper.custos;     }, set(v) { window.__hiper.custos     = v; }, configurable: true },
+        __hiperMaster:     { get() { return window.__hiper.master;     }, set(v) { window.__hiper.master     = v; }, configurable: true },
+        __hiperVendedor:   { get() { return window.__hiper.vendedor;   }, set(v) { window.__hiper.vendedor   = v; }, configurable: true },
+        __hiperCustosHash: { get() { return window.__hiper.custosHash; }, set(v) { window.__hiper.custosHash = v; }, configurable: true },
+    });
+
     const TARGET_PATH  = '/produtos/GetSelect2ParaPedido';
     const MASTER_KEY   = 'hc:master';
     const MIN_ITEMS_THRESHOLD = 100;
@@ -32,7 +52,6 @@
     let memMaster = [];
     let preloading = false;
     let inicializado = false;
-    window.__hiperCustos = {};
     window.__hiperUnidades = (typeof UNIDADES_PADRAO !== 'undefined') ? UNIDADES_PADRAO : {};
 
     // ── Utilitário de Log ─────────────────────────────────────────────────────
@@ -234,7 +253,8 @@
     }
 
     /** Expõe para uso externo (botão manual no widget de lucro) */
-    window.__hiperSyncCustos = verificarAtualizacaoCustos;
+    window.__hiper.syncCustos = verificarAtualizacaoCustos;
+    window.__hiperSyncCustos  = verificarAtualizacaoCustos;
 
     // ── 4. Interceptador de Rede (apenas Select2) ─────────────────────────────
     window.fetch = async function(input, init) {
@@ -456,6 +476,7 @@
     // Inicia o scheduler após 10s (deixa a página estabilizar primeiro)
     setTimeout(_preloadAgendado, 10_000);
 
-    window.__hiperReload = executarPreload;
-    window.__nativeFetch = NATIVE_FETCH;
+    window.__hiper.reload = executarPreload;
+    window.__hiperReload  = executarPreload;
+    window.__nativeFetch  = NATIVE_FETCH;
 })();
