@@ -40,7 +40,8 @@
   const RE_PEDIDO_VENDA = /api\.hiper\.com\.br\/pedido-venda(?:\/(\d+)(?:\/atualizar-situacao\/(\d+))?)?(?:[?#]|$)/i;
 
   // Nomes legíveis para logging
-  const NOME_SITUACAO = { 1: 'orçamento', 2: 'pedido', 3: 'cancelado', 99: 'cancelado' };
+  const NOME_SITUACAO = { 1: 'orçamento', 2: 'pedido', 3: 'cancelado', 9: 'entregue', 99: 'cancelado' };
+
 
   // Estado local removido — o backend é a única fonte da verdade.
   // A extensão envia apenas o que viu; o servidor determina a transição.
@@ -186,15 +187,15 @@
       estadoNovo = 'cancelado';
     } else if (situacaoUrl != null) {
       // PUT .../atualizar-situacao/{cod} — estado vem da URL (response é 204 vazio)
-      // Códigos conhecidos: 1=orçamento, 2=pedido, 3=cancelado, 99=cancelado (menu rápido)
-      // Qualquer código não mapeado como ativo (1 ou 2) é tratado como cancelado.
+      // Códigos rastreados: 1=orçamento, 2=pedido, 3=cancelado, 99=cancelado (menu rápido)
+      // Demais (ex: 9=entregue, faturado, etc.) são ignorados — sem ação de estoque.
       const s = Number(situacaoUrl);
       if      (s === 1) estadoNovo = 'orçamento';
       else if (s === 2) estadoNovo = 'pedido';
       else if (s === 3 || s === 99) estadoNovo = 'cancelado';
       else {
-        _warn(`atualizar-situacao: código ${s} para pedido ${pedidoId} — tratando como cancelado.`);
-        estadoNovo = 'cancelado';
+        _log(`atualizar-situacao: código ${s} (${NOME_SITUACAO[s] ?? 'desconhecido'}) para pedido ${pedidoId} — não rastreado, ignorando.`);
+        return;
       }
     } else if (responseBody && responseBody.situacao != null) {
       const s = Number(responseBody.situacao);
