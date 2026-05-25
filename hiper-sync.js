@@ -152,6 +152,7 @@
       codigo_pedido:    meta.codigoPedidoVenda || '',
       estado_novo:      estadoNovo,
       itens,
+      valor_total:      meta.responseBody?.valorTotalPedido || 0,
       timestamp:        new Date().toISOString(),
       origem_url:       location.href,
       payload_request:  meta.requestBody  || null,
@@ -300,8 +301,20 @@
             console.log('[FETCH][GET] Estado detectado:', estado);
 
             if (estado) {
-              // GET captura estado atual — apenas log (estado gerenciado pelo backend)
-              console.log('[FETCH][GET] Estado atual do pedido:', String(body.idPedidoVenda), estado);
+              // GET captura estado atual — garante existência do registro no backend.
+              // Itens ficam vazios (não disponíveis no GET); idempotência no servidor
+              // garante que ops já corretas não são alteradas.
+              await _processarTransicao(
+                String(body.idPedidoVenda),
+                null,
+                estado,
+                [],
+                {
+                  codigoPedidoVenda: body.codigoPedidoVenda || '',
+                  requestBody:       null,
+                  responseBody:      body,
+                }
+              );
             }
 
           } catch (e) {
