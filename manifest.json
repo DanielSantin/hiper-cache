@@ -40,6 +40,7 @@
         "hiper-lucro-widget.js",
         "hiper-db.js",
         "kit.js",
+        "hiper-mov-widget.js",
         "resumido-dados.js",
         "resumido-runtime.js",
         "resumido-gerador.js",

@@ -19,6 +19,7 @@ const MODULES = [
   { src: 'hiper-orcamento.js' },
   { src: "hiper-lucro-widget.js"},
   { src: 'kit.js' },
+  { src: 'hiper-mov-widget.js' },
   { src: 'resumido-dados.js' },
   { src: 'hiper-db.js' },
   { src: 'resumido-runtime.js' },
@@ -243,6 +244,26 @@ window.addEventListener('message', async (event) => {
       }
     } catch (e) {
       console.warn('[Interceptor] ❌ Falha ao registrar evento:', e);
+    }
+  }
+
+  if (msg.type === 'HIPER_MOV_GET') {
+    try {
+      const res  = await fetch(`https://db.superaserver.com/api/pedido-venda/${msg.pedidoId}`);
+      const data = res.ok ? await res.json() : null;
+      window.postMessage({ type: 'HIPER_MOV_GET_RESULT', seq: msg.seq, ok: res.ok, data }, '*');
+    } catch (e) {
+      window.postMessage({ type: 'HIPER_MOV_GET_RESULT', seq: msg.seq, ok: false, data: null }, '*');
+    }
+  }
+
+  if (msg.type === 'HIPER_MOV_PATCH') {
+    try {
+      const res  = await fetch(`https://db.superaserver.com/api/pedido-venda/${msg.pedidoId}/movimento`, { method: 'PATCH' });
+      const data = await res.json();
+      window.postMessage({ type: 'HIPER_MOV_PATCH_RESULT', seq: msg.seq, ok: res.ok, data }, '*');
+    } catch (e) {
+      window.postMessage({ type: 'HIPER_MOV_PATCH_RESULT', seq: msg.seq, ok: false, data: null }, '*');
     }
   }
   
