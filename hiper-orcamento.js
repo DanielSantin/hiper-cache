@@ -164,8 +164,15 @@ function _extrairDadosPedidoV2(linhas) {
     return {
       idProduto:       String(p.idProduto),
       idProdutoGrade:  p.idProdutoGrade ?? null,
-      codigo:          String(p.idProduto).match(/^\d{4}$/)?.[0] ?? null,
       nome:            linha.nome || p.Nome || p.text || '',
+      codigo:          (() => {
+        // Tenta extrair do idProduto (IDs legados de 4 dígitos)
+        const fromId = String(p.idProduto).match(/^\d{4}$/)?.[0];
+        if (fromId) return fromId;
+        // Extrai o código numérico do início do nome do produto: "3006 - Tabica branca" → "3006"
+        const nome = linha.nome || p.Nome || p.text || '';
+        return nome.match(/^(\d{3,6})\s*[-–]/)?.[1] ?? null;
+      })(),
       qtd,             // mantido para o template gerarHtmlOrcamento
       quantidade:      qtd,    // campo canônico para a API e estoque
       unidade:         p.siglaDaUnidadeDeMedida ?? 'UN',

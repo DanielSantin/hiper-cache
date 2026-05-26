@@ -163,8 +163,8 @@ function resumido_resolverMoBase(id, cfg) {
 
 // Detecta qual variante de tabica está no orçamento: branca | natural | misto
 function resumido_detectarTabica(itens) {
-  const temB = itens.some(it => it.idProduto === COD_TABICA_BRANCA);
-  const temN = itens.some(it => it.idProduto === COD_TABICA_NATURAL);
+  const temB = itens.some(it => (it.codigo || it.idProduto) === COD_TABICA_BRANCA);
+  const temN = itens.some(it => (it.codigo || it.idProduto) === COD_TABICA_NATURAL);
   if (temB && temN) return 'misto';
   if (temN) return 'natural';
   return 'branca';
@@ -191,8 +191,12 @@ function resumido_custoPorKit(kitsArr, itens) {
     }
   });
 
+  const semFormula = []; // itens sem fórmula em nenhum kit — distribuídos depois
+
   itens.forEach(item => {
-    const cod     = item.idProduto;
+    // Usa o código de 4 dígitos do nome (ex: "3006") para lookup nas fórmulas;
+    // idProduto é o ID interno longo do Hiper e não bate nas chaves de FORMULAS_GESSO.
+    const cod     = item.codigo || item.idProduto;
     const vlTotal = item.qtd * item.vlUnit;
     if (!cod || vlTotal <= 0) return;
 
@@ -201,8 +205,7 @@ function resumido_custoPorKit(kitsArr, itens) {
     );
 
     if (kitsComProduto.length === 0) {
-      const parte = vlTotal / kitsArr.length;
-      kitsArr.forEach(k => { resultado[k.nome] += parte; });
+      semFormula.push(vlTotal); // defer — distribuir proporcionalmente depois
       return;
     }
     if (kitsComProduto.length === 1) {
@@ -225,6 +228,22 @@ function resumido_custoPorKit(kitsArr, itens) {
       resultado[k.nome] += (qtdBrutaPorKit[i] / somaQtd) * vlTotal;
     });
   });
+
+  // Distribui itens sem fórmula proporcionalmente aos custos já atribuídos por fórmula.
+  // Se nenhum item teve fórmula, cai no split igualitário como fallback.
+  if (semFormula.length > 0) {
+    const totalAtribuido = kitsArr.reduce((s, k) => s + resultado[k.nome], 0);
+    semFormula.forEach(vlTotal => {
+      if (totalAtribuido > 0) {
+        kitsArr.forEach(k => {
+          resultado[k.nome] += (resultado[k.nome] / totalAtribuido) * vlTotal;
+        });
+      } else {
+        const parte = vlTotal / kitsArr.length;
+        kitsArr.forEach(k => { resultado[k.nome] += parte; });
+      }
+    });
+  }
 
   kitsArr.forEach(k => { if (resultado[k.nome] <= 0) resultado[k.nome] = 0.001; });
   return resultado;
