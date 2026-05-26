@@ -217,7 +217,11 @@ function gerarHtmlOrcamento(dados, opcoes) {
       '<td class="c">'+item.qtd.toLocaleString('pt-BR',{minimumFractionDigits:2})+'</td>'+
       '<td class="c">'+item.unidade+'</td>'+
       '<td class="desc">'+item.nome+'</td>'+
-      '<td class="r">R$ '+fmtN(item.vlUnit)+'</td>'+
+      '<td class="r" data-base="'+item.vlUnit.toFixed(2)+'">'+
+        '<input class="inp-preco" type="number" value="'+item.vlUnit.toFixed(2)+'" step="0.01" min="0" '+
+        'oninput="onPrecoCustom(this)" onblur="onPrecoBlur(this)" title="Clique para editar o preço">'+
+        '<span class="inp-preco-print">R$ '+fmtN(item.vlUnit)+'</span>'+
+      '</td>'+
       '<td class="r">R$ '+fmtN(vt)+'</td>'+
     '</tr>';
   }).join('');
@@ -282,6 +286,10 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .tbl td{padding:4px 5px;font-size:9pt;vertical-align:middle}
 .tbl td.c{text-align:center}.tbl td.r{text-align:right}.tbl td.desc{text-align:left}
 .tbl tr.vazia td{height:20px}
+.inp-preco{width:68px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;padding:0;color:#000;cursor:text}
+.inp-preco:focus{outline:1px solid #1a73e8;background:#e8f0fe;border-radius:2px;padding:0 2px;width:72px}
+.inp-preco-print{display:none}
+@media print{.inp-preco{display:none!important}.inp-preco-print{display:inline!important}}
 
 /* Coluna de custo — somente leitura */
 .custo-col{width:88px;flex-shrink:0;border:1px solid #e0c040;background:#fffbe6}
@@ -527,8 +535,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     </div>
     <div class="tval">
       <span class="val-prefix">R$</span>
-      <input class="val-inp" type="number" id="valC" step="0.01" 
-            oninput="onValC()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)" 
+      <input class="val-inp" type="number" id="valC" step="0.01"
+            oninput="onValC()" onblur="onBlurTotal(this,'C')"
             style="width:75px">
       <span class="val-print" id="valC-print">0,00</span>
     </div>
@@ -538,8 +546,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <div class="ttag pix" style="justify-content:flex-end;padding-left:20px;padding-right:20px;white-space:nowrap">À VISTA pix</div>
     <div class="tval">
       <span class="val-prefix">R$</span>
-      <input class="val-inp" type="number" id="valV" step="0.01" 
-            oninput="onValV()" onblur="this.value = parseFloat(this.value || 0).toFixed(2)" 
+      <input class="val-inp" type="number" id="valV" step="0.01"
+            oninput="onValV()" onblur="onBlurTotal(this,'V')"
             style="width:75px">
       <span class="val-print" id="valV-print">0,00</span>
     </div>
@@ -653,7 +661,8 @@ function _dbSalvar() {
       const nome = tds[3].textContent.trim();
       if (!nome) return;
 
-      let vlUnit   = _parseTdMoeda(tds[4].textContent);
+      const inpPreco = tds[4].querySelector('.inp-preco');
+      let vlUnit   = inpPreco ? (parseFloat(inpPreco.value) || 0) : _parseTdMoeda(tds[4].textContent);
       let subtotal = _parseTdMoeda(tds[5].textContent);
       const ref = itensIdx[nome];
       if (ref) {
@@ -835,7 +844,35 @@ function _atualizarColunaCusto() {
 
 // ── Base dinâmica ──────────────────────────────────────────────────────────────
 function getBase(){
-  return BASE_ITEM;
+  let soma = 0;
+  document.querySelectorAll('.tbl tbody tr:not(.vazia)').forEach(function(tr) {
+    const tds = tr.querySelectorAll('td');
+    if (tds.length < 5) return;
+    const qtd = parseFloat(tds[1].textContent.replace(',','.')) || 0;
+    const inp = tds[4].querySelector('.inp-preco');
+    const vl  = inp ? (parseFloat(inp.value) || 0) : _parseTdMoeda(tds[4].textContent);
+    soma += qtd * vl;
+  });
+  return soma || BASE_ITEM;
+}
+
+// ── Preço customizado por linha ────────────────────────────────────────────────
+function onPrecoCustom(inp) {
+  const tr  = inp.closest('tr');
+  const tds = tr.querySelectorAll('td');
+  const qtd = parseFloat(tds[1].textContent.replace(',','.')) || 0;
+  const vl  = parseFloat(inp.value) || 0;
+  const vt  = qtd * vl;
+  tds[5].textContent = 'R$ ' + vt.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const span = inp.nextElementSibling;
+  if (span) span.textContent = 'R$ ' + vl.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  recalc();
+}
+
+function onPrecoBlur(inp) {
+  const v = parseFloat(inp.value);
+  inp.value = (isNaN(v) || v < 0 ? parseFloat(inp.closest('td').dataset.base) : v).toFixed(2);
+  onPrecoCustom(inp);
 }
 
 // ── Recalcula totais ───────────────────────────────────────────────────────────
@@ -886,6 +923,47 @@ function onValV(){
 }
 
 function onDescC(){ recalc(); atualizarChkDesc(); }
+
+// ── Redistribuição de preços ───────────────────────────────────────────────────
+function onBlurTotal(inp, tipo) {
+  inp.value = parseFloat(inp.value || 0).toFixed(2);
+
+  const novoTotalV = tipo === 'C'
+    ? parseFloat(inp.value) * PIX
+    : parseFloat(inp.value);
+  const baseAtual = getBase();
+
+  if (novoTotalV > baseAtual + 0.005) {
+    const ratio    = novoTotalV / baseAtual;
+    const pct      = ((ratio - 1) * 100).toFixed(1);
+    const novoTotalC = (novoTotalV / PIX).toFixed(2);
+    const fmtR     = (v) => v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const confirma = confirm(
+      'O valor informado (R$ ' + fmtR(novoTotalV / PIX) + ' cartao / R$ ' + fmtR(novoTotalV) + ' pix) ' +
+      'e ' + pct + '% maior que o total atual.\\n\\n' +
+      'Redistribuir o aumento proporcionalmente entre todos os produtos?'
+    );
+    if (confirma) {
+      document.querySelectorAll('.tbl tbody tr:not(.vazia)').forEach(function(tr) {
+        const tds = tr.querySelectorAll('td');
+        if (tds.length < 5) return;
+        const inp = tds[4].querySelector('.inp-preco');
+        if (!inp) return;
+        inp.value = (Math.round(parseFloat(inp.value) * ratio * 100) / 100).toFixed(2);
+        onPrecoCustom(inp);
+      });
+      // Zera o desconto e deixa recalc ajustar os totais
+      const iDescEl = el('iDescC');
+      if (iDescEl) { iDescEl.value = '0.00'; syncPrint('iDescC', 0); }
+      recalc();
+      atualizarChkDesc();
+      return;
+    }
+  }
+
+  // Sem redistribuição: comportamento normal
+  if (tipo === 'C') onValC(); else onValV();
+}
 
 // ── Checkbox de desconto ───────────────────────────────────────────────────────
 function atualizarChkDesc() {
@@ -1123,6 +1201,16 @@ function congelarSelectEmClone(clone) {
 }
 
 function congelarInputsNoClone(clone) {
+    clone.querySelectorAll('.inp-preco').forEach(function(inp) {
+      const v = parseFloat(inp.value) || 0;
+      const span = inp.nextElementSibling;
+      if (span) {
+        span.style.display = 'inline';
+        span.textContent = 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+      }
+      inp.style.display = 'none';
+    });
+
     const ids = ['valC', 'valV', 'iDescC'];
     
     ids.forEach(id => {
