@@ -465,8 +465,9 @@ function adicionarLinhaCustom() {
   
   novaTr.innerHTML =
     '<td class="td-num" style="text-align:center;border:1px solid #000;padding:3px 4px;font-size:8pt;font-weight:bold;vertical-align:middle"></td>' +
-    '<td style="text-align:center;border:1px solid #000;padding:2px 3px">' +
-      '<input type="number" step="0.01" value="0" class="custom-area" style="width:52px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold" oninput="onCustomArea(this)">' +
+    '<td class="hd-cell" id="hd-ca-' + idx + '" style="text-align:center;border:1px solid #000;padding:2px 3px">' +
+      '<input type="number" step="0.01" value="0" class="custom-area" style="width:52px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000" oninput="onCustomArea(this)">' +
+      '<button class="hd-btn no-print" onclick="toggleHide(\\'ca-' + idx + '\\')" title="Ocultar/mostrar valor">◎</button>' +
     '</td>' +
     '<td style="text-align:center;border:1px solid #000;padding:2px 3px">' +
       '<span contenteditable="true" style="font-size:8.5pt;font-weight:bold;outline:none">m²</span>' +
@@ -475,11 +476,13 @@ function adicionarLinhaCustom() {
       '<div contenteditable="true" style="font-weight:bold;font-size:8.5pt;outline:none" onfocus="this.style.background=\\'#fffde7\\'" onblur="this.style.background=\\'\\'">Novo Item Personalizado</div>' +
       '<div contenteditable="true" style="font-size:8pt;color:#222;outline:none" onfocus="this.style.background=\\'#fffde7\\'" onblur="this.style.background=\\'\\'">Descrição do item...</div>' +
     '</td>' +
-    '<td style="text-align:right;border:1px solid #000;padding:2px 3px">' +
-      '<input type="number" step="0.01" value="0" class="custom-m2c" style="width:64px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-weight:bold" oninput="onCustomM2(this)">' +
+    '<td class="hd-cell" id="hd-cm-' + idx + '" style="text-align:right;border:1px solid #000;padding:2px 3px">' +
+      '<input type="number" step="0.01" value="0" class="custom-m2c" style="width:64px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-weight:bold;color:#000" oninput="onCustomM2(this)">' +
+      '<button class="hd-btn no-print" onclick="toggleHide(\\'cm-' + idx + '\\')" title="Ocultar/mostrar valor">◎</button>' +
     '</td>' +
-    '<td style="text-align:right;border:1px solid #000;padding:2px 3px">' +
-      '<input type="number" step="0.01" value="0" class="custom-totc" style="width:68px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold" oninput="atualizarTotaisGlobaisComMo()">' +
+    '<td class="hd-cell" id="hd-ct-' + idx + '" style="text-align:right;border:1px solid #000;padding:2px 3px">' +
+      '<input type="number" step="0.01" value="0" class="custom-totc" style="width:68px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000" oninput="atualizarTotaisGlobaisComMo()">' +
+      '<button class="hd-btn no-print" onclick="toggleHide(\\'ct-' + idx + '\\')" title="Ocultar/mostrar valor">◎</button>' +
     '</td>' +
     '<td class="col-mo-base no-print" style="border:1px solid #000;padding:2px 5px;text-align:center">' +
       '<button onclick="this.closest(\\'tr\\').remove(); renumerarLinhas(); atualizarTotaisGlobaisComMo();" style="border:none;background:#e55;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px">✕</button>' +
