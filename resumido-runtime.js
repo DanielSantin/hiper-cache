@@ -116,7 +116,9 @@ function onTotKit(i) {
 
 function onMoBase(i) {
   atualizarLabelMo(i);
-  if (_MO_ATIVA && !_MO_AGRUPAR) atualizarLinhaMoDesagrupada(i);
+  if (!_MO_ATIVA) return;
+  if (_MO_AGRUPAR) atualizarLinhaAgrupada(i);
+  else atualizarLinhaMoDesagrupada(i);
 }
 
 function onMoM2(i) {
@@ -162,12 +164,28 @@ function atualizarLinhaMoDesagrupada(i) {
   if (el('mo-totc-' + i)) el('mo-totc-' + i).value = (area * venda).toFixed(2);
 }
 
+function atualizarLinhaAgrupada(i) {
+  var trcEl = el('totc-' + i);
+  if (!trcEl || trcEl.dataset.totalMat === undefined) return;
+  var area  = numEl('area-' + i);
+  var base  = getMoBase(i);
+  var imp   = numEl('cfgImposto') || _MO_IMPOSTO;
+  var lucro = numEl('cfgLucro')   || _MO_LUCRO;
+  var venda = calcVendaMo(base, imp, lucro);
+  var totalComMo = parseFloat(trcEl.dataset.totalMat) + area * venda;
+  trcEl.value = totalComMo.toFixed(2);
+  if (area > 0 && el('m2c-' + i)) el('m2c-' + i).value = (totalComMo / area).toFixed(2);
+  atualizarTotaisGlobaisComMo();
+}
+
 function onCfgMO() {
   _MO_IMPOSTO = numEl('cfgImposto') || 13.53;
   _MO_LUCRO   = numEl('cfgLucro')   || 20;
   _KI.forEach(function(_, i) {
     atualizarLabelMo(i);
-    if (_MO_ATIVA && !_MO_AGRUPAR) atualizarLinhaMoDesagrupada(i);
+    if (!_MO_ATIVA) return;
+    if (_MO_AGRUPAR) atualizarLinhaAgrupada(i);
+    else atualizarLinhaMoDesagrupada(i);
   });
 }
 
