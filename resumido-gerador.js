@@ -554,8 +554,8 @@ function abrirOrcamentoResumido() {
     kitsInfo = kitsArr.map(function(k) {
       return {
         nome: k.nome, nomeLabel: k.nomeLabel, descricao: k.descricao,
-        A: 0, P: 0, cant: 0, grupos: null, cfg: null,
-        custoRelativo: 0, totalCartao: 0, moBase: 30,
+        A: 1, P: 0, cant: 0, grupos: null, cfg: null,
+        custoRelativo: 1, totalCartao: 0, moBase: 30,
       };
     });
   } else {
@@ -631,7 +631,7 @@ function abrirOrcamentoResumido() {
         kitsInfo = [
           { nome: '_gen1', nomeLabel: 'Fornecimento de material de gesso',
             descricao: 'Fornecimento de materiais para sistema de gesso acartonado (drywall).',
-            A: 0, P: 0, cant: 0, grupos: null, cfg: null, custoRelativo: 0, totalCartao: 0, moBase: 30 },
+            A: 1, P: 0, cant: 0, grupos: null, cfg: null, custoRelativo: 1, totalCartao: 0, moBase: 30 },
         ];
       } else {
         var kitsArr = [];
