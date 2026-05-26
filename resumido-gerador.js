@@ -31,6 +31,8 @@ function _resumido_css() {
     '.tbl{width:100%;border-collapse:collapse}',
     '.tbl thead tr{background:#d0d0d0}',
     '.tbl th{padding:3px 4px;font-size:8pt;text-align:center;border:1px solid #000}',
+    '.th-edit{outline:none;cursor:text;border-radius:2px;padding:1px 3px;display:inline-block;min-width:8px}',
+    '.th-edit:focus{background:#fffde7;outline:1px solid #f0c040}',
     '.totais-wrap{border:1px solid #000;border-top:none}',
     '.trow{display:grid;grid-template-columns:1fr 100px 100px;border-bottom:1px solid #000}',
     '.trow:last-child{border-bottom:none}',
@@ -133,9 +135,11 @@ function _resumido_linhasTabela(kitsInfo, totalV, varianteTabica) {
 
     var vlM2C = areaExibida > 0 ? tcKit / areaExibida : 0;
     var moBase = kit.moBase !== undefined ? kit.moBase : 30;
-    var texto = typeof resumido_resolverTexto === 'function'
-      ? resumido_resolverTexto(kit.nome, varianteTabica, kit.cfg || null)
-      : ((RESUMIDO_TEXTOS[kit.nome] || {})[varianteTabica] || '');
+    var texto = kit.descricao !== undefined
+      ? kit.descricao
+      : (typeof resumido_resolverTexto === 'function'
+          ? resumido_resolverTexto(kit.nome, varianteTabica, kit.cfg || null)
+          : ((RESUMIDO_TEXTOS[kit.nome] || {})[varianteTabica] || ''));
 
     // Linha principal (material ou agrupado)
     var tr = '<tr>' +
@@ -385,11 +389,11 @@ function resumido_gerarHtml(payload, opcoes) {
 
     '<table class="tbl"><thead><tr>\n' +
     '<th style="width:24px">ITEM</th>\n' +
-    '<th style="width:68px">\u00c1REA</th>\n' +
-    '<th style="width:32px">UND</th>\n' +
-    '<th>DESCRI\u00c7\u00c3O</th>\n' +
-    '<th style="width:76px">R$/M\u00b2</th>\n' +
-    '<th style="width:82px">VL TOTAL</th>\n' +
+    '<th style="width:68px"><span contenteditable="true" class="th-edit">\u00c1REA</span></th>\n' +
+    '<th style="width:32px"><span contenteditable="true" class="th-edit">UND</span></th>\n' +
+    '<th><span contenteditable="true" class="th-edit">DESCRI\u00c7\u00c3O</span></th>\n' +
+    '<th style="width:76px"><span contenteditable="true" class="th-edit">R$/M\u00b2</span></th>\n' +
+    '<th style="width:82px"><span contenteditable="true" class="th-edit">VL TOTAL</span></th>\n' +
     '<th class="col-mo-base tbl-mo-header no-print" style="width:96px">\uD83D\uDEE0\uFE0F CUSTO BASE MO</th>\n' +
     '</tr></thead>\n' +
     '<tbody id="tblBody">' + corpoTabela + '</tbody>\n' +
@@ -506,34 +510,51 @@ function _garantirLibs() {
 // ── Abre orçamento resumido (botão dedicado) ──────────────────────────────────
 function abrirOrcamentoResumido() {
   var kitsAtivos = window.kitsAtivos;
-  if (!kitsAtivos || kitsAtivos.size === 0) {
-    alert('Nenhum kit ativo. Ative um kit e preencha a area antes de gerar o resumido.');
-    return;
-  }
+  var semKits = !kitsAtivos || kitsAtivos.size === 0;
   var dadosOrc = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : { itens: [], total: 0 };
-  if (!dadosOrc.itens.length) {
+
+  if (!semKits && !dadosOrc.itens.length) {
     alert('Nenhum item encontrado no orcamento atual.');
     return;
   }
+
   var kitsArr = [];
-  kitsAtivos.forEach(function(estado, nome) {
-    kitsArr.push({
-      nome:   nome,
-      A:      estado.A    || 0,
-      P:      estado.P    || 0,
-      cant:   estado.cant || 3.15,
-      grupos: estado.grupos || null,  // só portas tem grupos
-      cfg:    estado.cfg   || null,   // só paredes têm cfg
+  if (semKits) {
+    kitsArr = [
+      { nome: '_gen1', nomeLabel: 'Fornecimento de material de gesso',
+        descricao: 'Fornecimento de materiais para sistema de gesso acartonado (drywall).',
+        A: 0, P: 0, cant: 0, grupos: null, cfg: null },
+    ];
+  } else {
+    kitsAtivos.forEach(function(estado, nome) {
+      kitsArr.push({
+        nome:   nome,
+        A:      estado.A    || 0,
+        P:      estado.P    || 0,
+        cant:   estado.cant || 3.15,
+        grupos: estado.grupos || null,
+        cfg:    estado.cfg   || null,
+      });
     });
-  });
+  }
   var varianteTabica  = resumido_detectarTabica(dadosOrc.itens);
+  var totalCartaoBase = dadosOrc.itens.reduce(function(s, it) { return s + it.qtd * it.vlUnit; }, 0);
+  var kitsInfo;
+  if (semKits) {
+    kitsInfo = kitsArr.map(function(k) {
+      return {
+        nome: k.nome, nomeLabel: k.nomeLabel, descricao: k.descricao,
+        A: 0, P: 0, cant: 0, grupos: null, cfg: null,
+        custoRelativo: 0, totalCartao: 0, moBase: 30,
+      };
+    });
+  } else {
   var custoPorKit     = resumido_custoPorKit(kitsArr, dadosOrc.itens);
   var kitsArrAgrupado = typeof resumido_agruparKitsArr === 'function'
     ? resumido_agruparKitsArr(kitsArr, custoPorKit)
     : kitsArr;
-  var totalCartaoBase = dadosOrc.itens.reduce(function(s, it) { return s + it.qtd * it.vlUnit; }, 0);
   var somaC           = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
-  var kitsInfo = kitsArrAgrupado.map(function(k) {
+  kitsInfo = kitsArrAgrupado.map(function(k) {
     return {
       nome:          k.nome,
       nomeLabel:     typeof resumido_resolverNome === 'function'
@@ -551,6 +572,7 @@ function abrirOrcamentoResumido() {
                        : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
     };
   });
+  } // fim else (semKits)
   var clienteEl  = document.getElementById('iCliente');
   var vendedorEl = document.getElementById('iVendedor');
   var _vend = window.__hiperVendedor || {};
@@ -589,45 +611,54 @@ function abrirOrcamentoResumido() {
     window.gerarHtmlOrcamento = function(dados, opcoes) {
       var html = _original(dados, opcoes);
       var kitsAtivos = window.kitsAtivos;
-      if (!kitsAtivos || kitsAtivos.size === 0) return html;
+      var semKits = !kitsAtivos || kitsAtivos.size === 0;
+      var dadosOrc = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : { itens: [] };
+      var totalBase = dadosOrc.itens.reduce(function(s, it) { return s + it.qtd * it.vlUnit; }, 0);
+      var varTab    = resumido_detectarTabica(dadosOrc.itens);
+      var kitsInfo;
 
-      var kitsArr = [];
-      kitsAtivos.forEach(function(estado, nome) {
-        kitsArr.push({
-          nome:   nome,
-          A:      estado.A    || 0,
-          P:      estado.P    || 0,
-          cant:   estado.cant || 3.15,
-          grupos: estado.grupos || null,
-          cfg:    estado.cfg   || null,
+      if (semKits) {
+        kitsInfo = [
+          { nome: '_gen1', nomeLabel: 'Fornecimento de material de gesso',
+            descricao: 'Fornecimento de materiais para sistema de gesso acartonado (drywall).',
+            A: 0, P: 0, cant: 0, grupos: null, cfg: null, custoRelativo: 0, totalCartao: 0, moBase: 30 },
+        ];
+      } else {
+        var kitsArr = [];
+        kitsAtivos.forEach(function(estado, nome) {
+          kitsArr.push({
+            nome:   nome,
+            A:      estado.A    || 0,
+            P:      estado.P    || 0,
+            cant:   estado.cant || 3.15,
+            grupos: estado.grupos || null,
+            cfg:    estado.cfg   || null,
+          });
         });
-      });
-      var dadosOrc         = typeof extrairDadosPedido === 'function' ? extrairDadosPedido() : { itens: [] };
-      var varTab           = resumido_detectarTabica(dadosOrc.itens);
-      var custoPorKit      = resumido_custoPorKit(kitsArr, dadosOrc.itens);
-      var kitsArrAgrupado  = typeof resumido_agruparKitsArr === 'function'
-        ? resumido_agruparKitsArr(kitsArr, custoPorKit)
-        : kitsArr;
-      var totalBase   = dadosOrc.itens.reduce(function(s, it) { return s + it.qtd * it.vlUnit; }, 0);
-      var somaC       = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
-      var kitsInfo = kitsArrAgrupado.map(function(k) {
-        return {
-          nome:          k.nome,
-          nomeLabel:     typeof resumido_resolverNome === 'function'
-                           ? resumido_resolverNome(k.nome, k.cfg)
-                           : (RESUMIDO_NOMES[k.nome] || k.nome),
-          A:             k.A,
-          P:             k.P,
-          cant:          k.cant,
-          grupos:        k.grupos || null,
-          cfg:           k.cfg   || null,
-          custoRelativo: k.custoRelativo,
-          totalCartao:   (k.custoRelativo / somaC) * totalBase,
-          moBase:        typeof resumido_resolverMoBase === 'function'
-                           ? resumido_resolverMoBase(k.nome, k.cfg)
-                           : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
-        };
-      });
+        var custoPorKit     = resumido_custoPorKit(kitsArr, dadosOrc.itens);
+        var kitsArrAgrupado = typeof resumido_agruparKitsArr === 'function'
+          ? resumido_agruparKitsArr(kitsArr, custoPorKit)
+          : kitsArr;
+        var somaC = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
+        kitsInfo = kitsArrAgrupado.map(function(k) {
+          return {
+            nome:          k.nome,
+            nomeLabel:     typeof resumido_resolverNome === 'function'
+                             ? resumido_resolverNome(k.nome, k.cfg)
+                             : (RESUMIDO_NOMES[k.nome] || k.nome),
+            A:             k.A,
+            P:             k.P,
+            cant:          k.cant,
+            grupos:        k.grupos || null,
+            cfg:           k.cfg   || null,
+            custoRelativo: k.custoRelativo,
+            totalCartao:   (k.custoRelativo / somaC) * totalBase,
+            moBase:        typeof resumido_resolverMoBase === 'function'
+                             ? resumido_resolverMoBase(k.nome, k.cfg)
+                             : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
+          };
+        });
+      }
       var clienteEl  = document.getElementById('iCliente');
       var vendedorEl = document.getElementById('iVendedor');
       var _vend = window.__hiperVendedor || {};
