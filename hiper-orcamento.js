@@ -373,10 +373,13 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   .obs-textarea{display:none!important}
   .obs-print{display:block!important}
   .obs-box{border-color:#000;background:transparent!important}
+  .obs-box.obs-vazia{display:none!important}
 }
 
 .toolbar{display:flex;gap:10px;justify-content:center;margin-bottom:10px;align-items:center;flex-wrap:wrap}
-.btn-print{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#1a73e8}
+.btn-print{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#1a73e8;transition:background 0.15s}
+.btn-print:hover{background:#155bb5}
+.btn-print:disabled{background:#aaa;cursor:default}
 .btn-copy{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#25d366}
 .btn-copy:hover{background:#1da851}
 .btn-copy:disabled{background:#aaa;cursor:default}
@@ -417,7 +420,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 <div class="page">
 
 <div class="toolbar no-print">
-  <button class="btn-print" onclick="_dbSalvar(); window.print()">🖨️ Imprimir / Salvar PDF</button>
+  <button class="btn-print" onclick="imprimirFormatado()">🖨️ Imprimir </button>
   <button class="btn-copy" id="btnCopy" onclick="_dbSalvar(); copiarImagem()">📋 Copiar para WhatsApp</button>
   <button class="btn-pdf" id="btnPdf" onclick="_dbSalvar(); baixarPdf()">⬇️ Baixar PDF</button>
   <button id="btnResumido"
@@ -453,7 +456,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 </div>
 
 <span class="obs-label no-print">📝 Observações</span>
-<div class="obs-box" id="obsBox">
+<div class="obs-box obs-vazia" id="obsBox">
   <textarea class="obs-textarea" id="obsTexto" rows="2"
     placeholder="Ex: Produto sob consulta, prazo de entrega previsto para 5 dias úteis…"
     oninput="onObs()" onkeydown="obsAutoResize(this)"></textarea>
@@ -1057,9 +1060,11 @@ function onVendedor() {
 function onObs() {
   const ta  = el('obsTexto');
   const pre = el('obsPrint');
+  const box = el('obsBox');
   if (!ta || !pre) return;
   pre.textContent = ta.value;
   obsAutoResize(ta);
+  if (box) box.classList.toggle('obs-vazia', !ta.value.trim());
 }
 
 function obsAutoResize(ta) {
@@ -1222,6 +1227,39 @@ async function copiarImagem() {
   }
 }
 
+// ── Imprimir com cabeçalho ────────────────────────────────────────────────────
+function imprimirFormatado() {
+  _dbSalvar();
+  const clienteNome  = el('iCliente')?.value.trim()  || '';
+  const vendedorNome = el('iVendedor')?.value.trim() || '';
+
+  const header = document.createElement('div');
+  header.className = 'print-inject';
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0 2px 8px;border-bottom:1px solid #ddd;margin-bottom:12px;font-family:Arial,sans-serif;font-size:9pt;color:#888';
+  header.innerHTML =
+    '<span style="font-weight:bold;color:#888;font-size:10pt">Orçamento ' + NUM_ORC + '</span>' +
+    '<span>' + (clienteNome ? 'Cliente: <strong style="color:#666">' + clienteNome + '</strong> &nbsp;|&nbsp; ' : '') +
+    'Emitido em ' + new Date().toLocaleDateString('pt-BR') + '</span>';
+
+  const footer = document.createElement('div');
+  footer.className = 'print-inject';
+  footer.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 2px 0;border-top:1px solid #ccc;margin-top:8px;font-family:Arial,sans-serif;font-size:8pt;color:#888';
+  footer.innerHTML =
+    '<span>Comércio e Serv. Gesso Acartonado Ltda &nbsp;|&nbsp; CNPJ 56.240.315/0001-60</span>' +
+    '<span>' + (vendedorNome ? 'Vendedor: ' + vendedorNome + ' &nbsp;|&nbsp; ' : '') +
+    '* Orçamento válido por 10 dias</span>';
+
+  const page = document.querySelector('.page');
+  page.insertBefore(header, page.firstChild);
+  page.appendChild(footer);
+
+  window.addEventListener('afterprint', function cleanup() {
+    document.querySelectorAll('.print-inject').forEach(e => e.remove());
+  }, { once: true });
+
+  window.print();
+}
+
 // ── Baixar PDF ────────────────────────────────────────────────────────────────
 async function baixarPdf() {
   const btn = el('btnPdf');
@@ -1372,6 +1410,7 @@ async function removerDoEstoque() {
     let entry = _toastMap.get(codigo);
     if (!entry) {
       const el = document.createElement('div');
+      el.className = 'no-print';
       el.style.cssText = [
         'position:fixed', 'bottom:20px', 'right:20px',
         'padding:9px 14px', 'border-radius:10px',
