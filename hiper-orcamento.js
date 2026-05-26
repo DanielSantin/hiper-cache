@@ -391,6 +391,9 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .btn-sync-custos.sync-err{border-color:#e57373;color:#c00;background:#fdd}
 .btn-edit-custos{padding:8px 14px;border:1px solid #e0c040;border-radius:6px;font-size:13px;cursor:pointer;color:#7a6000;font-weight:bold;background:#fffbe6;transition:background 0.15s}
 .btn-edit-custos:hover{background:#fff0b3}
+.btn-saida{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#c0392b;transition:background 0.15s}
+.btn-saida:hover:not(:disabled){background:#96281b}
+.btn-saida:disabled{background:#aaa;cursor:default}
 
 .rodape{border:1px solid #000;border-top:none;padding:5px 8px;font-size:8pt;line-height:1.6}
 .rodape .entrega{color:#c00;font-weight:bold;font-size:9pt;margin-top:3px}
@@ -424,6 +427,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   </button>
   <button class="btn-sync-custos" id="btnSyncCustos" onclick="syncCustos()">↻ Custos</button>
   <button class="btn-edit-custos" onclick="window.open('https://db.superaserver.com/custos/', '_blank')">✏️ Editar Custos</button>
+  <button class="btn-saida no-print" id="btnSaida" onclick="removerDoEstoque()">🏗️ Remover do estoque</button>
   <div class="pdf-badge" id="pdfBadge">✅ PDF baixado</div>
 </div>
 
@@ -1312,6 +1316,47 @@ async function baixarPdf() {
   }
 }
 
+// ── Remover do estoque ────────────────────────────────────────────────────────
+async function removerDoEstoque() {
+  const btn = el('btnSaida');
+  if (!btn || btn.disabled) return;
+
+  const itensValidos = ITENS.filter(it => it.idProduto && (it.qtd ?? it.quantidade) > 0);
+  if (!itensValidos.length) {
+    alert('Nenhum item válido para remover do estoque.');
+    return;
+  }
+
+  const confirmado = confirm(
+    'Remover do estoque — orçamento ' + NUM_ORC + '\\n\\n' +
+    itensValidos.map(it => '• ' + (it.nome || it.idProduto) + ' x ' + (it.qtd ?? it.quantidade)).join('\\n') +
+    '\\n\\nOperação irreversível. Confirma?'
+  );
+  if (!confirmado) return;
+
+  _dbSalvar();
+
+  if (!window.opener || typeof window.opener.__hiperRemoverEstoque !== 'function') {
+    alert('Extensão não disponível. Recarregue a página do Hiper e tente novamente.');
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = '⏳ Removendo…';
+
+  const res = await window.opener.__hiperRemoverEstoque(NUM_ORC, itensValidos);
+
+  if (res?.ok) {
+    btn.textContent = '✅ Removido';
+    btn.style.background = '#1a7a1a';
+  } else if (res?.erro?.includes('já foi registrada')) {
+    btn.textContent = '⚠️ Já removido';
+    btn.style.background = '#c07000';
+  } else {
+    // erro tratado pelo listener HIPER_SAIDA_ERRO
+  }
+}
+
 // ── Toast de status do DB (recebido via postMessage do hiper-db.js) ───────────
 (function() {
   const _toastMap = new Map();
@@ -1366,6 +1411,11 @@ async function baixarPdf() {
   window.addEventListener('message', function(ev) {
     if (ev.data?.type === 'HIPER_DB_TOAST') {
       mostrarToastDB(ev.data.codigo, ev.data.estado);
+    }
+    if (ev.data?.type === 'HIPER_SAIDA_ERRO') {
+      const btn = el('btnSaida');
+      if (btn) { btn.disabled = false; btn.textContent = '🏗️ Remover do estoque'; }
+      alert('Erro ao registrar saída: ' + (ev.data.msg || 'desconhecido'));
     }
   });
 })();

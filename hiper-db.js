@@ -864,6 +864,60 @@
     _registrar();
   })();
 
+  // ── Saída de estoque por orçamento customizado ────────────────────────────────
+  // Chamado pela janela blob via window.opener.__hiperRemoverEstoque(codigo, itens).
+  // Faz POST /api/saida-estoque diretamente (CORS liberado para tagdrywall.hiper.com.br).
+  // Envia toast de feedback para a janela blob via HIPER_DB_TOAST.
+
+  window.__hiperRemoverEstoque = async function(codigo, itens) {
+    if (!codigo || !itens?.length) return { ok: false, erro: 'Dados inválidos.' };
+
+    const blobWin = window.__hiperBlobWindow;
+    const _toast  = (estado) => {
+      if (blobWin && !blobWin.closed)
+        blobWin.postMessage({ type: 'HIPER_DB_TOAST', codigo, estado }, '*');
+    };
+
+    _toast('enviando');
+
+    const payload = {
+      codigo_orcamento: codigo,
+      itens: itens.map(it => ({
+        idProduto: String(it.idProduto || it.codigo || ''),
+        nome:      it.nome     || '',
+        unidade:   it.unidade  || 'UN',
+        qtd:       Number(it.qtd ?? it.quantidade ?? 0),
+      })).filter(it => it.idProduto && it.qtd > 0),
+    };
+
+    try {
+      const res  = await fetchComTimeout(`${API_BASE}/saida-estoque`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        console.info(`[HiperDB] ✅ Saída ${codigo} registrada — ${data.movimentos} produto(s).`);
+        _toast('ok');
+        return { ok: true, data };
+      }
+
+      const msg = data?.detail || `Erro ${res.status}`;
+      console.warn(`[HiperDB] ⚠️ Saída ${codigo} recusada: ${msg}`);
+      if (blobWin && !blobWin.closed)
+        blobWin.postMessage({ type: 'HIPER_SAIDA_ERRO', codigo, msg }, '*');
+      return { ok: false, erro: msg };
+
+    } catch (e) {
+      console.warn('[HiperDB] ❌ Falha ao registrar saída:', e);
+      if (blobWin && !blobWin.closed)
+        blobWin.postMessage({ type: 'HIPER_SAIDA_ERRO', codigo, msg: 'Sem conexão com o servidor.' }, '*');
+      return { ok: false, erro: e.message };
+    }
+  };
+
   window._tentarMarcarFaturado = _tentarMarcarFaturado;
   console.info('[HiperDB] ✅ Módulo DB carregado. API:', API_BASE);
 })();
