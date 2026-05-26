@@ -386,17 +386,19 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .btn-pdf{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#e8510a}
 .btn-pdf:hover{background:#c44208}
 .btn-pdf:disabled{background:#aaa;cursor:default}
-.btn-sync-custos{padding:8px 14px;border:1px solid #6dbf8a;border-radius:6px;font-size:13px;cursor:pointer;color:#1a5c1a;font-weight:bold;background:#f0fff4;transition:background 0.15s}
-.btn-sync-custos:hover:not(:disabled){background:#d4f0dc}
-.btn-sync-custos:disabled{opacity:0.5;cursor:default}
-.btn-sync-custos.sync-spin{border-color:#90caf9;color:#1565c0;background:#e8f0fe}
-.btn-sync-custos.sync-ok{border-color:#6dbf8a;color:#1a7a1a;background:#d4f0dc}
-.btn-sync-custos.sync-err{border-color:#e57373;color:#c00;background:#fdd}
-.btn-edit-custos{padding:8px 14px;border:1px solid #e0c040;border-radius:6px;font-size:13px;cursor:pointer;color:#7a6000;font-weight:bold;background:#fffbe6;transition:background 0.15s}
-.btn-edit-custos:hover{background:#fff0b3}
-.btn-saida{padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#c0392b;transition:background 0.15s}
-.btn-saida:hover:not(:disabled){background:#96281b}
-.btn-saida:disabled{background:#aaa;cursor:default}
+.btn-sync-custos{padding:6px 14px;border:1.5px solid #6dbf8a;border-radius:6px;font-size:12px;cursor:pointer;color:#1a5c1a;font-weight:bold;background:transparent;transition:background 0.15s;white-space:nowrap}
+.btn-sync-custos:hover:not(:disabled){background:#f0fff4}
+.btn-sync-custos:disabled{opacity:0.45;cursor:default}
+.btn-sync-custos.sync-spin{border-color:#90caf9;color:#1565c0}
+.btn-sync-custos.sync-ok{border-color:#6dbf8a;color:#1a7a1a}
+.btn-sync-custos.sync-err{border-color:#e57373;color:#c00}
+.btn-edit-custos{padding:6px 14px;border:1.5px solid #e0c040;border-radius:6px;font-size:12px;cursor:pointer;color:#7a6000;font-weight:bold;background:transparent;transition:background 0.15s;white-space:nowrap}
+.btn-edit-custos:hover{background:#fffbe6}
+.btn-saida{padding:6px 14px;border:1.5px solid #e57373;border-radius:6px;font-size:12px;cursor:pointer;color:#c0392b;font-weight:bold;background:transparent;transition:background 0.15s;white-space:nowrap}
+.btn-saida:hover:not(:disabled){background:#fff0f0}
+.btn-saida:disabled{opacity:0.45;cursor:default}
+.zona-saida{margin-top:24px;padding:10px 14px;background:#fafafa;border:1px solid #e8e8e8;border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.zona-saida-sep{width:1px;height:22px;background:#ddd;margin:0 2px;flex-shrink:0}
 
 .rodape{border:1px solid #000;border-top:none;padding:5px 8px;font-size:8pt;line-height:1.6}
 .rodape .entrega{color:#c00;font-weight:bold;font-size:9pt;margin-top:3px}
@@ -420,17 +422,14 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 <div class="page">
 
 <div class="toolbar no-print">
-  <button class="btn-print" onclick="imprimirFormatado()">🖨️ Imprimir </button>
-  <button class="btn-copy" id="btnCopy" onclick="_dbSalvar(); copiarImagem()">📋 Copiar para WhatsApp</button>
-  <button class="btn-pdf" id="btnPdf" onclick="_dbSalvar(); baixarPdf()">⬇️ Baixar PDF</button>
+  <button class="btn-print" onclick="imprimirFormatado()">🖨️ Imprimir</button>
+  <button class="btn-copy" id="btnCopy" onclick="_dbSalvar(); copiarImagem()">📷 Copiar</button>
+  <button class="btn-pdf" id="btnPdf" onclick="_dbSalvar(); baixarPdf()">⬇️ Baixar</button>
   <button id="btnResumido"
     onclick="_dbSalvar(); if(window.__gerarResumidoDaAba){window.__gerarResumidoDaAba();} else if(window.abrirOrcamentoResumido){window.abrirOrcamentoResumido();}"
     style="padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;color:#fff;font-weight:bold;background:#1a5c8a">
-    📝 Resumido
+    📄 Resumido
   </button>
-  <button class="btn-sync-custos" id="btnSyncCustos" onclick="syncCustos()">↻ Custos</button>
-  <button class="btn-edit-custos" onclick="window.open('https://db.superaserver.com/custos/', '_blank')">✏️ Editar Custos</button>
-  <button class="btn-saida no-print" id="btnSaida" onclick="removerDoEstoque()">🏗️ Remover do estoque</button>
   <div class="pdf-badge" id="pdfBadge">✅ PDF baixado</div>
 </div>
 
@@ -496,6 +495,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <div class="custo-body" id="custoBody">${linhasCusto}${linhasVaziasC}</div>
   </div>
 </div>
+
 
 <div class="totais-wrap">
   <div class="trow" id="rowDesc">
@@ -608,6 +608,14 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
       Aplicar desconto para 20% de margem
     </button>
   </div>
+</div>
+
+
+<div class="zona-saida no-print">
+  <button class="btn-sync-custos" id="btnSyncCustos" onclick="syncCustos()">↻ Sincronizar custos</button>
+  <button class="btn-edit-custos" onclick="window.open('https://db.superaserver.com/custos/', '_blank')">✏️ Editar custos</button>
+  <span class="zona-saida-sep"></span>
+  <button class="btn-saida" id="btnSaida" onclick="removerDoEstoque()">🏗️ Remover do estoque</button>
 </div>
 
 </div><!-- .page -->
