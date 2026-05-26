@@ -15,6 +15,11 @@ window.RESUMIDO_RUNTIME_SRC = `// ═══════════════�
 
 function el(id) { return document.getElementById(id); }
 
+function toggleHide(id) {
+  var td = document.getElementById('hd-' + id);
+  if (td) td.classList.toggle('hd-oculto');
+}
+
 function fN(n) {
   return Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -545,6 +550,11 @@ function _congelarInputsNumericos(scope) {
     span.style.display = 'inline-block';
     span.style.textAlign = 'right';
     span.style.width = '100%';
+    // Se a célula estiver marcada como oculta, mantém o texto invisível no PDF
+    var hdCell = inp.closest('.hd-cell');
+    if (hdCell && hdCell.classList.contains('hd-oculto')) {
+      span.style.color = 'transparent';
+    }
     inp.parentNode.insertBefore(span, inp);
     inp.style.display = 'none';
     restaurar.push(function() {

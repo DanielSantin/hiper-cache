@@ -81,6 +81,11 @@ function _resumido_css() {
     '.cliente-inp:focus{outline:none;border-color:#1a73e8;background:#f0f6ff}',
     '.cliente-badge{display:inline-block;font-size:9px;background:#d0e8ff;color:#1a3a6a;border-radius:3px;padding:1px 6px;font-weight:bold;letter-spacing:.3px}',
     /* MO column - hidden when printing */
+    '.hd-cell{position:relative}',
+    '.hd-btn{position:absolute;top:1px;right:1px;background:none;border:none;cursor:pointer;font-size:9px;padding:0;opacity:0;transition:opacity 0.15s;line-height:1;color:#888;z-index:1}',
+    '.hd-cell:hover .hd-btn{opacity:0.45}',
+    '.hd-oculto .hd-btn{opacity:1!important;color:#c00}',
+    '.hd-oculto input{color:transparent!important}',
     '.col-mo-base{background:#fff8f0}',
     '.mo-inp{width:62px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#7a3a00;cursor:text}',
     '.mo-inp:focus{outline:1px solid #e8510a;background:#fff3e0;border-radius:2px;padding:0 2px}',
@@ -98,7 +103,9 @@ function _resumido_css() {
     '  .val-print{display:inline!important}',
     '  .col-mo-base{display:none!important}',
     '  .tbl-mo-header{display:none!important}',
-    '}'
+    '  .hd-btn{display:none!important}',
+    '  .hd-oculto input{color:transparent!important}'
+    + '}'
     ,
   ].join('\n');
 }
@@ -144,10 +151,11 @@ function _resumido_linhasTabela(kitsInfo, totalV, varianteTabica) {
     // Linha principal (material ou agrupado)
     var tr = '<tr>' +
       '<td class="td-num" style="text-align:center;border:1px solid #000;padding:3px 4px;vertical-align:middle;font-size:8pt">' + (i + 1) + '</td>' +
-      '<td style="text-align:center;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
+      '<td class="hd-cell" id="hd-area-' + i + '" style="text-align:center;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
         '<input id="area-' + i + '" type="number" min="0" step="0.01" value="' + areaExibida.toFixed(2) + '"' +
         ' style="width:52px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
         ' oninput="onArea(' + i + ')" title="Editar quantidade">' +
+        '<button class="hd-btn no-print" onclick="toggleHide(\'area-' + i + '\')" title="Ocultar/mostrar valor">◎</button>' +
       '</td>' +
       '<td style="text-align:center;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
         '<span id="und-' + i + '" contenteditable="true" style="font-size:8.5pt;font-weight:bold;outline:none;cursor:text;display:inline-block;min-width:18px;border-radius:2px;padding:1px 2px"' +
@@ -164,15 +172,17 @@ function _resumido_linhasTabela(kitsInfo, totalV, varianteTabica) {
         'onblur="this.style.background=\'\';this.style.outline=\'none\'" ' +
         'class="no-print-border">' + texto + '</div>' +
       '</td>' +
-      '<td style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
+      '<td class="hd-cell" id="hd-m2c-' + i + '" style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
         '<input id="m2c-' + i + '" type="number" min="0" step="0.01" value="' + vlM2C.toFixed(2) + '"' +
         ' style="width:64px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
         ' oninput="onM2(' + i + ')" title="Editar R$/un">' +
+        '<button class="hd-btn no-print" onclick="toggleHide(\'m2c-' + i + '\')" title="Ocultar/mostrar valor">◎</button>' +
       '</td>' +
-      '<td style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
+      '<td class="hd-cell" id="hd-totc-' + i + '" style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
         '<input id="totc-' + i + '" type="number" min="0" step="0.01" value="' + tcKit.toFixed(2) + '"' +
         ' style="width:68px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
         ' oninput="onTotKit(' + i + ')" title="Editar total">' +
+        '<button class="hd-btn no-print" onclick="toggleHide(\'totc-' + i + '\')" title="Ocultar/mostrar valor">◎</button>' +
       '</td>' +
       // Coluna MO Base (oculta na impressão)
       '<td class="col-mo-base no-print" style="text-align:right;border:1px solid #000;padding:2px 5px;vertical-align:middle;min-width:90px">' +
