@@ -405,6 +405,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .btn-saida{padding:6px 14px;border:1.5px solid #e57373;border-radius:6px;font-size:12px;cursor:pointer;color:#c0392b;font-weight:bold;background:transparent;transition:background 0.15s;white-space:nowrap}
 .btn-saida:hover:not(:disabled){background:#fff0f0}
 .btn-saida:disabled{opacity:0.45;cursor:default}
+.btn-mov{padding:6px 14px;border:1.5px solid #7cb3e8;border-radius:6px;font-size:12px;cursor:pointer;color:#1a5c8a;font-weight:bold;background:transparent;transition:background 0.15s;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
+.btn-mov:hover{background:#f0f6ff}
 .zona-saida{margin-top:24px;padding:10px 14px;background:#fafafa;border:1px solid #e8e8e8;border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .zona-saida-sep{width:1px;height:22px;background:#ddd;margin:0 2px;flex-shrink:0}
 
@@ -623,6 +625,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   <button class="btn-sync-custos" id="btnSyncCustos" onclick="syncCustos()">↻ Sincronizar custos</button>
   <button class="btn-edit-custos" onclick="window.open('https://db.superaserver.com/custos/', '_blank')">✏️ Editar custos</button>
   <span class="zona-saida-sep"></span>
+  <a class="btn-mov" href="https://db.superaserver.com/estoque/#movimentos" target="_blank">📋 Ver movimentações</a>
   <button class="btn-saida" id="btnSaida" onclick="removerDoEstoque()">🏗️ Remover do estoque</button>
 </div>
 
