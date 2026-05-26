@@ -1561,10 +1561,9 @@ async function removerDoEstoque() {
 }
 
 function calcularParcelasPadrao(total) {
-  if (total >= 3000) return 5;
-  if (total >= 2000) return 4;
-  if (total >= 1000) return 3;
-  if (total >= 500)  return 2;
+  if (total >= 2250) return 4;
+  if (total >= 1500) return 3;
+  if (total >= 750)  return 2;
   return 1;
 }
 
