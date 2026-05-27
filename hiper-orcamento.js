@@ -355,7 +355,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .desc-chk-wrap input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:#1a73e8;flex-shrink:0}
 #rowDesc.desc-oculto{opacity:0.45;position:relative}
 .trow{position:relative}
-@media print{.desc-chk-wrap{display:none!important}}
+@media print{.desc-chk-wrap{display:none!important}#rowDesc.desc-oculto{display:none!important}}
 
 /* Painel topo */
 .panel{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;background:#f4f8ff;border:1px solid #b3d4f5}
@@ -422,6 +422,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .rodape-pix-wrap{display:flex;align-items:center;flex-wrap:wrap}
 .rodape-pix-wrap select{border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto;padding:0}
 
+@page{margin-bottom:0}
 @media print{
   .no-print{display:none!important}
   .margem-box{display:none!important}
@@ -432,6 +433,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   .val-print{display:inline!important}
   .tbl-wrap{display:block}
   .tbl{width:100%}
+  .trow .ttag select{-webkit-appearance:none!important;appearance:none!important}
+  .rodape-pix-wrap select{-webkit-appearance:none!important;appearance:none!important}
 }
 </style>
 </head>

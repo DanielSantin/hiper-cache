@@ -95,6 +95,7 @@ function _resumido_css() {
     '@media screen{',
     '  .page{max-width:700px}',   // <- largura desejada só na tela
     '}',
+    '@page{margin-bottom:0}',
     '@media print{',
     '  .no-print{display:none!important}',
     '  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}',
@@ -104,7 +105,9 @@ function _resumido_css() {
     '  .col-mo-base{display:none!important}',
     '  .tbl-mo-header{display:none!important}',
     '  .hd-btn{display:none!important}',
-    '  .hd-oculto input{color:transparent!important}'
+    '  .hd-oculto input{color:transparent!important}',
+    '  .trow .ttag select{-webkit-appearance:none!important;appearance:none!important}',
+    '  .rodape-pix-wrap select{-webkit-appearance:none!important;appearance:none!important}'
     + '}'
     ,
   ].join('\n');
