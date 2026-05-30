@@ -30,7 +30,7 @@
 
     // ── Sincronização de custos com servidor ──────────────────────────────────
     const SYNC_API_BASE       = 'https://db.superaserver.com/api';
-    const SYNC_INTERVAL_MS    = 20 * 60 * 1000;  // 20 minutos (intervalo normal)
+    const SYNC_INTERVAL_MS    = 60 * 60 * 1000;  // 1 hora (intervalo normal)
     const SYNC_RETRY_STEPS_MS = [5 * 60 * 1000, 15 * 60 * 1000]; // backoff offline
     const CUSTOS_HASH_KEY     = 'hc:custos_hash';  // chave no chrome.storage
 
@@ -156,64 +156,72 @@
     // Esta função envia HIPER_SYNC_CUSTOS_REQ e aguarda HIPER_SYNC_CUSTOS_RESULT.
     async function verificarAtualizacaoCustos() {
         if (_syncEmAndamento) return;
-        _syncEmAndamento = true;
 
-        const hashLocal = await _lerHashLocal();
-
-        return new Promise(resolve => {
-            const timer = setTimeout(() => {
-                cleanup();
-                _syncEmAndamento = false;
-                const delay = SYNC_RETRY_STEPS_MS[_syncRetryIndex] ?? SYNC_INTERVAL_MS;
-                _syncRetryIndex = Math.min(_syncRetryIndex + 1, SYNC_RETRY_STEPS_MS.length);
-                console.warn(`[HiperCache] ⚠️ Timeout ao sincronizar custos — retry em ${delay / 60000}min.`);
-                _agendarProximaVerificacao(delay);
-                resolve();
-            }, 12000);
-
-            function cleanup() {
-                clearTimeout(timer);
-                window.removeEventListener('message', handler);
+        // Só uma aba executa o fetch por vez — lock mantido durante toda a operação
+        await navigator.locks.request('hiper_custo_sync', { ifAvailable: true }, async lock => {
+            if (!lock) {
+                DEBUG && console.log('[HiperCache] 🔒 Outra aba já sincronizando — pulando.');
+                _agendarProximaVerificacao(SYNC_INTERVAL_MS);
+                return;
             }
 
-            function handler(ev) {
-                if (ev.source !== window) return;
-                if (ev.data?.type !== 'HIPER_SYNC_CUSTOS_RESULT') return;
-                cleanup();
-                _syncEmAndamento = false;
+            _syncEmAndamento = true;
+            const hashLocal = await _lerHashLocal();
 
-                const { ok, custos, hash, error } = ev.data;
-                if (ok) {
-                    if (custos) {
-                        // Atualiza memória imediatamente
-                        Object.entries(custos).forEach(([id, val]) => {
-                            window.__hiperCustos[id] = (typeof val === 'object' && val !== null) ? val.valor : val;
-                        });
-                        // Persiste no chrome.storage via interceptor
-                        Object.entries(custos).forEach(([id, val]) => {
-                            const num = (typeof val === 'object' && val !== null) ? val.valor : val;
-                            window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: num, ts: Date.now() }, '*');
-                        });
-                        window.postMessage({ type: 'HIPER_CACHE_SET', key: CUSTOS_HASH_KEY, data: hash, ts: Date.now() }, '*');
-                        window.__hiperCustosHash = hash;
-                        window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
-                        console.info(`[HiperCache] ✅ ${Object.keys(custos).length} custos atualizados | hash: ${hash}`);
-                    } else {
-                        DEBUG && console.log('[HiperCache] ✅ Custos em dia — nenhuma atualização necessária.');
-                    }
-                    _syncRetryIndex = 0;
-                    _agendarProximaVerificacao(SYNC_INTERVAL_MS);
-                } else {
+            await new Promise(resolve => {
+                const timer = setTimeout(() => {
+                    cleanup();
+                    _syncEmAndamento = false;
                     const delay = SYNC_RETRY_STEPS_MS[_syncRetryIndex] ?? SYNC_INTERVAL_MS;
                     _syncRetryIndex = Math.min(_syncRetryIndex + 1, SYNC_RETRY_STEPS_MS.length);
-                    console.warn(`[HiperCache] ⚠️ Sem conexão — retry em ${delay / 60000}min.`, error);
+                    console.warn(`[HiperCache] ⚠️ Timeout ao sincronizar custos — retry em ${delay / 60000}min.`);
                     _agendarProximaVerificacao(delay);
-                }
-                resolve();
-            }
+                    resolve();
+                }, 12000);
 
-            window.addEventListener('message', handler);
-            window.postMessage({ type: 'HIPER_SYNC_CUSTOS_REQ', hashLocal }, '*');
+                function cleanup() {
+                    clearTimeout(timer);
+                    window.removeEventListener('message', handler);
+                }
+
+                function handler(ev) {
+                    if (ev.source !== window) return;
+                    if (ev.data?.type !== 'HIPER_SYNC_CUSTOS_RESULT') return;
+                    cleanup();
+                    _syncEmAndamento = false;
+
+                    const { ok, custos, hash, error } = ev.data;
+                    if (ok) {
+                        if (custos) {
+                            Object.entries(custos).forEach(([id, val]) => {
+                                window.__hiperCustos[id] = (typeof val === 'object' && val !== null) ? val.valor : val;
+                            });
+                            Object.entries(custos).forEach(([id, val]) => {
+                                const num = (typeof val === 'object' && val !== null) ? val.valor : val;
+                                window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: num, ts: Date.now() }, '*');
+                            });
+                            window.postMessage({ type: 'HIPER_CACHE_SET', key: CUSTOS_HASH_KEY, data: hash, ts: Date.now() }, '*');
+                            window.__hiperCustosHash = hash;
+                            window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
+                            console.info(`[HiperCache] ✅ ${Object.keys(custos).length} custos atualizados | hash: ${hash}`);
+                        } else {
+                            DEBUG && console.log('[HiperCache] ✅ Custos em dia.');
+                        }
+                        _syncRetryIndex = 0;
+                        _agendarProximaVerificacao(SYNC_INTERVAL_MS);
+                    } else {
+                        const delay = SYNC_RETRY_STEPS_MS[_syncRetryIndex] ?? SYNC_INTERVAL_MS;
+                        _syncRetryIndex = Math.min(_syncRetryIndex + 1, SYNC_RETRY_STEPS_MS.length);
+                        console.warn(`[HiperCache] ⚠️ Sem conexão — retry em ${delay / 60000}min.`, error);
+                        _agendarProximaVerificacao(delay);
+                    }
+                    resolve();
+                }
+
+                window.addEventListener('message', handler);
+                window.postMessage({ type: 'HIPER_SYNC_CUSTOS_REQ', hashLocal }, '*');
+            });
+            // Lock liberado automaticamente ao sair do callback
         });
     }
 
