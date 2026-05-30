@@ -16,7 +16,7 @@
 // inserido imediatamente na posição correta.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const ROTA_FORMULARIO = /pedido-venda\/(novo|editar|visualizar)(\/|$)/;
+const ROTA_FORMULARIO = /pedido-venda\/(novo|editar|duplicar|visualizar)(\/|$)/;
 
 function _estaNoFormulario() {
   return ROTA_FORMULARIO.test(location.hash);
