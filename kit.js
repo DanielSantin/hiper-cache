@@ -56,7 +56,7 @@ const ARREDONDAMENTO_CODIGOS = {
 };
 
 // Códigos que devem ser adicionados mas não devem ser modificados automaticamente
-const BLACKLIST_SETAR = new Set(["3007", "3008"]);
+const BLACKLIST_SETAR = new Set(["3007", "3008", "3042", "3043", "3044", "3060"]);
 
 
 // ── 2. DEFINIÇÃO DOS KITS (não-parede) ────────────────────────────────
@@ -163,8 +163,12 @@ const PAREDE_FORMULAS_FACE_CIM = {
 // Fórmulas da ESTRUTURA — fatorEstrutura = 2 se dupla, 1 se simples
 // 3058 e 3020 são da fixação da estrutura na laje/piso (independente de faces e chapas)
 const PAREDE_FORMULAS_ESTRUTURA = {
-  "3008": (A, fe) => A * 2.11 / 3 * fe, // montante (m)
-  "3007": (A, fe) => A * 0.7  / 3 * fe, // guia (m)
+  "3008": (A, fe) => A * 2.11 / 3 * fe, // montante 70 (m)
+  "3042": (A, fe) => A * 2.11 / 3 * fe, // montante 48 (m)
+  "3043": (A, fe) => A * 2.11 / 3 * fe, // montante 90 (m)
+  "3007": (A, fe) => A * 0.7  / 3 * fe, // guia 70 (m)
+  "3060": (A, fe) => A * 0.7  / 3 * fe, // guia 48 (m)
+  "3044": (A, fe) => A * 0.7  / 3 * fe, // guia 90 (m)
   "3058": (A, fe) => A * 0.7  / 3 * 11, // parafuso 6mm (un) — não dobra na dupla
   "3020": (A, fe) => A * 0.7  / 3 * 11, // bucha 6mm (un)    — não dobra na dupla
   "3173": (A, fe) => A * 0.7  / 3 * 11, // bucha 6mm pacote 1000 — mesmo cálculo
@@ -745,7 +749,7 @@ async function aplicarParedeCfg(cfg) {
     }
   });
 
-  kitsAtivos.set(id, { tipo: 'parede', cfg: { ...cfg }, A: 0, linhas: linhasDoKit });
+  kitsAtivos.set(id, { tipo: 'parede', cfg: { ...cfg }, A: 0, montante: '70', linhas: linhasDoKit });
   console.log(`[HiperCache] ✅ Parede "${id}" ativa — ${paredeLabelCfg(cfg)}`);
   return id;
 }
@@ -791,6 +795,8 @@ function _injetarCssPainel() {
     #hiper-painel-kits .hp-btn-add-parede:hover{background:#e0d0ff}
     #hiper-painel-kits .hp-btn-tabica{font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer;color:#666;white-space:nowrap;flex-shrink:0}
     #hiper-painel-kits .hp-btn-tabica.ativo{background:#1a7a4a;border-color:#1a7a4a;color:#fff;font-weight:bold}
+    #hiper-painel-kits .hp-btn-montante{font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer;color:#666;white-space:nowrap;flex-shrink:0}
+    #hiper-painel-kits .hp-btn-montante.ativo{background:#2c5fa0;border-color:#2c5fa0;color:#fff;font-weight:bold}
     #hiper-painel-kits .hp-porta-grupo{padding-bottom:5px;border-bottom:1px dashed #f5c880;margin-bottom:4px}
     #hiper-painel-kits .hp-porta-grupo:last-of-type{border-bottom:none;padding-bottom:0;margin-bottom:0}
   `;
@@ -913,7 +919,8 @@ function renderizarPainel(painelRef) {
     } else if (estado.tipo === 'parede') {
       const item = document.createElement('div');
       item.className = 'hp-item parede';
-      const margemParede = estado.margem != null ? estado.margem : '';
+      const margemParede  = estado.margem   != null ? estado.margem   : '';
+      const montanteAtual = estado.montante || '70';
       item.innerHTML = `
         <div class="hp-head">
           <span class="hp-badge parede">🧱 ${paredeLabelCfg(estado.cfg)}</span>
@@ -925,6 +932,14 @@ function renderizarPainel(painelRef) {
             <div class="hp-row-val">
               <input class="hp-inp" type="number" min="0" step="0.01" value="${estado.A || ''}" data-id="${id}" data-key="A">
               <span class="hp-row-unit">m²</span>
+            </div>
+          </div>
+          <div class="hp-field-row">
+            <span class="hp-row-lbl">Montante</span>
+            <div class="hp-row-val">
+              <button class="hp-btn-montante${montanteAtual === '48' ? ' ativo' : ''}" data-id="${id}" data-montante="48">48</button>
+              <button class="hp-btn-montante${montanteAtual === '70' ? ' ativo' : ''}" data-id="${id}" data-montante="70">70</button>
+              <button class="hp-btn-montante${montanteAtual === '90' ? ' ativo' : ''}" data-id="${id}" data-montante="90">90</button>
             </div>
           </div>
           <div class="hp-field-row">
@@ -1084,6 +1099,37 @@ function _bindPainelEventos(lista) {
       renderizarPainel();
     });
   }
+
+  // Toggle de montante/guia (48 / 70 / 90)
+  const COD_MONTANTE = { '48': '3042', '70': '3008', '90': '3043' };
+  const COD_GUIA     = { '48': '3060', '70': '3007', '90': '3044' };
+  const TODOS_MONTANTES = new Set(Object.values(COD_MONTANTE));
+  const TODOS_GUIAS     = new Set(Object.values(COD_GUIA));
+
+  lista.querySelectorAll('.hp-btn-montante').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const id      = this.dataset.id;
+      const novoTam = this.dataset.montante;
+      const estado  = kitsAtivos.get(id);
+      if (!estado || estado.montante === novoTam) return;
+
+      const linhaM = estado.linhas.find(l => TODOS_MONTANTES.has(l.codigo));
+      const linhaG = estado.linhas.find(l => TODOS_GUIAS.has(l.codigo));
+
+      [{ linha: linhaM, mapa: COD_MONTANTE }, { linha: linhaG, mapa: COD_GUIA }].forEach(({ linha, mapa }) => {
+        if (!linha) return;
+        const novoCod = mapa[novoTam];
+        const produto = buscarNaMaster(novoCod);
+        if (!produto) return;
+        const $inp = linha.$linha.find('input.produto');
+        if ($inp.length) inserirViaCache($inp, produto);
+        linha.codigo = novoCod;
+      });
+
+      estado.montante = novoTam;
+      renderizarPainel();
+    });
+  });
 
   // Toggle de tabica (branca / natural)
   const COD_TABICA = { branca: '3006', natural: '3010' };
