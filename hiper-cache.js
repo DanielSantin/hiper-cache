@@ -151,80 +151,70 @@
      * Se hash mudou OU force_update == true → baixa dados completos.
      * Se offline → agenda retry com backoff.
      */
+    // ── Sincronização via interceptor (content script — sem restrição de CSP) ──
+    // O fetch real acontece no interceptor.js (contexto privilegiado).
+    // Esta função envia HIPER_SYNC_CUSTOS_REQ e aguarda HIPER_SYNC_CUSTOS_RESULT.
     async function verificarAtualizacaoCustos() {
         if (_syncEmAndamento) return;
         _syncEmAndamento = true;
 
-        try {
-            const resp = await NATIVE_FETCH(`${SYNC_API_BASE}/custos/metadata`, {
-                cache: 'no-store',
-                signal: AbortSignal.timeout(8000),
-            });
+        const hashLocal = await _lerHashLocal();
 
-            if (!resp.ok) throw new Error(`metadata status ${resp.status}`);
+        return new Promise(resolve => {
+            const timer = setTimeout(() => {
+                cleanup();
+                _syncEmAndamento = false;
+                const delay = SYNC_RETRY_STEPS_MS[_syncRetryIndex] ?? SYNC_INTERVAL_MS;
+                _syncRetryIndex = Math.min(_syncRetryIndex + 1, SYNC_RETRY_STEPS_MS.length);
+                console.warn(`[HiperCache] ⚠️ Timeout ao sincronizar custos — retry em ${delay / 60000}min.`);
+                _agendarProximaVerificacao(delay);
+                resolve();
+            }, 12000);
 
-            const meta         = await resp.json();
-            const hashRemoto   = meta.hash        || '';
-            const forceUpdate  = meta.force_update === true;
-
-            // Lê hash local (salvo no chrome.storage via interceptor)
-            const hashLocal = await _lerHashLocal();
-
-            DEBUG && console.log(`[HiperCache] 🔍 hash local: ${hashLocal} | remoto: ${hashRemoto} | force: ${forceUpdate}`);
-
-            if (forceUpdate || hashRemoto !== hashLocal) {
-                console.info(`[HiperCache] 🔄 Custos desatualizados — baixando dados completos...`);
-                await _baixarCustosCompletos(hashRemoto);
-            } else {
-                DEBUG && console.log('[HiperCache] ✅ Custos em dia — nenhuma atualização necessária.');
+            function cleanup() {
+                clearTimeout(timer);
+                window.removeEventListener('message', handler);
             }
 
-            // Sucesso — volta ao intervalo normal
-            _syncRetryIndex = 0;
-            _agendarProximaVerificacao(SYNC_INTERVAL_MS);
+            function handler(ev) {
+                if (ev.source !== window) return;
+                if (ev.data?.type !== 'HIPER_SYNC_CUSTOS_RESULT') return;
+                cleanup();
+                _syncEmAndamento = false;
 
-        } catch (e) {
-            // Offline ou falha de rede → backoff
-            const delay = SYNC_RETRY_STEPS_MS[_syncRetryIndex] ?? SYNC_INTERVAL_MS;
-            _syncRetryIndex = Math.min(_syncRetryIndex + 1, SYNC_RETRY_STEPS_MS.length);
-            console.warn(`[HiperCache] ⚠️ Sem conexão — retry em ${delay / 60000}min.`, e.message);
-            _agendarProximaVerificacao(delay);
-        } finally {
-            _syncEmAndamento = false;
-        }
-    }
+                const { ok, custos, hash, error } = ev.data;
+                if (ok) {
+                    if (custos) {
+                        // Atualiza memória imediatamente
+                        Object.entries(custos).forEach(([id, val]) => {
+                            window.__hiperCustos[id] = (typeof val === 'object' && val !== null) ? val.valor : val;
+                        });
+                        // Persiste no chrome.storage via interceptor
+                        Object.entries(custos).forEach(([id, val]) => {
+                            const num = (typeof val === 'object' && val !== null) ? val.valor : val;
+                            window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: num, ts: Date.now() }, '*');
+                        });
+                        window.postMessage({ type: 'HIPER_CACHE_SET', key: CUSTOS_HASH_KEY, data: hash, ts: Date.now() }, '*');
+                        window.__hiperCustosHash = hash;
+                        window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
+                        console.info(`[HiperCache] ✅ ${Object.keys(custos).length} custos atualizados | hash: ${hash}`);
+                    } else {
+                        DEBUG && console.log('[HiperCache] ✅ Custos em dia — nenhuma atualização necessária.');
+                    }
+                    _syncRetryIndex = 0;
+                    _agendarProximaVerificacao(SYNC_INTERVAL_MS);
+                } else {
+                    const delay = SYNC_RETRY_STEPS_MS[_syncRetryIndex] ?? SYNC_INTERVAL_MS;
+                    _syncRetryIndex = Math.min(_syncRetryIndex + 1, SYNC_RETRY_STEPS_MS.length);
+                    console.warn(`[HiperCache] ⚠️ Sem conexão — retry em ${delay / 60000}min.`, error);
+                    _agendarProximaVerificacao(delay);
+                }
+                resolve();
+            }
 
-    async function _baixarCustosCompletos(hashEsperado) {
-        const resp = await NATIVE_FETCH(`${SYNC_API_BASE}/custos/data`, {
-            cache: 'no-store',
-            signal: AbortSignal.timeout(15000),
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'HIPER_SYNC_CUSTOS_REQ', hashLocal }, '*');
         });
-        if (!resp.ok) throw new Error(`data status ${resp.status}`);
-
-        const payload = await resp.json();
-        const custos  = payload.custos || {};
-        const hash    = payload.hash   || hashEsperado;
-
-        // Atualiza memória imediatamente
-        // Suporta formato novo { nome, valor } e formato antigo (número direto)
-        Object.entries(custos).forEach(([id, val]) => {
-            window.__hiperCustos[id] = (typeof val === 'object' && val !== null) ? val.valor : val;
-        });
-
-        // Persiste cada custo no chrome.storage via interceptor (salva só o número)
-        Object.entries(custos).forEach(([id, val]) => {
-            const num = (typeof val === 'object' && val !== null) ? val.valor : val;
-            window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: num, ts: Date.now() }, '*');
-        });
-
-        // Salva o novo hash localmente
-        window.postMessage({ type: 'HIPER_CACHE_SET', key: CUSTOS_HASH_KEY, data: hash, ts: Date.now() }, '*');
-        window.__hiperCustosHash = hash;
-
-        // Notifica widgets (ex: hiper-lucro-widget) para recalcular
-        window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
-
-        console.info(`[HiperCache] ✅ ${Object.keys(custos).length} custos atualizados do servidor | hash: ${hash}`);
     }
 
     /** Lê o hash salvo localmente (memória > chrome.storage) */

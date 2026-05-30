@@ -232,6 +232,40 @@ window.addEventListener('message', async (event) => {
     });
   }
 
+  // ── Sincronização de custos via interceptor (bypass CSP) ─────────────────
+  if (msg.type === 'HIPER_SYNC_CUSTOS_REQ') {
+    (async () => {
+      try {
+        const API = 'https://db.superaserver.com/api';
+        const metaRes = await fetch(`${API}/custos/metadata`, {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!metaRes.ok) throw new Error(`metadata status ${metaRes.status}`);
+        const meta        = await metaRes.json();
+        const hashRemoto  = meta.hash        || '';
+        const forceUpdate = meta.force_update === true;
+        const hashLocal   = msg.hashLocal    || '';
+
+        if (forceUpdate || hashRemoto !== hashLocal) {
+          const dataRes = await fetch(`${API}/custos/data`, {
+            cache: 'no-store',
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!dataRes.ok) throw new Error(`data status ${dataRes.status}`);
+          const payload = await dataRes.json();
+          const custos  = payload.custos || {};
+          const hash    = payload.hash   || hashRemoto;
+          window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: true, custos, hash }, '*');
+        } else {
+          window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: true, custos: null, hash: hashRemoto }, '*');
+        }
+      } catch(e) {
+        window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: false, error: e.message }, '*');
+      }
+    })();
+  }
+
   if (msg.type === 'HIPER_EVENTO_SEND') {
     try {
       const res = await fetch(`https://db.superaserver.com/api/hiper-evento`, {
