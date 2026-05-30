@@ -61,8 +61,8 @@ const BLACKLIST_SETAR = new Set(["3007", "3008"]);
 
 // ── 2. DEFINIÇÃO DOS KITS (não-parede) ────────────────────────────────
 const KITS_GESSO = {
-  aramado:     ["3076","3089","3019","3023","3132","3035","3037","3010","3006","3021","3058","3020"],
-  estruturado: ["3073","3089","3018","3017","3029","3022","3132","3021","3006","3010","3058","3020"],
+  aramado:     ["3076","3089","3019","3023","3132","3035","3037","3006","3021","3058","3020"],
+  estruturado: ["3073","3089","3018","3017","3029","3022","3132","3021","3006","3058","3020"],
   cortineiro:  ["3073","3089","3021","3132","3009"],
   portas:      ["3073","3089","3008","3007","3021","3058","3020","3132"],
 };
@@ -679,7 +679,7 @@ async function aplicarKitGesso(nomeKit) {
     ? { tipo: 'portas', nomeKit, A: 0, grupos: [{ id: Date.now(), qtd: 1, larg: 0.70, alt: 2.10 }], linhas: linhasDoKit }
     : { tipo: 'kit', nomeKit, A: 0, P: 0,
         ...(nomeKit === 'cortineiro'  ? { cant: 3.15 } : {}),
-        ...((nomeKit === 'aramado' || nomeKit === 'estruturado') ? { altPend: 0.6 } : {}),
+        ...((nomeKit === 'aramado' || nomeKit === 'estruturado') ? { altPend: 0.6, tabica: 'branca' } : {}),
         linhas: linhasDoKit };
 
   kitsAtivos.set(id, estadoInicial);
@@ -761,28 +761,38 @@ function _injetarCssPainel() {
   s.textContent = `
     #hiper-painel-kits{margin:10px 0;padding:8px 10px;border:1px solid #ddd;background:#fdfdfd;border-radius:4px}
     #hiper-painel-kits .hp-titulo{font-size:10px;color:#666;margin-bottom:8px;font-weight:bold;text-transform:uppercase}
-    #hiper-painel-kits .hp-lista{display:flex;flex-direction:column;gap:4px}
-    #hiper-painel-kits .hp-item{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:5px 6px;border:1px solid #b8d4f5;border-radius:4px;background:#f0f6ff}
+    #hiper-painel-kits .hp-lista{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
+    #hiper-painel-kits .hp-item{display:flex;flex-direction:column;width:200px;max-width:200px;box-sizing:border-box;border:1px solid #b8d4f5;border-radius:5px;background:#f0f6ff;overflow:hidden}
     #hiper-painel-kits .hp-item.parede{border-color:#c8b4f5;background:#f5f0ff}
-    #hiper-painel-kits .hp-badge{font-size:11px;font-weight:bold;color:#1a5c1a;background:#d4edda;border-radius:3px;padding:1px 7px;white-space:nowrap;flex-shrink:0}
-    #hiper-painel-kits .hp-badge.porta{color:#7a3a00;background:#fff0d4}
-    #hiper-painel-kits .hp-badge.parede{color:#3a007a;background:#ede0ff}
-    #hiper-painel-kits .hp-lbl{font-size:11px;color:#777;white-space:nowrap}
-    #hiper-painel-kits .hp-lbl.m2{font-size:10px;color:#aaa;white-space:nowrap}
-    #hiper-painel-kits .hp-inp{width:68px;padding:2px 5px;font-size:12px;border:1px solid #b0c8e8;border-radius:3px;height:22px;background:#fff}
-    #hiper-painel-kits .hp-inp.qtd{width:46px}
-    #hiper-painel-kits .hp-sel{padding:1px 3px;font-size:11px;border:1px solid #b0c8e8;border-radius:3px;height:22px;background:#fff;color:#333}
-    #hiper-painel-kits .hp-sep{width:1px;height:14px;background:#cce;flex-shrink:0}
-    #hiper-painel-kits .hp-btn-rm{margin-left:auto;font-size:11px;padding:1px 7px;border:none;border-radius:3px;background:#e55;color:#fff;cursor:pointer;line-height:18px;flex-shrink:0}
-    #hiper-painel-kits .hp-btn-add-grupo{font-size:11px;padding:2px 9px;border:1px dashed #b87a00;border-radius:3px;background:transparent;color:#b87a00;cursor:pointer;white-space:nowrap}
-    #hiper-painel-kits .hp-add-wrap{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    #hiper-painel-kits .hp-item.porta{border-color:#f5c880;background:#fff8ee}
+    #hiper-painel-kits .hp-head{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:#dce8ff;border-bottom:1px solid #b8d4f5}
+    #hiper-painel-kits .hp-item.parede .hp-head{background:#e4d4ff;border-bottom-color:#c8b4f5}
+    #hiper-painel-kits .hp-item.porta .hp-head{background:#ffe8c0;border-bottom-color:#f5c880}
+    #hiper-painel-kits .hp-body{padding:7px 8px;display:flex;flex-direction:column;gap:4px}
+    #hiper-painel-kits .hp-field-row{display:flex;align-items:center;gap:6px;min-height:24px}
+    #hiper-painel-kits .hp-row-lbl{width:66px;font-size:11px;color:#777;flex-shrink:0;white-space:nowrap}
+    #hiper-painel-kits .hp-row-val{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+    #hiper-painel-kits .hp-row-unit{font-size:11px;color:#aaa;flex-shrink:0}
+    #hiper-painel-kits .hp-badge{font-size:12px;font-weight:bold;color:#1a5c1a;white-space:nowrap}
+    #hiper-painel-kits .hp-badge.porta{color:#7a3a00}
+    #hiper-painel-kits .hp-badge.parede{color:#3a007a}
+    #hiper-painel-kits .hp-lbl{font-size:11px;color:#777;white-space:nowrap;flex-shrink:0}
+    #hiper-painel-kits .hp-lbl.m2{font-size:11px;color:#999}
+    #hiper-painel-kits .hp-inp{flex:1;min-width:0;padding:2px 5px;font-size:13px;text-align:left;border:1px solid #b0c8e8;border-radius:3px;height:24px;background:#fff;box-sizing:border-box}
+    #hiper-painel-kits .hp-btn-rm{font-size:11px;padding:1px 7px;border:none;border-radius:3px;background:#e55;color:#fff;cursor:pointer;line-height:18px;flex-shrink:0}
+    #hiper-painel-kits .hp-btn-add-grupo{font-size:11px;padding:2px 9px;border:1px dashed #b87a00;border-radius:3px;background:transparent;color:#b87a00;cursor:pointer;white-space:nowrap;margin-top:2px}
+    #hiper-painel-kits .hp-add-wrap{width:100%;margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
     #hiper-painel-kits .hp-add-lbl{font-size:10px;color:#aaa}
     #hiper-painel-kits .hp-btn-tipo{font-size:11px;font-weight:bold;padding:3px 10px;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer;color:#444}
     #hiper-painel-kits .hp-btn-tipo:hover{background:#e8f0fe;border-color:#2c7be5;color:#2c7be5}
-    #hiper-painel-kits .hp-parede-form{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:4px;padding:5px 8px;border:1px dashed #c8b4f5;border-radius:4px;background:#faf7ff}
+    #hiper-painel-kits .hp-parede-form{width:100%;box-sizing:border-box;display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:4px;padding:5px 8px;border:1px dashed #c8b4f5;border-radius:4px;background:#faf7ff}
     #hiper-painel-kits .hp-parede-form select{padding:1px 3px;font-size:11px;border:1px solid #c0a8e8;border-radius:3px;height:22px;background:#fff;color:#333}
     #hiper-painel-kits .hp-btn-add-parede{font-size:11px;font-weight:bold;padding:2px 10px;border:1px solid #8a5cd0;border-radius:3px;background:#f0e8ff;color:#5a1fa0;cursor:pointer;white-space:nowrap}
     #hiper-painel-kits .hp-btn-add-parede:hover{background:#e0d0ff}
+    #hiper-painel-kits .hp-btn-tabica{font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer;color:#666;white-space:nowrap;flex-shrink:0}
+    #hiper-painel-kits .hp-btn-tabica.ativo{background:#1a7a4a;border-color:#1a7a4a;color:#fff;font-weight:bold}
+    #hiper-painel-kits .hp-porta-grupo{padding-bottom:5px;border-bottom:1px dashed #f5c880;margin-bottom:4px}
+    #hiper-painel-kits .hp-porta-grupo:last-of-type{border-bottom:none;padding-bottom:0;margin-bottom:0}
   `;
   document.head.appendChild(s);
 }
@@ -852,48 +862,79 @@ function renderizarPainel(painelRef) {
   kitsAtivos.forEach((estado, id) => {
 
     if (estado.tipo === 'portas') {
-      (estado.grupos || []).forEach(grupo => {
-        const areaGrupo = (num(grupo.qtd) * (num(grupo.larg) || 0.70) * (num(grupo.alt) || 2.10)).toFixed(2);
-        const item = document.createElement('div');
-        item.className = 'hp-item';
-        item.innerHTML = `
-          <span class="hp-badge porta">🚪 Porta</span>
-          <span class="hp-lbl">Qtd</span>
-          <input class="hp-inp qtd" type="number" min="1" step="1" value="${grupo.qtd}"
-            data-id="portas" data-gid="${grupo.id}" data-key="qtd">
-          <div class="hp-sep"></div>
-          <span class="hp-lbl">Larg</span>
-          <input class="hp-inp" type="number" min="0.01" step="0.01" value="${grupo.larg}"
-            data-id="portas" data-gid="${grupo.id}" data-key="larg">
-          <span class="hp-lbl">Alt</span>
-          <input class="hp-inp" type="number" min="0.01" step="0.01" value="${grupo.alt}"
-            data-id="portas" data-gid="${grupo.id}" data-key="alt">
-          <span class="hp-lbl m2" data-m2-gid="${grupo.id}">= ${areaGrupo} m²</span>
-          <button class="hp-btn-rm" data-rm-id="portas" data-rm-gid="${grupo.id}">✕</button>
-        `;
-        lista.appendChild(item);
-      });
+      const portaCard = document.createElement('div');
+      portaCard.className = 'hp-item porta';
 
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'padding:2px 4px';
-      wrap.innerHTML = `<button class="hp-btn-add-grupo" id="hp-btn-add-porta">+ outro tamanho de porta</button>`;
-      lista.appendChild(wrap);
+      const gruposHTML = (estado.grupos || []).map(grupo => {
+        const areaGrupo = (num(grupo.qtd) * (num(grupo.larg) || 0.70) * (num(grupo.alt) || 2.10)).toFixed(2);
+        return `<div class="hp-porta-grupo">
+          <div class="hp-field-row">
+            <span class="hp-row-lbl">Qtd</span>
+            <div class="hp-row-val">
+              <input class="hp-inp" type="number" min="1" step="1" value="${grupo.qtd}" data-id="portas" data-gid="${grupo.id}" data-key="qtd">
+            </div>
+          </div>
+          <div class="hp-field-row">
+            <span class="hp-row-lbl">Larg (m)</span>
+            <div class="hp-row-val">
+              <input class="hp-inp" type="number" min="0.01" step="0.01" value="${grupo.larg}" data-id="portas" data-gid="${grupo.id}" data-key="larg">
+              <span class="hp-row-unit">m</span>
+            </div>
+          </div>
+          <div class="hp-field-row">
+            <span class="hp-row-lbl">Alt (m)</span>
+            <div class="hp-row-val">
+              <input class="hp-inp" type="number" min="0.01" step="0.01" value="${grupo.alt}" data-id="portas" data-gid="${grupo.id}" data-key="alt">
+              <span class="hp-row-unit">m</span>
+            </div>
+          </div>
+          <div class="hp-field-row">
+            <span class="hp-row-lbl">Área</span>
+            <div class="hp-row-val">
+              <span class="hp-lbl m2" data-m2-gid="${grupo.id}" style="flex:1;text-align:right">${areaGrupo}</span>
+              <span class="hp-row-unit">m²</span>
+              <button class="hp-btn-rm" data-rm-id="portas" data-rm-gid="${grupo.id}">✕</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+
+      portaCard.innerHTML = `
+        <div class="hp-head">
+          <span class="hp-badge porta">🚪 Fechamento de Porta</span>
+        </div>
+        <div class="hp-body">
+          ${gruposHTML}
+          <button class="hp-btn-add-grupo" id="hp-btn-add-porta">+ outro tamanho</button>
+        </div>
+      `;
+      lista.appendChild(portaCard);
 
     } else if (estado.tipo === 'parede') {
       const item = document.createElement('div');
       item.className = 'hp-item parede';
       const margemParede = estado.margem != null ? estado.margem : '';
       item.innerHTML = `
-        <span class="hp-badge parede">🧱 ${paredeLabelCfg(estado.cfg)}</span>
-        <span class="hp-lbl">M²</span>
-        <input class="hp-inp" type="number" min="0" step="0.01" value="${estado.A || ''}"
-          data-id="${id}" data-key="A">
-        <div class="hp-sep"></div>
-        <span class="hp-lbl" title="Margem extra em % (ex: 5 = +5% em todos os itens)" style="cursor:help;text-decoration:underline dotted">Margem Material</span>
-        <input class="hp-inp" type="number" min="0" step="1" value="${margemParede}"
-          data-id="${id}" data-key="margem" style="width:46px" placeholder="0">
-        <span class="hp-lbl">%</span>
-        <button class="hp-btn-rm" data-rm-id="${id}">✕</button>
+        <div class="hp-head">
+          <span class="hp-badge parede">🧱 ${paredeLabelCfg(estado.cfg)}</span>
+          <button class="hp-btn-rm" data-rm-id="${id}">✕</button>
+        </div>
+        <div class="hp-body">
+          <div class="hp-field-row">
+            <span class="hp-row-lbl">M²</span>
+            <div class="hp-row-val">
+              <input class="hp-inp" type="number" min="0" step="0.01" value="${estado.A || ''}" data-id="${id}" data-key="A">
+              <span class="hp-row-unit">m²</span>
+            </div>
+          </div>
+          <div class="hp-field-row">
+            <span class="hp-row-lbl" title="Margem extra em %" style="cursor:help;text-decoration:underline dotted">Margem</span>
+            <div class="hp-row-val">
+              <input class="hp-inp" type="number" min="0" step="1" value="${margemParede}" data-id="${id}" data-key="margem" placeholder="0">
+              <span class="hp-row-unit">%</span>
+            </div>
+          </div>
+        </div>
       `;
       lista.appendChild(item);
 
@@ -904,26 +945,45 @@ function renderizarPainel(painelRef) {
       const item = document.createElement('div');
       item.className = 'hp-item';
 
-      const inputsHTML = campos.map(({ key, label, title }, idx) => {
-        const val = estado[key] !== undefined ? estado[key] : (key === 'altPend' ? 0.6 : '');
-        const sep = idx > 0 ? '<div class="hp-sep"></div>' : '';
-        return `${sep}
-          <span class="hp-lbl"${title ? ` title="${title}" style="cursor:help;text-decoration:underline dotted"` : ''}>${label}</span>
-          <input class="hp-inp" type="number" min="0" step="0.01" value="${val}"
-            data-id="${id}" data-key="${key}"${title ? ` title="${title}"` : ''}>
-        `;
+      const temTabica   = tipoKit === 'aramado' || tipoKit === 'estruturado';
+      const tabicaAtual = estado.tabica || 'branca';
+      const margemKit   = estado.margem != null ? estado.margem : '';
+
+      // Extrai label e unidade de "Área (m²)" → ["Área", "m²"]
+      const splitLU = lbl => { const m = lbl.match(/^(.+?)\s*\(([^)]+)\)$/); return m ? [m[1].trim(), m[2]] : [lbl, '']; };
+
+      const campoRows = campos.map(f => {
+        const val = estado[f.key] !== undefined ? estado[f.key] : (f.key === 'altPend' ? 0.6 : f.key === 'cant' ? 3.15 : '');
+        const [lbl, unit] = splitLU(f.label);
+        const tabicaInline = (temTabica && f.key === 'P') ? `
+          <button class="hp-btn-tabica${tabicaAtual === 'branca'  ? ' ativo' : ''}" data-id="${id}" data-tabica="branca">B</button>
+          <button class="hp-btn-tabica${tabicaAtual === 'natural' ? ' ativo' : ''}" data-id="${id}" data-tabica="natural">N</button>
+        ` : '';
+        return `<div class="hp-field-row">
+          <span class="hp-row-lbl"${f.title ? ` title="${f.title}" style="cursor:help;text-decoration:underline dotted"` : ''}>${lbl}</span>
+          <div class="hp-row-val">
+            <input class="hp-inp" type="number" min="0" step="0.01" value="${val}" data-id="${id}" data-key="${f.key}"${f.title ? ` title="${f.title}"` : ''}>
+            ${unit ? `<span class="hp-row-unit">${unit}</span>` : ''}
+            ${tabicaInline}
+          </div>
+        </div>`;
       }).join('');
 
-      const margemKit = estado.margem != null ? estado.margem : '';
       item.innerHTML = `
-        <span class="hp-badge">${KIT_LABELS[tipoKit] || tipoKit}</span>
-        ${inputsHTML}
-        <div class="hp-sep"></div>
-        <span class="hp-lbl" title="Margem extra em % (ex: 5 = +5% em todos os itens)" style="cursor:help;text-decoration:underline dotted">Margem Material</span>
-        <input class="hp-inp" type="number" min="0" step="1" value="${margemKit}"
-          data-id="${id}" data-key="margem" style="width:46px" placeholder="0">
-        <span class="hp-lbl">%</span>
-        <button class="hp-btn-rm" data-rm-id="${id}">✕</button>
+        <div class="hp-head">
+          <span class="hp-badge">${KIT_LABELS[tipoKit] || tipoKit}</span>
+          <button class="hp-btn-rm" data-rm-id="${id}">✕</button>
+        </div>
+        <div class="hp-body">
+          ${campoRows}
+          <div class="hp-field-row">
+            <span class="hp-row-lbl" title="Margem extra em % (ex: 5 = +5%)" style="cursor:help;text-decoration:underline dotted">Margem</span>
+            <div class="hp-row-val">
+              <input class="hp-inp" type="number" min="0" step="1" value="${margemKit}" data-id="${id}" data-key="margem" placeholder="0">
+              <span class="hp-row-unit">%</span>
+            </div>
+          </div>
+        </div>
       `;
       lista.appendChild(item);
     }
@@ -1024,6 +1084,33 @@ function _bindPainelEventos(lista) {
       renderizarPainel();
     });
   }
+
+  // Toggle de tabica (branca / natural)
+  const COD_TABICA = { branca: '3006', natural: '3010' };
+  lista.querySelectorAll('.hp-btn-tabica').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      const id         = this.dataset.id;
+      const novaTabica = this.dataset.tabica;
+      const estado     = kitsAtivos.get(id);
+      if (!estado || estado.tabica === novaTabica) return;
+
+      const linhaTabica = estado.linhas.find(l => l.codigo === COD_TABICA.branca || l.codigo === COD_TABICA.natural);
+      if (linhaTabica) {
+        const novoCod  = COD_TABICA[novaTabica];
+        const formulas = FORMULAS_GESSO[estado.nomeKit] || {};
+        const fn       = formulas[novoCod];
+        const fator    = 1 + (num(estado.margem) / 100);
+        const qtdBruta = fn ? fn(num(estado.A), num(estado.P), 3.15, num(estado.altPend || 0.6)) * fator : 0;
+        const qtdFinal = Math.round(qtdBruta * 100) / 100;
+        await trocarProdutoNaLinha(linhaTabica.$linha, novoCod, qtdFinal, qtdBruta);
+        linhaTabica.codigo = novoCod;
+      }
+
+      estado.tabica = novaTabica;
+      recalcularTudo();
+      renderizarPainel();
+    });
+  });
 
   // Botões de adicionar kit normal
   lista.querySelectorAll('[data-add-kit]').forEach(btn => {
