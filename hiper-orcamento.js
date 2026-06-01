@@ -1603,7 +1603,7 @@ async function abrirOrcamento() {
   const opcoes = {
     parcelas: parcelasSelecionadas,
     incluirEntrega: false,
-    taxaEntrega: 30,
+    taxaEntrega: 50,
     numeroOrcamento,
   };
   const html = gerarHtmlOrcamento(dados, opcoes);
