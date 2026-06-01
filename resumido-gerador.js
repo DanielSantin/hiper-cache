@@ -566,8 +566,32 @@ function abrirOrcamentoResumido() {
   var kitsArrAgrupado = typeof resumido_agruparKitsArr === 'function'
     ? resumido_agruparKitsArr(kitsArr, custoPorKit)
     : kitsArr;
-  var somaC           = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
-  kitsInfo = kitsArrAgrupado.map(function(k) {
+  // Custo total por tipo (resultado do agrupamento)
+  var custoAgrupado = {};
+  kitsArrAgrupado.forEach(function(g) { custoAgrupado[g.nome] = g.custoRelativo; });
+  // Área e contagem por tipo, para dividir o custo proporcional entre kits individuais
+  var areaPorTipo  = {};
+  var countPorTipo = {};
+  kitsArr.forEach(function(k) {
+    var t = k.nome.replace(/_\d+$/, '');
+    areaPorTipo[t]  = (areaPorTipo[t]  || 0) + (k.A || 0);
+    countPorTipo[t] = (countPorTipo[t] || 0) + 1;
+  });
+  var somaC = kitsArrAgrupado.reduce(function(s, g) { return s + g.custoRelativo; }, 0) || 1;
+  console.log('[ResumidoDBG] kitsArr:', JSON.stringify(kitsArr.map(function(k){return{nome:k.nome,A:k.A};})));
+  console.log('[ResumidoDBG] custoPorKit:', JSON.stringify(custoPorKit));
+  console.log('[ResumidoDBG] custoAgrupado:', JSON.stringify(custoAgrupado));
+  console.log('[ResumidoDBG] areaPorTipo:', JSON.stringify(areaPorTipo));
+  console.log('[ResumidoDBG] somaC:', somaC, '| totalCartaoBase:', totalCartaoBase);
+  kitsInfo = kitsArr.map(function(k) {
+    var tipoBase   = k.nome.replace(/_\d+$/, '');
+    var custoGrupo = custoAgrupado[tipoBase] || custoAgrupado[k.nome] || 0;
+    var areaTotal  = areaPorTipo[tipoBase] || 0;
+    var propArea   = areaTotal > 0
+      ? (k.A || 0) / areaTotal
+      : 1 / (countPorTipo[tipoBase] || 1);
+    var custo = custoGrupo * propArea;
+    console.log('[ResumidoDBG] kit', k.nome, '| tipoBase:', tipoBase, '| custoGrupo:', custoGrupo, '| propArea:', propArea, '| custo:', custo);
     return {
       nome:          k.nome,
       nomeLabel:     typeof resumido_resolverNome === 'function'
@@ -578,8 +602,8 @@ function abrirOrcamentoResumido() {
       cant:          k.cant,
       grupos:        k.grupos || null,
       cfg:           k.cfg   || null,
-      custoRelativo: k.custoRelativo,
-      totalCartao:   (k.custoRelativo / somaC) * totalCartaoBase,
+      custoRelativo: custo,
+      totalCartao:   (custo / somaC) * totalCartaoBase,
       moBase:        typeof resumido_resolverMoBase === 'function'
                        ? resumido_resolverMoBase(k.nome, k.cfg)
                        : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
@@ -648,12 +672,28 @@ function abrirOrcamentoResumido() {
             cfg:    estado.cfg   || null,
           });
         });
-        var custoPorKit     = resumido_custoPorKit(kitsArr, dadosOrc.itens);
+        var custoPorKit = resumido_custoPorKit(kitsArr, dadosOrc.itens);
         var kitsArrAgrupado = typeof resumido_agruparKitsArr === 'function'
           ? resumido_agruparKitsArr(kitsArr, custoPorKit)
           : kitsArr;
-        var somaC = Object.values(custoPorKit).reduce(function(s, v) { return s + v; }, 0) || 1;
-        kitsInfo = kitsArrAgrupado.map(function(k) {
+        var custoAgrupado = {};
+        kitsArrAgrupado.forEach(function(g) { custoAgrupado[g.nome] = g.custoRelativo; });
+        var areaPorTipo  = {};
+        var countPorTipo = {};
+        kitsArr.forEach(function(k) {
+          var t = k.nome.replace(/_\d+$/, '');
+          areaPorTipo[t]  = (areaPorTipo[t]  || 0) + (k.A || 0);
+          countPorTipo[t] = (countPorTipo[t] || 0) + 1;
+        });
+        var somaC = kitsArrAgrupado.reduce(function(s, g) { return s + g.custoRelativo; }, 0) || 1;
+        kitsInfo = kitsArr.map(function(k) {
+          var tipoBase   = k.nome.replace(/_\d+$/, '');
+          var custoGrupo = custoAgrupado[tipoBase] || custoAgrupado[k.nome] || 0;
+          var areaTotal  = areaPorTipo[tipoBase] || 0;
+          var propArea   = areaTotal > 0
+            ? (k.A || 0) / areaTotal
+            : 1 / (countPorTipo[tipoBase] || 1);
+          var custo = custoGrupo * propArea;
           return {
             nome:          k.nome,
             nomeLabel:     typeof resumido_resolverNome === 'function'
@@ -664,8 +704,8 @@ function abrirOrcamentoResumido() {
             cant:          k.cant,
             grupos:        k.grupos || null,
             cfg:           k.cfg   || null,
-            custoRelativo: k.custoRelativo,
-            totalCartao:   (k.custoRelativo / somaC) * totalBase,
+            custoRelativo: custo,
+            totalCartao:   (custo / somaC) * totalBase,
             moBase:        typeof resumido_resolverMoBase === 'function'
                              ? resumido_resolverMoBase(k.nome, k.cfg)
                              : ((typeof RESUMIDO_MO_BASE !== 'undefined' ? RESUMIDO_MO_BASE[k.nome] : null) || 30),
