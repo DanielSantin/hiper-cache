@@ -318,7 +318,7 @@ function resumido_gerarHtml(payload, opcoes) {
     '<h4>\u2699\uFE0F Op\u00e7\u00f5es \u2014 <strong style="color:#1a5c1a">' + numeroOrcamento + '</strong> <span class="resumido-tag">RESUMIDO</span></h4>\n' +
     '<div class="prow">\n' +
     '<label><input type="checkbox" id="chkE" onchange="recalcTotais()"' + (frete > 0 ? ' checked' : '') + '> Entrega R$</label>\n' +
-    '<input type="number" id="iE" value="' + (frete > 0 ? frete : 30) + '" min="0" step="0.01" style="width:72px" oninput="recalcTotais()">\n' +
+    '<input type="number" id="iE" value="' + (frete > 0 ? frete : 50) + '" min="0" step="0.01" style="width:72px" oninput="recalcTotais()">\n' +
     '<span class="panel-sep">|</span>\n' +
     '<label style="font-weight:bold;color:#1a3a6a;white-space:nowrap">Vendedor:</label>\n' +
     '<input type="text" id="iVendedor" placeholder="ex: Daniel Santin" maxlength="80"\n' +
@@ -635,7 +635,7 @@ function abrirOrcamentoResumido() {
   var urlR  = URL.createObjectURL(blobR);
   window.open(urlR, '_blank');
   setTimeout(function() { URL.revokeObjectURL(urlR); }, 120000);
-  _baixarDetalhadoEmBackground(dadosOrc, { parcelas: 0, incluirEntrega: false, taxaEntrega: 30, numeroOrcamento: payload.numeroOrcamento });
+  _baixarDetalhadoEmBackground(dadosOrc, { parcelas: 0, incluirEntrega: false, taxaEntrega: 50, numeroOrcamento: payload.numeroOrcamento });
 }
 
 // ── Monkey-patch em gerarHtmlOrcamento ────────────────────────────────────────

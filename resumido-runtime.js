@@ -462,6 +462,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (vInp && !vInp.value) vInp.value = _VENDEDOR;
     onVendedor();
   }
+  var chkEl  = el('chkE');
+  var valCEl = el('valC');
+  if (chkEl && !chkEl.checked && valCEl && parseFloat(valCEl.value) < 500) {
+    chkEl.checked = true;
+    recalcTotais();
+  }
 });
 
 // ── Linhas personalizadas ─────────────────────────────────────────────────────

@@ -457,7 +457,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   <h4>⚙️ Opções — Orçamento <strong style="color:#1a5c1a">${numeroOrcamento}</strong></h4>
   <div class="prow">
     <label><input type="checkbox" id="chkE" onchange="recalc()"> Entrega R$</label>
-    <input type="number" id="iE" value="${frete0>0?frete0:30}" min="0" step="0.01" style="width:72px" oninput="recalc()">
+    <input type="number" id="iE" value="${frete0>0?frete0:50}" min="0" step="0.01" style="width:72px" oninput="recalc()">
     <span class="panel-sep">|</span>
     <label>% imposto <input type="number" id="iImp" value="10.70" min="0" max="100" step="0.01" style="width:68px" oninput="recalc()"></label>
     <span class="panel-sep">|</span>
@@ -1074,6 +1074,7 @@ function aplicarDescMax(){
 }
 
 if(${frete0>0?'true':'false'}) el('chkE').checked=true;
+else if(parseFloat(el('valC').value||'0') < 500) el('chkE').checked=true;
 recalc();
 atualizarChkDesc();
 
