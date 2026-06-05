@@ -535,13 +535,12 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     </div>
   </div>
   <div class="trow">
-    <div class="tlabel" id="lblC">Valor Total – Parcelado em até ${parcelas}x no Cartão de Crédito</div>
+    <div class="tlabel" id="lblC">${parcelas === 0 ? '' : parcelas === 1 ? 'Valor Total – À vista no Cartão de Crédito' : `Valor Total – Parcelado em até ${parcelas}x no Cartão de Crédito`}</div>
     <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold;justify-content:flex-end;padding-left:20px;padding-right:20px">
       <select id="select-parcelas-input" style="...">
+        <option value="0" ${parcelas === 0 ? 'selected' : ''}>No Cartão</option>
         ${[1,2,3,4,5,6,7,8,9,10,11,12].map(n =>
-            `<option value="${n}" ${n === parcelas ? 'selected' : ''}>
-                CARTÃO ${n}x
-            </option>`
+            `<option value="${n}" ${n === parcelas ? 'selected' : ''}>CARTÃO ${n}x</option>`
         ).join('')}
       </select>
     </div>
@@ -703,7 +702,7 @@ function _dbSalvar() {
     const total    = totalC > 0 ? totalC : totalV;
 
     const selParcelas = el('select-parcelas-input');
-    const parcelas    = selParcelas ? (parseInt(selParcelas.value, 10) || 1) : 1;
+    const parcelas    = selParcelas ? parseInt(selParcelas.value, 10) : 0;
 
     const clienteInp  = el('iCliente');
     const cliente     = clienteInp ? clienteInp.value.trim() : '';
@@ -1109,10 +1108,14 @@ document.addEventListener('keydown', function(e) {
 });
 
 el('select-parcelas-input').addEventListener('change', function() {
-  const n = parseInt(this.value, 10) || 1;
-  el('lblC').textContent = n <= 1
-    ? 'Valor Total – À vista no Cartão de Crédito'
-    : 'Valor Total – Parcelado em até ' + n + 'x no Cartão de Crédito';
+  const n = parseInt(this.value, 10);
+  if (n === 0 || isNaN(n)) {
+    el('lblC').textContent = '';
+  } else if (n === 1) {
+    el('lblC').textContent = 'Valor Total – À vista no Cartão de Crédito';
+  } else {
+    el('lblC').textContent = 'Valor Total – Parcelado em até ' + n + 'x no Cartão de Crédito';
+  }
 });
 el('select-parcelas-input').dispatchEvent(new Event('change'));
 
@@ -1582,7 +1585,6 @@ function calcularParcelasPadrao(total) {
 
 async function abrirOrcamento() {
   const dados = extrairDadosPedido();
-  const parcelasSelecionadas = calcularParcelasPadrao(dados.total || dados.itens.reduce((s, it) => s + it.qtd * it.vlUnit, 0));
 
   if (dados.itens.length === 0) {
     alert('Nenhum item encontrado. Adicione pelo menos um produto.');
@@ -1601,7 +1603,7 @@ async function abrirOrcamento() {
   window.__hiperPedidoAberto = numeroOrcamento;
 
   const opcoes = {
-    parcelas: parcelasSelecionadas,
+    parcelas: 0,
     incluirEntrega: false,
     taxaEntrega: 50,
     numeroOrcamento,

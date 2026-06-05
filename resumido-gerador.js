@@ -86,6 +86,7 @@ function _resumido_css() {
     '.hd-cell:hover .hd-btn{opacity:0.45}',
     '.hd-oculto .hd-btn{opacity:1!important;color:#c00}',
     '.hd-oculto input{color:transparent!important}',
+    '.hd-oculto .hd-val{color:transparent!important}',
     '.col-mo-base{background:#fff8f0}',
     '.mo-inp{width:62px;border:none;background:transparent;text-align:right;font-size:9pt;font-family:Arial;font-weight:bold;color:#7a3a00;cursor:text}',
     '.mo-inp:focus{outline:1px solid #e8510a;background:#fff3e0;border-radius:2px;padding:0 2px}',
@@ -106,6 +107,7 @@ function _resumido_css() {
     '  .tbl-mo-header{display:none!important}',
     '  .hd-btn{display:none!important}',
     '  .hd-oculto input{color:transparent!important}',
+  '  .hd-oculto .hd-val{color:transparent!important}',
     '  .trow .ttag select{-webkit-appearance:none!important;appearance:none!important}',
     '  .rodape-pix-wrap select{-webkit-appearance:none!important;appearance:none!important}'
     + '}'
@@ -280,7 +282,7 @@ function resumido_gerarHtml(payload, opcoes) {
   var clienteNome     = payload.clienteNome || '';
   var vendedorTexto   = payload.vendedorTexto || '';
 
-  var parcelas = (opcoes && opcoes.parcelas) || 3;
+  var parcelas = (opcoes != null && opcoes.parcelas != null) ? opcoes.parcelas : 0;
   var frete    = (opcoes && opcoes.frete)    || 0;
 
   var IMG_TEL   = (typeof window !== 'undefined' && window.__hiperIconeTel)   || '';
@@ -300,9 +302,10 @@ function resumido_gerarHtml(payload, opcoes) {
       'O texto usa a variante mista. Confirme antes de enviar ao cliente.</div>'
     : '';
 
-  var selectOptions = [1,2,3,4,5,6,7,8,9,10,11,12].map(function(n) {
-    return '<option value="' + n + '"' + (n === parcelas ? ' selected' : '') + '>CART\u00c3O ' + n + 'x</option>';
-  }).join('');
+  var selectOptions = '<option value="0"' + (parcelas === 0 ? ' selected' : '') + '>No Cart\u00c3o</option>' +
+    [1,2,3,4,5,6,7,8,9,10,11,12].map(function(n) {
+      return '<option value="' + n + '"' + (n === parcelas ? ' selected' : '') + '>CART\u00c3O ' + n + 'x</option>';
+    }).join('');
 
   var clienteDiv  = '<div class="sub-cliente" id="subCliente"' + (clienteNome   ? '' : ' style="display:none"') + '>' + (clienteNome  ? 'Cliente: '  + clienteNome   : '') + '</div>';
   var vendedorDiv = '<div class="sub" id="subVendedor"'        + (vendedorTexto ? '' : ' style="display:none"') + '>' + (vendedorTexto ? 'Vendedor: ' + vendedorTexto : '') + '</div>';
@@ -418,7 +421,7 @@ function resumido_gerarHtml(payload, opcoes) {
     '<div class="tval" id="valEntrega">R$ ' + fmtN(frete) + '</div>\n' +
     '</div>\n' +
     '<div class="trow">\n' +
-    '<div class="tlabel" id="lblParc">Valor Total \u2013 Parcelado em at\u00e9 ' + parcelas + 'x no Cart\u00e3o de Cr\u00e9dito</div>\n' +
+    '<div class="tlabel" id="lblParc">' + (parcelas === 0 ? '' : parcelas === 1 ? 'Valor Total \u2013 \u00c0 vista no Cart\u00e3o de Cr\u00e9dito' : 'Valor Total \u2013 Parcelado em at\u00e9 ' + parcelas + 'x no Cart\u00e3o de Cr\u00e9dito') + '</div>\n' +
     '<div class="ttag cartao"><select id="selParcelas" onchange="recalcTotais()" style="border:none;background:transparent;font-size:9pt;font-weight:bold;font-family:Arial;cursor:pointer;text-align:center;width:100%;-webkit-appearance:auto">' +
     selectOptions + '</select></div>\n' +
     '<div class="tval"><span class="val-prefix">R$</span>\n' +
@@ -627,12 +630,12 @@ function abrirOrcamentoResumido() {
     clienteNome: (clienteEl && clienteEl.value.trim()) || '',
     vendedorTexto: vendedorTextoFinal,
   };
-  var htmlResumido = resumido_gerarHtml(payload, { parcelas: 3, frete: 0 });
+  var htmlResumido = resumido_gerarHtml(payload, { parcelas: 0, frete: 0 });
   var blobR = new Blob([htmlResumido], { type: 'text/html;charset=utf-8' });
   var urlR  = URL.createObjectURL(blobR);
   window.open(urlR, '_blank');
   setTimeout(function() { URL.revokeObjectURL(urlR); }, 120000);
-  _baixarDetalhadoEmBackground(dadosOrc, { parcelas: 3, incluirEntrega: false, taxaEntrega: 30, numeroOrcamento: payload.numeroOrcamento });
+  _baixarDetalhadoEmBackground(dadosOrc, { parcelas: 0, incluirEntrega: false, taxaEntrega: 30, numeroOrcamento: payload.numeroOrcamento });
 }
 
 // ── Monkey-patch em gerarHtmlOrcamento ────────────────────────────────────────
@@ -730,7 +733,7 @@ function abrirOrcamentoResumido() {
 
       // Gera o HTML completo do resumido em memória e serializa com JSON.stringify.
       // JSON.stringify produz uma string JS segura — sem risco de </script> no output.
-      var htmlResumido  = resumido_gerarHtml(payloadR, { parcelas: 3, frete: 0 });
+      var htmlResumido  = resumido_gerarHtml(payloadR, { parcelas: 0, frete: 0 });
       var htmlResumidoJ = JSON.stringify(htmlResumido).replace(/<\/script>/gi, '<\\/script>');
 
       var SI = '<' + 'script';

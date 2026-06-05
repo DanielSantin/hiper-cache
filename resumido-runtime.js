@@ -61,9 +61,16 @@ function getUnid(i) {
 }
 
 function atualizarLblParc() {
-  var p = parseInt((el('selParcelas') && el('selParcelas').value) || '3');
+  var sel = el('selParcelas');
+  var p = sel ? parseInt(sel.value, 10) : 0;
   if (el('lblParc')) {
-    el('lblParc').textContent = 'Valor Total \u2013 Parcelado em at\u00e9 ' + p + 'x no Cart\u00e3o de Cr\u00e9dito';
+    if (p === 0 || isNaN(p)) {
+      el('lblParc').textContent = '';
+    } else if (p === 1) {
+      el('lblParc').textContent = 'Valor Total \u2013 \u00c0 vista no Cart\u00e3o de Cr\u00e9dito';
+    } else {
+      el('lblParc').textContent = 'Valor Total \u2013 Parcelado em at\u00e9 ' + p + 'x no Cart\u00e3o de Cr\u00e9dito';
+    }
   }
 }
 
@@ -293,10 +300,15 @@ function aplicarMO() {
           tr2.className = 'row-mo';
           tr2.innerHTML =
             '<td class="td-num" style="text-align:center;border:1px solid #000;padding:3px 4px;font-size:8pt;vertical-align:middle">' + (i + 1) + '</td>' +
-            '<td style="text-align:center;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
-              '<span style="font-size:8.5pt;font-weight:bold">' + fN(area) + '</span>' +
+            '<td class="hd-cell" id="hd-mo-area-' + i + '" style="text-align:center;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
+              '<span class="hd-val" style="font-size:8.5pt;font-weight:bold">' + fN(area) + '</span>' +
+              '<button class="hd-btn no-print" onclick="toggleHide(\\'mo-area-' + i + '\\')" title="Ocultar/mostrar valor">◎</button>' +
             '</td>' +
-            '<td style="text-align:center;border:1px solid #000;padding:2px 3px;font-size:8.5pt;font-weight:bold;vertical-align:middle">' + unid + '</td>' +
+            '<td style="text-align:center;border:1px solid #000;padding:2px 3px;font-size:8.5pt;font-weight:bold;vertical-align:middle">' +
+              '<span contenteditable="true" style="outline:none;cursor:text;border-radius:2px;padding:1px 2px;display:inline-block" ' +
+                'onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
+                'onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">' + unid + '</span>' +
+            '</td>' +
             '<td style="text-align:left;border:1px solid #000;padding:3px 5px;vertical-align:top">' +
               '<div contenteditable="true" style="font-weight:bold;font-size:8.5pt;margin-bottom:2px;outline:none;cursor:text;border-radius:2px;padding:1px 2px" ' +
                 'onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
@@ -305,19 +317,19 @@ function aplicarMO() {
                 'onfocus="this.style.background=\\'#fffde7\\';this.style.outline=\\'1px solid #f0c040\\'" ' +
                 'onblur="this.style.background=\\'\\';this.style.outline=\\'none\\'">' + moDescTexto + '</div>' +
               '<div style="margin-top:3px;font-size:8pt;color:#555;display:flex;gap:10px;flex-wrap:wrap">' +
-                '<span>Cart\u00e3o: <strong id="mo-lm2c-' + i + '">R$ ' + fN(venda) + '/' + unid + '</strong></span>' +
-                '<span>\u00c0 vista: <strong id="mo-lm2v-' + i + '">R$ ' + fN(venda * _PIX) + '/' + unid + '</strong></span>' +
               '</div>' +
             '</td>' +
-            '<td style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
+            '<td class="hd-cell" id="hd-mo-m2c-' + i + '" style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
               '<input id="mo-m2c-' + i + '" type="number" min="0" step="0.01" value="' + venda.toFixed(2) + '"' +
               ' style="width:64px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
               ' oninput="onMoM2(' + i + ')">' +
+              '<button class="hd-btn no-print" onclick="toggleHide(\\'mo-m2c-' + i + '\\')" title="Ocultar/mostrar valor">◎</button>' +
             '</td>' +
-            '<td style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
+            '<td class="hd-cell" id="hd-mo-totc-' + i + '" style="text-align:right;border:1px solid #000;padding:2px 3px;vertical-align:middle">' +
               '<input id="mo-totc-' + i + '" type="number" min="0" step="0.01" value="' + tot.toFixed(2) + '"' +
               ' style="width:68px;border:none;background:transparent;text-align:right;font-size:8.5pt;font-family:Arial;font-weight:bold;color:#000"' +
               ' oninput="onMoTotc(' + i + ')">' +
+              '<button class="hd-btn no-print" onclick="toggleHide(\\'mo-totc-' + i + '\\')" title="Ocultar/mostrar valor">◎</button>' +
             '</td>' +
             '<td class="col-mo-base no-print" style="border:1px solid #000;padding:2px 5px;text-align:center">' +
               '<span style="font-size:8pt;color:#aaa">\u2014</span>' +
