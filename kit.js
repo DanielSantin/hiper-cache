@@ -799,6 +799,13 @@ function _injetarCssPainel() {
     #hiper-painel-kits .hp-btn-montante.ativo{background:#2c5fa0;border-color:#2c5fa0;color:#fff;font-weight:bold}
     #hiper-painel-kits .hp-porta-grupo{padding-bottom:5px;border-bottom:1px dashed #f5c880;margin-bottom:4px}
     #hiper-painel-kits .hp-porta-grupo:last-of-type{border-bottom:none;padding-bottom:0;margin-bottom:0}
+    #hiper-painel-kits .hp-item.memoria{border-color:#b0bac8;background:#f0f2f5}
+    #hiper-painel-kits .hp-item.memoria .hp-head{background:#dce0e8;border-bottom-color:#b0bac8}
+    #hiper-painel-kits .hp-item.memoria .hp-badge{color:#3a4556}
+    #hiper-painel-kits .hp-item.memoria .hp-inp{background:#e2e5ea!important;color:#333!important;cursor:not-allowed;border-color:#c8d0da}
+    #hiper-painel-kits .hp-item.memoria .hp-btn-tabica,
+    #hiper-painel-kits .hp-item.memoria .hp-btn-montante{opacity:.3;pointer-events:none}
+    #hiper-painel-kits .hp-memoria-tag{font-size:10px;background:#c4ccd8;color:#3a4556;border-radius:3px;padding:1px 5px;font-weight:normal;margin-left:5px;vertical-align:middle}
   `;
   document.head.appendChild(s);
 }
@@ -869,7 +876,7 @@ function renderizarPainel(painelRef) {
 
     if (estado.tipo === 'portas') {
       const portaCard = document.createElement('div');
-      portaCard.className = 'hp-item porta';
+      portaCard.className = 'hp-item porta' + (estado._restaurado ? ' memoria' : '');
 
       const gruposHTML = (estado.grupos || []).map(grupo => {
         const areaGrupo = (num(grupo.qtd) * (num(grupo.larg) || 0.70) * (num(grupo.alt) || 2.10)).toFixed(2);
@@ -907,23 +914,27 @@ function renderizarPainel(painelRef) {
 
       portaCard.innerHTML = `
         <div class="hp-head">
-          <span class="hp-badge porta">🚪 Fechamento de Porta</span>
+          <span class="hp-badge porta">🚪 Fechamento de Porta${estado._restaurado ? ' <span class="hp-memoria-tag">memória</span>' : ''}</span>
+          ${estado._restaurado ? '<button class="hp-btn-rm" data-rm-id="portas">✕</button>' : ''}
         </div>
         <div class="hp-body">
           ${gruposHTML}
-          <button class="hp-btn-add-grupo" id="hp-btn-add-porta">+ outro tamanho</button>
+          ${estado._restaurado ? '' : '<button class="hp-btn-add-grupo" id="hp-btn-add-porta">+ outro tamanho</button>'}
         </div>
       `;
+      if (estado._restaurado) {
+        portaCard.querySelectorAll('.hp-inp, [data-rm-gid]').forEach(el => { el.disabled = true; });
+      }
       lista.appendChild(portaCard);
 
     } else if (estado.tipo === 'parede') {
       const item = document.createElement('div');
-      item.className = 'hp-item parede';
+      item.className = 'hp-item parede' + (estado._restaurado ? ' memoria' : '');
       const margemParede  = estado.margem   != null ? estado.margem   : '';
       const montanteAtual = estado.montante || '70';
       item.innerHTML = `
         <div class="hp-head">
-          <span class="hp-badge parede">🧱 ${paredeLabelCfg(estado.cfg)}</span>
+          <span class="hp-badge parede">🧱 ${paredeLabelCfg(estado.cfg)}${estado._restaurado ? ' <span class="hp-memoria-tag">memória</span>' : ''}</span>
           <button class="hp-btn-rm" data-rm-id="${id}">✕</button>
         </div>
         <div class="hp-body">
@@ -951,14 +962,18 @@ function renderizarPainel(painelRef) {
           </div>
         </div>
       `;
+      if (estado._restaurado) {
+        item.querySelectorAll('.hp-inp, .hp-btn-montante').forEach(el => { el.disabled = true; });
+      }
       lista.appendChild(item);
 
     } else {
       // Kit normal (aramado, estruturado, cortineiro, e suas instâncias múltiplas)
       const tipoKit = estado.nomeKit ?? id;
       const campos = KIT_INPUTS[tipoKit] || [{ key: 'A', label: 'Área (m²)' }];
+      const ehMemoria = !!estado._restaurado;
       const item = document.createElement('div');
-      item.className = 'hp-item';
+      item.className = 'hp-item' + (ehMemoria ? ' memoria' : '');
 
       const temTabica   = tipoKit === 'aramado' || tipoKit === 'estruturado';
       const tabicaAtual = estado.tabica || 'branca';
@@ -986,7 +1001,7 @@ function renderizarPainel(painelRef) {
 
       item.innerHTML = `
         <div class="hp-head">
-          <span class="hp-badge">${KIT_LABELS[tipoKit] || tipoKit}</span>
+          <span class="hp-badge">${KIT_LABELS[tipoKit] || tipoKit}${ehMemoria ? ' <span class="hp-memoria-tag">memória</span>' : ''}</span>
           <button class="hp-btn-rm" data-rm-id="${id}">✕</button>
         </div>
         <div class="hp-body">
@@ -1000,6 +1015,9 @@ function renderizarPainel(painelRef) {
           </div>
         </div>
       `;
+      if (ehMemoria) {
+        item.querySelectorAll('.hp-inp, .hp-btn-tabica').forEach(el => { el.disabled = true; });
+      }
       lista.appendChild(item);
     }
   });

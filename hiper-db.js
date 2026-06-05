@@ -361,7 +361,7 @@
       if ($qtd.length) {
         const pronto = await _aguardarHabilitado($qtd);
         if (pronto) {
-          const qtdAlvo = it.quantidade ?? it.qtd;  // aceita formato novo e legado
+          const qtdAlvo     = it.quantidade ?? it.qtd;  // aceita formato novo e legado
           const nativeInput = $qtd[0];
 
           function _aplicarQtd() {
@@ -377,39 +377,25 @@
             nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
           }
 
-          await _aguardarEstabilizarQtd(nativeInput);
+          // Aguarda o preço aparecer — sinal de que o Hiper terminou de inicializar
+          // a linha (incluindo o reset da quantidade para 1). Só então aplicamos.
+          await _aguardarPrecoCarregado($linha);
           _aplicarQtd();
-          console.info(`[HiperDB] Quantidade aplicada: ${qtdAlvo}`);
+          console.info(`[HiperDB] ✅ Quantidade aplicada: ${qtdAlvo}`);
 
-          // Guarda o valor que aplicamos para detectar sobrescrita posterior do Hiper
+          // Safety net curto: se o Angular ainda alterar algo nos próximos 800ms,
+          // re-aplica uma última vez (caso raro em conexões extremamente lentas).
           const valorAplicado = nativeInput.value;
           let _reaplicas = 0;
-
-          // Observa mudanças no atributo value (Angular pode alterar assim)
           const _obs = new MutationObserver(() => {
-            if (nativeInput.value !== valorAplicado && _reaplicas < 3) {
+            if (nativeInput.value !== valorAplicado && _reaplicas < 2) {
               _reaplicas++;
-              console.info(`[HiperDB] Quantidade sobrescrita pelo Hiper (tentativa ${_reaplicas}) — re-aplicando ${qtdAlvo}`);
+              console.info(`[HiperDB] ⚠️ Qty alterada após preço (tentativa ${_reaplicas}) — re-aplicando ${qtdAlvo}`);
               _aplicarQtd();
             }
           });
           _obs.observe(nativeInput, { attributes: true, attributeFilter: ['value'] });
-
-          // Também vigia via evento input, caso Angular altere via setter sem tocar no atributo
-          const _onExternalInput = () => {
-            if (nativeInput.value !== valorAplicado && _reaplicas < 3) {
-              _reaplicas++;
-              console.info(`[HiperDB] Quantidade alterada via input (tentativa ${_reaplicas}) — re-aplicando ${qtdAlvo}`);
-              _aplicarQtd();
-            }
-          };
-          nativeInput.addEventListener('input', _onExternalInput);
-
-          // Para de vigiar após 2s — o Hiper já terminou nesse ponto
-          setTimeout(() => {
-            _obs.disconnect();
-            nativeInput.removeEventListener('input', _onExternalInput);
-          }, 2000);
+          setTimeout(() => _obs.disconnect(), 800);
         }
       }
     }
@@ -427,28 +413,22 @@
     return false;
   }
 
-  // Aguarda o Hiper terminar de preencher o campo de quantidade com o valor padrão (1).
-  // Retorna quando o valor parar de mudar por ao menos `estavel` ms, ou quando
-  // o timeout for atingido. Isso garante que só aplicamos o valor correto DEPOIS
-  // que o Hiper terminou de inicializar o campo — evitando a race condition em
-  // conexões lentas onde o Hiper sobrescreve nossa quantidade com 1.
-  async function _aguardarEstabilizarQtd(nativeInput, timeout = 5000, estavel = 300) {
+  // Aguarda o campo de preço unitário da linha ser preenchido com valor > 0.
+  // O preço carrega de forma assíncrona no Hiper — quando ele aparece significa
+  // que o Hiper terminou de inicializar a linha (inclusive o reset da qtd para 1).
+  // Usar o preço como gatilho é mais robusto que observar a quantidade, pois
+  // em conexões lentas o reset para 1 acontece junto com o carregamento do preço.
+  async function _aguardarPrecoCarregado($linha, timeout = 10000) {
     const inicio = Date.now();
-    let ultimoValor = nativeInput.value;
-    let igualDesde  = Date.now();
-
     while (Date.now() - inicio < timeout) {
-      await delay(50);
-      const atual = nativeInput.value;
-      if (atual !== ultimoValor) {
-        ultimoValor = atual;
-        igualDesde  = Date.now();
-      } else if (Date.now() - igualDesde >= estavel) {
-        // Valor estável por `estavel` ms — Hiper terminou de preencher
-        return;
-      }
+      const val   = $linha.find('.input-valor-unitario-produto').first().val() || '';
+      const preco = typeof parseMoedaOrc === 'function'
+        ? parseMoedaOrc(val)
+        : parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
+      if (preco > 0) return true;
+      await delay(100);
     }
-    // Timeout: prossegue mesmo assim
+    return false; // timeout — prossegue mesmo assim
   }
 
   // ── Restaurar kits (sem recalcular — usa quantidades do banco) ────────────────
@@ -479,11 +459,12 @@
         const linhasDoKit = _resolverLinhasPorCodigos(codigos);
 
         kitsAtivos.set(kit.id, {
-          tipo:   'parede',
-          cfg:    { ...kit.cfg },
-          A:      kit.A      || 0,
-          margem: kit.margem || 0,
-          linhas: linhasDoKit,
+          tipo:        'parede',
+          cfg:         { ...kit.cfg },
+          A:           kit.A      || 0,
+          margem:      kit.margem || 0,
+          _restaurado: true,
+          linhas:      linhasDoKit,
         });
 
       } else if (kit.tipo === 'portas') {
@@ -491,11 +472,12 @@
         const linhasDoKit = _resolverLinhasPorCodigos(codigos);
 
         kitsAtivos.set(kit.id, {
-          tipo:   'portas',
-          nomeKit: 'portas',
-          A:      0,
-          grupos: (kit.grupos || []).map(g => ({ ...g })),
-          linhas: linhasDoKit,
+          tipo:        'portas',
+          nomeKit:     'portas',
+          A:           0,
+          grupos:      (kit.grupos || []).map(g => ({ ...g })),
+          _restaurado: true,
+          linhas:      linhasDoKit,
         });
 
       } else {
@@ -504,13 +486,14 @@
         const linhasDoKit = _resolverLinhasPorCodigos(codigos);
 
         const estadoKit = {
-          tipo:    'kit',
-          nomeKit: kit.nomeKit,
-          A:       kit.A       || 0,
-          P:       kit.P       || 0,
-          altPend: kit.altPend ?? 0.6,
-          margem:  kit.margem  || 0,
-          linhas:  linhasDoKit,
+          tipo:        'kit',
+          nomeKit:     kit.nomeKit,
+          A:           kit.A       || 0,
+          P:           kit.P       || 0,
+          altPend:     kit.altPend ?? 0.6,
+          margem:      kit.margem  || 0,
+          _restaurado: true,
+          linhas:      linhasDoKit,
         };
         // cant é exclusivo do cortineiro (sanca)
         if (kit.nomeKit === 'cortineiro') estadoKit.cant = kit.cant ?? 3.15;
