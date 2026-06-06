@@ -36,7 +36,7 @@
   const TIMEOUT_MS = 8_000;
 
   // Regex que reconhece endpoints relevantes do Hiper
-  // Captura grupo 1 = pedidoId, grupo 2 = cod de situacao (atualizar-situacao/{cod})
+  // Captur2a grupo 1 = pedidoId, grupo 2 = cod de situacao (atualizar-situacao/{cod})
   const RE_PEDIDO_VENDA = /api\.hiper\.com\.br\/pedido-venda(?:\/(\d+)(?:\/atualizar-situacao\/(\d+))?)?(?:[?#]|$)/i;
 
   // Nomes legíveis para logging
@@ -45,6 +45,9 @@
 
   // Estado local removido — o backend é a única fonte da verdade.
   // A extensão envia apenas o que viu; o servidor determina a transição.
+
+  // Cache de filial por pedidoId — necessário para atualizar-situacao (204, sem body)
+  const _filialCache = new Map();
 
   // ── Utilitários ───────────────────────────────────────────────────────────────
 
@@ -147,12 +150,23 @@
   async function _processarTransicao(pedidoId, _ignorado, estadoNovo, itens, meta) {
     _log(`Evento pedido ${pedidoId}: → ${estadoNovo}`);
 
+    // Atualiza cache de filial sempre que o responseBody trouxer esses campos
+    if (meta.responseBody?.idFilial) {
+      _filialCache.set(pedidoId, {
+        idFilial:   meta.responseBody.idFilial,
+        nomeFilial: meta.responseBody.nomeFilial || '',
+      });
+    }
+    const filialCached = _filialCache.get(pedidoId) || {};
+
     const evento = {
       pedido_id:        String(pedidoId),
       codigo_pedido:    meta.codigoPedidoVenda || '',
       estado_novo:      estadoNovo,
       itens,
       valor_total:      meta.responseBody?.valorTotalPedido || 0,
+      id_filial:        meta.responseBody?.idFilial   ?? filialCached.idFilial   ?? null,
+      nome_filial:      meta.responseBody?.nomeFilial ?? filialCached.nomeFilial ?? null,
       timestamp:        new Date().toISOString(),
       origem_url:       location.href,
       payload_request:  meta.requestBody  || null,
