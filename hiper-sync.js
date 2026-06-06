@@ -150,21 +150,21 @@
   async function _processarTransicao(pedidoId, _ignorado, estadoNovo, itens, meta) {
     _log(`Evento pedido ${pedidoId}: → ${estadoNovo}`);
 
-    // Atualiza cache de filial sempre que o responseBody trouxer esses campos
-    if (meta.responseBody?.idFilial) {
-      _filialCache.set(pedidoId, {
-        idFilial:   meta.responseBody.idFilial,
-        nomeFilial: meta.responseBody.nomeFilial || '',
-      });
-    }
-    const filialCached = _filialCache.get(pedidoId) || {};
+    // Atualiza cache mesclando — nunca sobrescreve um campo bom com vazio
+    const _existing = _filialCache.get(pedidoId) || {};
+    const _merged   = { ..._existing };
+    if (meta.responseBody?.idFilial)              _merged.idFilial   = meta.responseBody.idFilial;
+    if (meta.responseBody?.nomeFilial)            _merged.nomeFilial = meta.responseBody.nomeFilial;
+    if ((meta.responseBody?.valorTotalPedido) > 0) _merged.valorTotal = meta.responseBody.valorTotalPedido;
+    _filialCache.set(pedidoId, _merged);
+    const filialCached = _merged;
 
     const evento = {
       pedido_id:        String(pedidoId),
       codigo_pedido:    meta.codigoPedidoVenda || '',
       estado_novo:      estadoNovo,
       itens,
-      valor_total:      meta.responseBody?.valorTotalPedido || 0,
+      valor_total:      meta.responseBody?.valorTotalPedido || filialCached.valorTotal || 0,
       id_filial:        meta.responseBody?.idFilial   ?? filialCached.idFilial   ?? null,
       nome_filial:      meta.responseBody?.nomeFilial ?? filialCached.nomeFilial ?? null,
       timestamp:        new Date().toISOString(),
