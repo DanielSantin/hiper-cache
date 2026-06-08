@@ -302,7 +302,7 @@ function resumido_gerarHtml(payload, opcoes) {
       'O texto usa a variante mista. Confirme antes de enviar ao cliente.</div>'
     : '';
 
-  var selectOptions = '<option value="0"' + (parcelas === 0 ? ' selected' : '') + '>No Cart\u00c3o</option>' +
+  var selectOptions = '<option value="0"' + (parcelas === 0 ? ' selected' : '') + '>No Cart\u00e3o</option>' +
     [1,2,3,4,5,6,7,8,9,10,11,12].map(function(n) {
       return '<option value="' + n + '"' + (n === parcelas ? ' selected' : '') + '>CART\u00c3O ' + n + 'x</option>';
     }).join('');
