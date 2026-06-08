@@ -383,19 +383,19 @@
           _aplicarQtd();
           console.info(`[HiperDB] ✅ Quantidade aplicada: ${qtdAlvo}`);
 
-          // Safety net curto: se o Angular ainda alterar algo nos próximos 800ms,
-          // re-aplica uma última vez (caso raro em conexões extremamente lentas).
-          const valorAplicado = nativeInput.value;
+          // Polling substitui MutationObserver: Angular altera a propriedade .value
+          // diretamente (não via setAttribute), então o observer nunca dispararia.
+          // Verifica por 2s e re-aplica até 3× se a qtd for sobrescrita.
           let _reaplicas = 0;
-          const _obs = new MutationObserver(() => {
-            if (nativeInput.value !== valorAplicado && _reaplicas < 2) {
+          const _poll = setInterval(() => {
+            const atual = parseFloat((nativeInput.value || '').replace(',', '.')) || 0;
+            if (Math.abs(atual - qtdAlvo) > 0.01 && _reaplicas < 3) {
               _reaplicas++;
-              console.info(`[HiperDB] ⚠️ Qty alterada após preço (tentativa ${_reaplicas}) — re-aplicando ${qtdAlvo}`);
+              console.info(`[HiperDB] ⚠️ Qty sobrescrita (${_reaplicas}) — re-aplicando ${qtdAlvo}`);
               _aplicarQtd();
             }
-          });
-          _obs.observe(nativeInput, { attributes: true, attributeFilter: ['value'] });
-          setTimeout(() => _obs.disconnect(), 800);
+          }, 200);
+          setTimeout(() => clearInterval(_poll), 10000);
         }
       }
     }
