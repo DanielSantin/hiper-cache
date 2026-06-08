@@ -1074,7 +1074,7 @@ function aplicarDescMax(){
 }
 
 if(${frete0>0?'true':'false'}) el('chkE').checked=true;
-else if(parseFloat(el('valC').value||'0') < 500) el('chkE').checked=true;
+else if(${subtotalItens} < 500) el('chkE').checked=true;
 recalc();
 atualizarChkDesc();
 
