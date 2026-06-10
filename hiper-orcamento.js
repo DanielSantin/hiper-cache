@@ -321,7 +321,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .trow .ttag.pix{background:transparent}
 .trow .ttag.cartao{background:transparent}
 .trow .ttag select{border:none;background:transparent;font-size:9pt;font-weight:bold;font-family:Arial;cursor:pointer;text-align:right;width:auto;-webkit-appearance:auto}
-.trow .tval{border-left:1px solid #000;display:flex;align-items:center;justify-content:flex-end;padding:2px 8px;font-weight:bold;font-size:10pt;}
+.trow .tval{border-left:1px solid #000;display:flex;align-items:center;justify-content:flex-end;padding:2px 8px;font-weight:bold;font-size:10pt;position:relative}
 
 .val-inp{width:100%;border:none;background:transparent;text-align:right;font-weight:bold;font-size:10pt;font-family:Arial;padding:0;color:#000;cursor:text}
 .val-inp:focus{outline:1px solid #1a73e8;background:#e8f0fe;border-radius:2px;padding:0 2px}
@@ -407,6 +407,20 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .btn-sync-custos.sync-spin{border-color:#90caf9;color:#1565c0}
 .btn-sync-custos.sync-ok{border-color:#6dbf8a;color:#1a7a1a}
 .btn-sync-custos.sync-err{border-color:#e57373;color:#c00}
+.row-locked>.tval{background:#e8f4ff}
+.row-locked .val-inp{color:#1565c0;cursor:default}
+.lock-btn{background:none;border:none;padding:2px;cursor:pointer;display:inline-flex;align-items:center;outline:none;position:absolute;left:calc(100% + 4px);right:auto;top:50%;transform:translateY(-50%);border-radius:3px;transition:opacity .15s}
+.lock-btn .svg-open{display:inline-flex;opacity:0.18;transition:opacity .15s}
+.lock-btn .svg-lock{display:none}
+.lock-btn:hover .svg-open{opacity:0.55}
+.row-locked .lock-btn .svg-open{display:none}
+.row-locked .lock-btn .svg-lock{display:inline-flex}
+.lock-btn-inline{background:none;border:none;padding:1px 3px;cursor:pointer;display:inline-flex;align-items:center;outline:none;border-radius:3px;vertical-align:middle}
+.lock-btn-inline .svg-open{opacity:0.25;transition:opacity .15s}
+.lock-btn-inline .svg-lock{display:none}
+.lock-btn-inline:hover .svg-open{opacity:0.6}
+.lock-pix-ativo .svg-open{display:none}
+.lock-pix-ativo .svg-lock{display:inline-flex}
 .btn-edit-custos{padding:6px 14px;border:1.5px solid #e0c040;border-radius:6px;font-size:12px;cursor:pointer;color:#7a6000;font-weight:bold;background:transparent;transition:background 0.15s;white-space:nowrap}
 .btn-edit-custos:hover{background:#fffbe6}
 .btn-saida{padding:6px 14px;border:1.5px solid #e57373;border-radius:6px;font-size:12px;cursor:pointer;color:#c0392b;font-weight:bold;background:transparent;transition:background 0.15s;white-space:nowrap}
@@ -435,6 +449,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
   .tbl{width:100%}
   .trow .ttag select{-webkit-appearance:none!important;appearance:none!important}
   .rodape-pix-wrap select{-webkit-appearance:none!important;appearance:none!important}
+  .row-locked>.tval{background:transparent!important}
+  .row-locked .val-inp{color:#000!important}
 }
 </style>
 </head>
@@ -460,6 +476,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <input type="number" id="iE" value="${frete0>0?frete0:50}" min="0" step="0.01" style="width:72px" oninput="recalc()">
     <span class="panel-sep">|</span>
     <label>% imposto <input type="number" id="iImp" value="10.70" min="0" max="100" step="0.01" style="width:68px" oninput="recalc()"></label>
+    <span class="panel-sep">|</span>
+    <label>% desc. PIX <input type="number" id="iPixDesc" value="4.77" min="0" max="100" step="0.01" style="width:62px" oninput="onPixDesc()" onblur="onBlurPixDesc()"></label><button class="lock-btn-inline" id="btnLockPix" onclick="setLock('desconto')" title="Travar % desc. PIX"><svg class="svg-open" xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="8" rx="1.5" fill="#555"/><path d="M3 6V4a3 3 0 0 1 6 0" stroke="#555" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="6" cy="10" r="1.2" fill="#eee"/></svg><svg class="svg-lock" xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="8" rx="1.5" fill="#1565c0"/><path d="M3 6V4a3 3 0 0 1 6 0v2" stroke="#1565c0" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="6" cy="10" r="1.2" fill="white"/></svg></button>
     <span class="panel-sep">|</span>
     <label style="font-weight:bold;color:#1a3a6a;white-space:nowrap">Vendedor:</label>
     <input type="text" id="iVendedor" placeholder="ex: Daniel Santin" maxlength="80"
@@ -534,7 +552,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
       <span class="val-print" id="iDescC-print">0,00</span>
     </div>
   </div>
-  <div class="trow">
+  <div class="trow" id="rowValC">
     <div class="tlabel" id="lblC">${parcelas === 0 ? '' : parcelas === 1 ? 'Valor Total – À vista no Cartão de Crédito' : `Valor Total – Parcelado em até ${parcelas}x no Cartão de Crédito`}</div>
     <div class="ttag cartao" style="background:transparent;font-size:9pt;font-weight:bold;justify-content:flex-end;padding-left:20px;padding-right:20px">
       <select id="select-parcelas-input" style="...">
@@ -550,9 +568,13 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
             oninput="onValC()" onblur="onBlurTotal(this,'C')"
             style="width:75px">
       <span class="val-print" id="valC-print">0,00</span>
+      <button class="lock-btn no-print" onclick="setLock('aprazo')" title="Travar a prazo">
+        <svg class="svg-open" xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="8" rx="1.5" fill="#555"/><path d="M3 6V4a3 3 0 0 1 6 0" stroke="#555" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="6" cy="10" r="1.2" fill="#eee"/></svg>
+        <svg class="svg-lock" xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="8" rx="1.5" fill="#1565c0"/><path d="M3 6V4a3 3 0 0 1 6 0v2" stroke="#1565c0" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="6" cy="10" r="1.2" fill="white"/></svg>
+      </button>
     </div>
   </div>
-  <div class="trow">
+  <div class="trow" id="rowValV">
     <div class="tlabel">Valor Total – À vista (PIX)</div>
     <div class="ttag pix" style="justify-content:flex-end;padding-left:20px;padding-right:20px;white-space:nowrap">À VISTA pix</div>
     <div class="tval">
@@ -561,6 +583,10 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
             oninput="onValV()" onblur="onBlurTotal(this,'V')"
             style="width:75px">
       <span class="val-print" id="valV-print">0,00</span>
+      <button class="lock-btn no-print" onclick="setLock('avista')" title="Travar à vista">
+        <svg class="svg-open" xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="8" rx="1.5" fill="#555"/><path d="M3 6V4a3 3 0 0 1 6 0" stroke="#555" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="6" cy="10" r="1.2" fill="#eee"/></svg>
+        <svg class="svg-lock" xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="8" rx="1.5" fill="#1565c0"/><path d="M3 6V4a3 3 0 0 1 6 0v2" stroke="#1565c0" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="6" cy="10" r="1.2" fill="white"/></svg>
+      </button>
     </div>
   </div>
   <div id="rowE" class="trow" style="display:none">
@@ -641,7 +667,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 </div><!-- .page -->
 
 <script>
-const PIX       = 0.9523;
+let PIX         = 0.9523;
 const BASE_ITEM = ${subtotalItens.toFixed(4)};
 const ITENS     = ${itensJSON};
 const CUSTOS_IN = ${custosJSON};
@@ -650,7 +676,8 @@ const NUM_ORC   = ${numOrcJSON};
 // Soma dos vlUnitBruto × qtd: total cartão exato do sistema (sem arredondamento PIX)
 const TOTAL_SISTEMA_CARTAO = ${totalSistemaCartao.toFixed(4)};
 let _descMaxCartao = NaN;
-let _pdfBaixado = false;
+let _pdfBaixado    = false;
+let _lock          = null; // null | 'desconto' | 'avista' | 'aprazo'
 
 // ── Salva no banco via opener (hiper-db.js) ───────────────────────────────────
 function _parseTdMoeda(txt) {
@@ -682,7 +709,7 @@ function _dbSalvar() {
         if (!subtotal && ref.subtotal) subtotal = ref.subtotal;
       }
 
-      const qtd = parseFloat(tds[1].textContent.replace(',', '.')) || 0;
+      const qtd = parseMoedaOrc(tds[1].textContent);
       if (!subtotal && vlUnit && qtd) subtotal = qtd * vlUnit;
 
       itens.push({
@@ -732,6 +759,14 @@ window.addEventListener('beforeunload', function(e) {
 console.log('[HiperOrc] Orçamento', NUM_ORC, '| Custos carregados:', JSON.stringify(custos));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+function parseMoedaOrc(str) {
+  if (!str) return 0;
+  const s = str.replace(/[^0-9,.]/g, '');
+  const commas = (s.match(/,/g)||[]).length, dots = (s.match(/[.]/g)||[]).length;
+  if (commas===1 && dots===0) return parseFloat(s.replace(',','.')) || 0;
+  if (dots===1 && commas===0) return parseFloat(s) || 0;
+  return parseFloat(s.replace(/[.]/g,'').replace(',','.')) || 0;
+}
 function fmt(n){
   if(isNaN(n)||n==null) return '—';
   return 'R$ ' + fmtNum(n);
@@ -860,7 +895,7 @@ function getBase(){
   document.querySelectorAll('.tbl tbody tr:not(.vazia)').forEach(function(tr) {
     const tds = tr.querySelectorAll('td');
     if (tds.length < 5) return;
-    const qtd = parseFloat(tds[1].textContent.replace(',','.')) || 0;
+    const qtd = parseMoedaOrc(tds[1].textContent);
     const inp = tds[4].querySelector('.inp-preco');
     const vl  = inp ? (parseFloat(inp.value) || 0) : _parseTdMoeda(tds[4].textContent);
     soma += qtd * vl;
@@ -872,7 +907,7 @@ function getBase(){
 function onPrecoCustom(inp) {
   const tr  = inp.closest('tr');
   const tds = tr.querySelectorAll('td');
-  const qtd = parseFloat(tds[1].textContent.replace(',','.')) || 0;
+  const qtd = parseMoedaOrc(tds[1].textContent);
   const vl  = parseFloat(inp.value) || 0;
   const vt  = qtd * vl;
   tds[5].textContent = 'R$ ' + vt.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -889,12 +924,30 @@ function onPrecoBlur(inp) {
 
 // ── Recalcula totais ───────────────────────────────────────────────────────────
 function recalc(){
-  const base   = getBase();
-  const descC  = num('iDescC');
-  const totalV = base - descC;
-  const totalC = totalV / PIX;
-  silent('valC', totalC.toFixed(2));
-  silent('valV', totalV.toFixed(2));
+  const base = getBase();
+  let totalV, totalC, descC;
+
+  if (_lock === 'avista') {
+    totalV = Math.max(0, num('valV'));
+    totalC = totalV / PIX;
+    descC  = Math.max(0, base - totalV);
+    silent('valC',   totalC);
+    silent('iDescC', descC);
+  } else if (_lock === 'aprazo') {
+    totalC = Math.max(0, num('valC'));
+    totalV = totalC * PIX;
+    descC  = Math.max(0, base - totalV);
+    silent('valV',   totalV);
+    silent('iDescC', descC);
+  } else {
+    // sem lock ou lock desconto: descC é a âncora
+    descC  = num('iDescC');
+    totalV = base - descC;
+    totalC = totalV / PIX;
+    silent('valC', totalC);
+    silent('valV', totalV);
+  }
+
   syncPrint('iDescC', descC);
   syncPrint('valC',   totalC);
   syncPrint('valV',   totalV);
@@ -909,32 +962,156 @@ function recalc(){
 }
 
 function onValC(){
+  if (_lock === 'aprazo') return;
   const base   = getBase();
   const totalC = num('valC');
+
+  if (_lock === 'avista') {
+    // valV travado → PIX% ajusta para manter a vista fixo
+    const totalV = num('valV');
+    if (totalC > 0) {
+      PIX = totalV / totalC;
+      const inp = el('iPixDesc');
+      if (inp && document.activeElement !== inp) inp.value = ((1 - PIX) * 100).toFixed(2);
+    }
+    syncPrint('valC', totalC);
+    recalcMargem(totalC, totalV);
+    return;
+  }
+
   const totalV = totalC * PIX;
-  silent('iDescC', Math.max(0, base - totalV).toFixed(2));
-  silent('valV',   totalV.toFixed(2));
+  silent('iDescC', Math.max(0, base - totalV));
+  silent('valV',   totalV);
   syncPrint('iDescC', Math.max(0, base - totalV));
-  syncPrint('valC',   totalC);
-  syncPrint('valV',   totalV);
+  syncPrint('valC', totalC);
+  syncPrint('valV', totalV);
   recalcMargem(totalC, totalV);
   atualizarChkDesc();
 }
 
 function onValV(){
+  if (_lock === 'avista') return;
   const base   = getBase();
   const totalV = num('valV');
+
+  if (_lock === 'aprazo') {
+    // valC travado → PIX% ajusta, desconto recalcula pela base
+    const totalC = num('valC');
+    if (totalC > 0) {
+      PIX = totalV / totalC;
+      const inp = el('iPixDesc');
+      if (inp && document.activeElement !== inp) inp.value = ((1 - PIX) * 100).toFixed(2);
+    }
+    const descC = Math.max(0, base - totalV);
+    silent('iDescC', descC);
+    syncPrint('iDescC', descC);
+    syncPrint('valC',   num('valC'));
+    syncPrint('valV',   totalV);
+    recalcMargem(num('valC'), totalV);
+    atualizarChkDesc();
+    return;
+  }
+
   const totalC = totalV / PIX;
-  silent('iDescC', Math.max(0, base - totalV).toFixed(2));
-  silent('valC',   totalC.toFixed(2));
+  silent('iDescC', Math.max(0, base - totalV));
+  silent('valC',   totalC);
   syncPrint('iDescC', Math.max(0, base - totalV));
-  syncPrint('valC',   totalC);
-  syncPrint('valV',   totalV);
+  syncPrint('valC', totalC);
+  syncPrint('valV', totalV);
   recalcMargem(totalC, totalV);
   atualizarChkDesc();
 }
 
-function onDescC(){ recalc(); atualizarChkDesc(); }
+function onDescC(){
+  if (_lock === 'avista') return;
+  if (_lock === 'aprazo') {
+    // valC travado → desconto mudou → valV = base - desconto; PIX% ajusta
+    const base   = getBase();
+    const descC  = num('iDescC');
+    const totalV = Math.max(0, base - descC);
+    const totalC = num('valC');
+    if (totalC > 0) {
+      PIX = totalV / totalC;
+      const inp = el('iPixDesc');
+      if (inp && document.activeElement !== inp) inp.value = ((1 - PIX) * 100).toFixed(2);
+    }
+    silent('valV', totalV);
+    syncPrint('iDescC', descC);
+    syncPrint('valC',   totalC);
+    syncPrint('valV',   totalV);
+    recalcMargem(totalC, totalV);
+    atualizarChkDesc();
+    return;
+  }
+  recalc();
+  atualizarChkDesc();
+}
+
+function onPixDesc() {
+  const pct = num('iPixDesc');
+  PIX = 1 - pct / 100;
+  recalc();
+}
+
+function onBlurPixDesc() {
+  if (_lock !== 'aprazo') return;
+  const totalC = num('valC');
+  const totalV = totalC * PIX;
+  const base   = getBase();
+  if (totalV <= base + 0.005) return;
+
+  const ratio    = totalV / base;
+  const pct      = ((ratio - 1) * 100).toFixed(1);
+  const fmtR     = (v) => v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const confirma = confirm(
+    'O valor à vista calculado (R$ ' + fmtR(totalV) + ' pix / R$ ' + fmtR(totalC) + ' cartão) ' +
+    'é ' + pct + '% maior que o total atual.\\n\\n' +
+    'Redistribuir o aumento proporcionalmente entre todos os produtos?'
+  );
+  if (!confirma) return;
+
+  document.querySelectorAll('.tbl tbody tr:not(.vazia)').forEach(function(tr) {
+    const tds = tr.querySelectorAll('td');
+    if (tds.length < 5) return;
+    const inp = tds[4].querySelector('.inp-preco');
+    if (!inp) return;
+    inp.value = (Math.round(parseFloat(inp.value) * ratio * 100) / 100).toFixed(2);
+    onPrecoCustom(inp);
+  });
+  const iDescEl = el('iDescC');
+  if (iDescEl) { iDescEl.value = '0.00'; syncPrint('iDescC', 0); }
+  recalc();
+  atualizarChkDesc();
+}
+
+function setLock(tipo) {
+  _lock = tipo; // sempre uma opção ativa, sem desselecionar
+
+  // remove estilos de travamento anteriores
+  ['iPixDesc', 'valC', 'valV'].forEach(function(id) {
+    const inp = el(id);
+    if (inp) { inp.readOnly = false; inp.classList.remove('lock-field'); }
+  });
+  ['rowValC', 'rowValV'].forEach(function(id) {
+    const row = el(id);
+    if (row) row.classList.remove('row-locked');
+  });
+  const btnPix = el('btnLockPix');
+  if (btnPix) btnPix.classList.remove('lock-pix-ativo');
+
+  // aplica estilos do novo travamento
+  const lockMap = { desconto: ['iPixDesc', null], avista: ['valV', 'rowValV'], aprazo: ['valC', 'rowValC'] };
+  if (_lock && lockMap[_lock]) {
+    const inpId = lockMap[_lock][0], rowId = lockMap[_lock][1];
+    const inp = el(inpId);
+    if (inp) { inp.readOnly = true; inp.classList.add('lock-field'); }
+    if (rowId) { const row = el(rowId); if (row) row.classList.add('row-locked'); }
+    if (_lock === 'desconto' && btnPix) btnPix.classList.add('lock-pix-ativo');
+  }
+
+  recalc();
+  atualizarChkDesc();
+}
 
 // ── Redistribuição de preços ───────────────────────────────────────────────────
 function onBlurTotal(inp, tipo) {
@@ -1101,6 +1278,8 @@ atualizarChkDesc();
     descNecessario.toFixed(2), '→ totalC =', (BASE_ITEM - descNecessario) / PIX);
 })();
 
+setLock('desconto'); // pré-seleciona travamento de desconto
+
 // ── Enter desfoca o campo ativo ───────────────────────────────────────────────
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && document.activeElement && document.activeElement.tagName !== 'TEXTAREA') {
@@ -1266,6 +1445,9 @@ function congelarInputsNoClone(clone) {
         // Oculta o header "edição" (badge) no clone
         // label fica fora do box e já tem classe no-print — removido do clone antes desta função
     }
+    // Remove estilo de travamento para não aparecer no PDF/imagem
+    clone.querySelectorAll('.row-locked').forEach(function(r) { r.classList.remove('row-locked'); });
+    clone.querySelectorAll('.lock-field').forEach(function(i)  { i.classList.remove('lock-field'); });
 }
 
 // ── Copiar imagem ─────────────────────────────────────────────────────────────
