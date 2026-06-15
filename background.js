@@ -24,6 +24,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // mantém sendResponse ativo até o callback assíncrono responder
 });
 
+// ── Suprime window.print() na página de impressão quando tag_view=1 ──────────
+// chrome.scripting.executeScript com world:'MAIN' bypassa o CSP da página.
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'loading') return;
+  const url = changeInfo.url || tab.url || '';
+  if (!url.includes('/Imprimir') || !url.includes('tag_view=1')) return;
+
+  chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    injectImmediately: true,
+    func: () => { window.print = function () {}; },
+  }).catch(() => {});
+});
+
 // ── Interceptação de rede: atualizar-situacao ─────────────────────────────────
 // O Hiper salva referências ao fetch nativo antes dos scripts de extensão
 // carregarem. Para o endpoint atualizar-situacao (PUT sem body), usamos
