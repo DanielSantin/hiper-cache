@@ -1,4 +1,4 @@
-// ═══════════════════════════════════════════════════════════════════════════════
+﻿// ═══════════════════════════════════════════════════════════════════════════════
 // hiper-sync.js — Sincronização de pedidos-venda Hiper ↔ banco externo
 // ═══════════════════════════════════════════════════════════════════════════════
 //
@@ -32,7 +32,7 @@
 
   // ── Configuração ─────────────────────────────────────────────────────────────
 
-  const API_BASE   = 'https://db.superaserver.com/api';
+  const API_BASE   = 'https://tag.santin.tec.br/api';
   const TIMEOUT_MS = 8_000;
 
   // Regex que reconhece endpoints relevantes do Hiper

@@ -1,4 +1,4 @@
-// ═══════════════════════════════════════════════════════════════════════════════
+﻿// ═══════════════════════════════════════════════════════════════════════════════
 // hiper-orcamento.js — Geração do HTML de orçamento
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -244,7 +244,7 @@ function gerarHtmlOrcamento(dados, opcoes) {
     const c   = key != null ? custosMap[key] : undefined;
     const txt = c != null ? parseFloat(c).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—';
     const cls = c != null ? 'custo-val ok' : 'custo-val vazio';
-    const url = key != null ? 'https://db.superaserver.com/custos/?q=' + encodeURIComponent(key) : 'https://db.superaserver.com/custos/';
+    const url = key != null ? 'https://tag.santin.tec.br/custos/?q=' + encodeURIComponent(key) : 'https://tag.santin.tec.br/custos/';
     return '<div class="custo-row">' +
       '<a class="custo-link" href="' + url + '" target="_blank" title="Editar custo do produto">' +
         '<span class="' + cls + '">' + txt + '</span>' +
@@ -658,9 +658,9 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 
 <div class="zona-saida no-print">
   <button class="btn-sync-custos" id="btnSyncCustos" onclick="syncCustos()">↻ Sincronizar custos</button>
-  <button class="btn-edit-custos" onclick="window.open('https://db.superaserver.com/custos/', '_blank')">✏️ Editar custos</button>
+  <button class="btn-edit-custos" onclick="window.open('https://tag.santin.tec.br/custos/', '_blank')">✏️ Editar custos</button>
   <span class="zona-saida-sep"></span>
-  <a class="btn-mov" href="https://db.superaserver.com/estoque/#movimentos" target="_blank">📋 Ver movimentações</a>
+  <a class="btn-mov" href="https://tag.santin.tec.br/estoque/#movimentos" target="_blank">📋 Ver movimentações</a>
   <button class="btn-saida" id="btnSaida" onclick="removerDoEstoque()">🏗️ Remover do estoque</button>
 </div>
 

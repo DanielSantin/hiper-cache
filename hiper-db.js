@@ -1,4 +1,4 @@
-// ═══════════════════════════════════════════════════════════════════════════════
+﻿// ═══════════════════════════════════════════════════════════════════════════════
 // hiper-db.js — Integração com banco de dados local (Oracle Cloud)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -12,7 +12,7 @@
     if (cod) window.__hiperRecuperarCodigo = cod.trim().toUpperCase();
   })();
 
-  const API_BASE   = 'https://db.superaserver.com/api';
+  const API_BASE   = 'https://tag.santin.tec.br/api';
   const TIMEOUT_MS = 4000;
 
   // ── Utilitários ──────────────────────────────────────────────────────────────
@@ -778,7 +778,7 @@
         style="padding:3px 10px;background:#f57f17;color:#fff;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;">
         Carregar
       </button>
-      <a id="hiper-rec-lista" href="https://db.superaserver.com/" target="_blank"
+      <a id="hiper-rec-lista" href="https://tag.santin.tec.br/" target="_blank"
         style="padding:3px 10px;background:#1e4a7a;color:#93c5fd;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;text-decoration:none;white-space:nowrap;">
         📋 Lista de orçamentos
       </a>

@@ -1,4 +1,4 @@
-(function() {
+﻿(function() {
     // DEBUG: mude para false para silenciar, ou ative pelo console com:
     //   localStorage.setItem('hc_debug', '1')  →  ativa
     //   localStorage.removeItem('hc_debug')     →  desativa (recarregue a página)
@@ -29,7 +29,7 @@
     const MIN_ITEMS_THRESHOLD = 100;
 
     // ── Sincronização de custos com servidor ──────────────────────────────────
-    const SYNC_API_BASE       = 'https://db.superaserver.com/api';
+    const SYNC_API_BASE       = 'https://tag.santin.tec.br/api';
     const SYNC_INTERVAL_MS    = 60 * 60 * 1000;  // 1 hora (intervalo normal)
     const SYNC_RETRY_STEPS_MS = [5 * 60 * 1000, 15 * 60 * 1000]; // backoff offline
     const CUSTOS_HASH_KEY     = 'hc:custos_hash';  // chave no chrome.storage
