@@ -54,6 +54,11 @@ function _resumido_css() {
     '.rodape .entrega{color:#c00;font-weight:bold;font-size:8pt;margin-top:2px}',
     '.rodape-pix-wrap{display:flex;align-items:center;flex-wrap:wrap}',
     '.rodape-pix-wrap select{border:none;background:transparent;font-size:8pt;font-family:Arial;font-weight:bold;cursor:pointer;-webkit-appearance:auto;padding:0}',
+    '.obs-label{font-size:11px;font-weight:bold;color:#1a3a6a;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;display:block}',
+    '.obs-box{border:1px solid #000;padding:6px 8px;margin-bottom:6px;background:transparent}',
+    '.obs-textarea{width:100%;min-height:36px;max-height:240px;resize:vertical;border:none;outline:none;padding:0;font-size:10pt;font-family:Arial,sans-serif;color:#222;background:transparent;line-height:1.5;overflow-y:auto;box-sizing:border-box;display:block}',
+    '.obs-textarea::placeholder{color:#aaa;font-style:italic}',
+    '.obs-print{display:none;font-size:9.5pt;color:#333;line-height:1.6;white-space:pre-wrap;word-break:break-word}',
     '.panel{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;background:#f4f8ff;border:1px solid #b3d4f5}',
     '.panel h4{font-size:12px;font-weight:bold;color:#1a3a6a;margin-bottom:8px}',
     '.panel-mo{background:#fff8f0;border-color:#f5c080}',
@@ -109,7 +114,12 @@ function _resumido_css() {
     '  .hd-oculto input{color:transparent!important}',
   '  .hd-oculto .hd-val{color:transparent!important}',
     '  .trow .ttag select{-webkit-appearance:none!important;appearance:none!important}',
-    '  .rodape-pix-wrap select{-webkit-appearance:none!important;appearance:none!important}'
+    '  .rodape-pix-wrap select{-webkit-appearance:none!important;appearance:none!important}',
+    '  .obs-label{display:none!important}',
+    '  .obs-textarea{display:none!important}',
+    '  .obs-print{display:block!important}',
+    '  .obs-box{border-color:#000;background:transparent!important}',
+    '  .obs-box.obs-vazia{display:none!important}'
     + '}'
     ,
   ].join('\n');
@@ -228,7 +238,7 @@ function _calcVendaMo(custoBase, impostoNF, lucroMeta) {
 // ── Monta o bloco <script> embutido no HTML gerado ────────────────────────────
 // Todos os dados são serializados via JSON.stringify — sem escaping manual.
 // O runtime é concatenado como texto puro (já lido pelo loader).
-function _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedorTexto) {
+function _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedorTexto, obsTexto) {
     console.log('[debug] RESUMIDO_RUNTIME_SRC length:', typeof RESUMIDO_RUNTIME_SRC, 
     typeof RESUMIDO_RUNTIME_SRC === 'string' ? RESUMIDO_RUNTIME_SRC.length : 0);
 
@@ -249,6 +259,7 @@ function _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedor
     'var _pdfOK     = false;',
     'var _CLIENTE   = ' + JSON.stringify(clienteNome   || '') + ';',
     'var _VENDEDOR  = ' + JSON.stringify(vendedorTexto || '') + ';',
+    'var _OBS       = ' + JSON.stringify(obsTexto      || '') + ';',
     '// MO config (editável no painel)',
     'var _MO_IMPOSTO = 13.53;  // % NF serviço',
     'var _MO_LUCRO   = 30;     // % lucro desejado',
@@ -281,6 +292,7 @@ function resumido_gerarHtml(payload, opcoes) {
   var dataHoje        = payload.dataHoje;
   var clienteNome     = payload.clienteNome || '';
   var vendedorTexto   = payload.vendedorTexto || '';
+  var obsTexto        = payload.obsTexto || '';
 
   var parcelas = (opcoes != null && opcoes.parcelas != null) ? opcoes.parcelas : 0;
   var frete    = (opcoes && opcoes.frete)    || 0;
@@ -294,7 +306,7 @@ function resumido_gerarHtml(payload, opcoes) {
   var totalC = totalV / PIX;             // cartão = à vista / 0.9523 (~5% a mais)
 
   var corpoTabela = _resumido_linhasTabela(kitsInfo, totalV, varianteTabica);
-  var scriptTag   = _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedorTexto);
+  var scriptTag   = _resumido_montarScript(kitsInfo, numeroOrcamento, clienteNome, vendedorTexto, obsTexto);
 
   var avisoHtml = avisoMisto
     ? '<div id="avisoMisto" style="background:#fff3cd;border:1px solid #e0c040;border-radius:4px;padding:7px 12px;margin-bottom:8px;font-size:10pt" class="no-print">' +
@@ -392,6 +404,14 @@ function resumido_gerarHtml(payload, opcoes) {
     panelEntrega +
     panelMO +
     avisoHtml + '\n' +
+
+    '<span class="obs-label no-print">📝 Observações</span>\n' +
+    '<div class="obs-box obs-vazia" id="obsBox">\n' +
+    '  <textarea class="obs-textarea" id="obsTexto" rows="2"\n' +
+    '    placeholder="Ex: Produto sob consulta, prazo de entrega previsto para 5 dias úteis…"\n' +
+    '    oninput="onObs()"></textarea>\n' +
+    '  <div class="obs-print" id="obsPrint"></div>\n' +
+    '</div>\n' +
 
     '<div class="header">\n' +
     '<div class="header-logo"><div class="tag-txt">TAG</div><div class="orc-num">' + numeroOrcamento + '</div></div>\n' +
@@ -615,6 +635,7 @@ function abrirOrcamentoResumido() {
   } // fim else (semKits)
   var clienteEl  = document.getElementById('iCliente');
   var vendedorEl = document.getElementById('iVendedor');
+  var obsEl      = document.getElementById('obsTexto');
   var _vend = window.__hiperVendedor || {};
   // Prioriza o campo iVendedor digitado na aba do orçamento;
   // cai para __hiperVendedor (storage) caso o campo não exista ou esteja vazio.
@@ -629,6 +650,7 @@ function abrirOrcamentoResumido() {
     dataHoje: new Date().toLocaleDateString('pt-BR'),
     clienteNome: (clienteEl && clienteEl.value.trim()) || '',
     vendedorTexto: vendedorTextoFinal,
+    obsTexto: (obsEl && obsEl.value.trim()) || '',
   };
   var htmlResumido = resumido_gerarHtml(payload, { parcelas: 0, frete: 0 });
   var blobR = new Blob([htmlResumido], { type: 'text/html;charset=utf-8' });
@@ -717,6 +739,7 @@ function abrirOrcamentoResumido() {
       }
       var clienteEl  = document.getElementById('iCliente');
       var vendedorEl = document.getElementById('iVendedor');
+      var obsElPatch = document.getElementById('obsTexto');
       var _vend = window.__hiperVendedor || {};
       var vendedorTextoFinal = (vendedorEl && vendedorEl.value.trim())
         ? vendedorEl.value.trim()
@@ -729,6 +752,7 @@ function abrirOrcamentoResumido() {
         dataHoje: new Date().toLocaleDateString('pt-BR'),
         clienteNome: (clienteEl && clienteEl.value.trim()) || '',
         vendedorTexto: vendedorTextoFinal,
+        obsTexto: (obsElPatch && obsElPatch.value.trim()) || '',
       };
 
       // Gera o HTML completo do resumido em memória e serializa com JSON.stringify.
@@ -743,14 +767,17 @@ function abrirOrcamentoResumido() {
         '(function() {\n' +
         '  var _HTML = ' + htmlResumidoJ + ';\n' +
         '  window.__gerarResumidoDaAba = function() {\n' +
-        '    // Relê cliente e vendedor da aba do orçamento no momento do clique\n' +
+        '    // Relê cliente, vendedor e obs da aba do orçamento no momento do clique\n' +
         '    var cEl = document.getElementById("iCliente");\n' +
         '    var vEl = document.getElementById("iVendedor");\n' +
+        '    var oEl = document.getElementById("obsTexto");\n' +
         '    var cliente  = cEl ? cEl.value.trim()  : "";\n' +
         '    var vendedor = vEl ? vEl.value.trim()  : "";\n' +
+        '    var obs      = oEl ? oEl.value.trim()  : "";\n' +
         '    var html = _HTML\n' +
         '      .replace(/(var _CLIENTE\\s*=\\s*)"[^"]*"/, "$1" + JSON.stringify(cliente))\n' +
-        '      .replace(/(var _VENDEDOR\\s*=\\s*)"[^"]*"/, "$1" + JSON.stringify(vendedor));\n' +
+        '      .replace(/(var _VENDEDOR\\s*=\\s*)"[^"]*"/, "$1" + JSON.stringify(vendedor))\n' +
+        '      .replace(/(var _OBS\\s*=\\s*)"[^"]*"/, "$1" + JSON.stringify(obs));\n' +
         '    var blob = new Blob([html], { type: "text/html;charset=utf-8" });\n' +
         '    var url  = URL.createObjectURL(blob);\n' +
         '    window.open(url, "_blank");\n' +

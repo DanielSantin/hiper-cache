@@ -553,6 +553,30 @@ function onCustomM2(inp) {
   atualizarTotaisGlobaisComMo();
 }
 
+// ── Observações ──────────────────────────────────────────────────────────────
+function obsAutoResize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
+}
+
+function onObs() {
+  var ta  = el('obsTexto');
+  var pre = el('obsPrint');
+  var box = el('obsBox');
+  if (!ta || !pre) return;
+  pre.textContent = ta.value;
+  obsAutoResize(ta);
+  if (box) box.classList.toggle('obs-vazia', !ta.value.trim());
+}
+
+// Inicializa o campo de obs com o valor herdado do orçamento (_OBS)
+(function initObs() {
+  var ta = el('obsTexto');
+  if (!ta) return;
+  if (typeof _OBS !== 'undefined' && _OBS) ta.value = _OBS;
+  if (ta.value.trim()) onObs();
+})();
+
 // ── Formatação de números para captura (PDF / Copiar) ─────────────────────────
 // Substitui todos os <input type="number"> visíveis por <span> formatado,
 // retornando uma função de restauração.
@@ -633,6 +657,21 @@ async function copiarImagem() {
   clone.style.transformOrigin = 'unset';  
   clone.style.padding = '0';
   clone.querySelectorAll('.no-print').forEach(function(e) { e.remove(); });
+  // Congela campo de obs: copia valor do textarea vivo, exibe texto estático
+  var _obsOrig = el('obsTexto');
+  var _taCl    = clone.querySelector('#obsTexto');
+  var _preCl   = clone.querySelector('#obsPrint');
+  var _boxCl   = clone.querySelector('#obsBox');
+  if (_obsOrig && _taCl && _preCl) {
+    var _obsVal = _obsOrig.value.trim();
+    if (_obsVal) {
+      _preCl.textContent   = _obsVal;
+      _preCl.style.display = 'block';
+    } else if (_boxCl) {
+      _boxCl.style.display = 'none';
+    }
+    _taCl.style.display = 'none';
+  }
   congelarSelectEmClone(clone);
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
@@ -705,6 +744,21 @@ async function baixarPdf() {
   var clone = page.cloneNode(true);
   clone.style.cssText = 'width:100%;max-width:none;padding:0;margin:0';
   clone.querySelectorAll('.no-print').forEach(function(e) { e.remove(); });
+  // Congela campo de obs: copia valor do textarea vivo, exibe texto estático
+  var _obsOrigPdf = el('obsTexto');
+  var _taClPdf    = clone.querySelector('#obsTexto');
+  var _preClPdf   = clone.querySelector('#obsPrint');
+  var _boxClPdf   = clone.querySelector('#obsBox');
+  if (_obsOrigPdf && _taClPdf && _preClPdf) {
+    var _obsValPdf = _obsOrigPdf.value.trim();
+    if (_obsValPdf) {
+      _preClPdf.textContent   = _obsValPdf;
+      _preClPdf.style.display = 'block';
+    } else if (_boxClPdf) {
+      _boxClPdf.style.display = 'none';
+    }
+    _taClPdf.style.display = 'none';
+  }
   congelarSelectEmClone(clone);
   wrapper.appendChild(clone);
   document.body.appendChild(wrapper);
