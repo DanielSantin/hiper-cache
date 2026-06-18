@@ -32,7 +32,7 @@
 
   // ── Configuração ─────────────────────────────────────────────────────────────
 
-  const API_BASE   = 'https://tag.santin.tec.br/api';
+  const API_BASE   = 'https://sistema.santin.tec.br/api';
   const TIMEOUT_MS = 8_000;
 
   // Regex que reconhece endpoints relevantes do Hiper
