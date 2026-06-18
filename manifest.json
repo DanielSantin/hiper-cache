@@ -41,6 +41,7 @@
         "hiper-db.js",
         "kit.js",
         "hiper-mov-widget.js",
+        "hiper-mov-lista.js",
         "resumido-dados.js",
         "resumido-runtime.js",
         "resumido-gerador.js",

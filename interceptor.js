@@ -20,6 +20,7 @@ const MODULES = [
   { src: "hiper-lucro-widget.js"},
   { src: 'kit.js' },
   { src: 'hiper-mov-widget.js' },
+  { src: 'hiper-mov-lista.js' },
   { src: 'resumido-dados.js' },
   { src: 'hiper-db.js' },
   { src: 'resumido-runtime.js' },
