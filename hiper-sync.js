@@ -37,7 +37,8 @@
 
   // Regex que reconhece endpoints relevantes do Hiper
   // Captur2a grupo 1 = pedidoId, grupo 2 = cod de situacao (atualizar-situacao/{cod})
-  const RE_PEDIDO_VENDA = /api\.hiper\.com\.br\/pedido-venda(?:\/(\d+)(?:\/atualizar-situacao\/(\d+))?)?(?:[?#]|$)/i;
+  const RE_PEDIDO_VENDA         = /api\.hiper\.com\.br\/pedido-venda(?:\/(\d+)(?:\/atualizar-situacao\/(\d+))?)?(?:[?#]|$)/i;
+  const RE_CONFIRMAR_IMPORTACAO = /fiscal\/importacao-de-xml-de-documento-fiscal\/api\/confirmar-importacao/i;
 
   // Nomes legíveis para logging
   const NOME_SITUACAO = { 1: 'orçamento', 2: 'pedido', 3: 'cancelado', 9: 'entregue', 99: 'cancelado' };
@@ -344,6 +345,44 @@
       return resp;
     }
 
+    // ── Confirmação de NF-e → entrada de estoque ─────────────────────────────
+    if (metodo === 'POST' && RE_CONFIRMAR_IMPORTACAO.test(url)) {
+      _log('confirmar-importacao interceptada via fetch, aguardando resposta...');
+      const response = await fetchOriginal.apply(this, args);
+      _log('confirmar-importacao respondeu — status:', response.status);
+      if (response.ok) {
+        (async () => {
+          try {
+            const bodyStr = typeof init?.body === 'string' ? init.body : null;
+            if (!bodyStr) { _warn('confirmar-importacao: body não é string'); return; }
+            const body  = JSON.parse(bodyStr);
+            const itens = (body.SugestoesDeProduto || [])
+              .filter(p => p.IdProduto && p.Quantidade > 0)
+              .map(p => ({
+                idProduto: String(p.IdProduto),
+                nome:      p.NomeProdutoGrade || '',
+                unidade:   p.SiglaUnidadeMedida || 'UN',
+                qtd:       p.Quantidade,
+              }));
+            if (!itens.length) { _warn('confirmar-importacao: nenhum item encontrado'); return; }
+            window.postMessage({
+              type: 'HIPER_ENTRADA_ESTOQUE',
+              payload: {
+                id_nfe:      String(body.IdNfe),
+                itens,
+                valor_total: body.InformacoesFiscais?.ValorTotalNfe || 0,
+                descricao:   `Entrada NF-e ${body.IdNfe}`,
+              },
+            }, '*');
+            _log(`NF-e ${body.IdNfe} — ${itens.length} produto(s) para entrada de estoque.`);
+          } catch (e) {
+            _warn('Erro ao processar confirmar-importacao:', e);
+          }
+        })();
+      }
+      return response;
+    }
+
     // =========================
     // POST / PUT / DELETE
     // =========================
@@ -493,6 +532,38 @@
               });
             } catch (e) {
               _warn('Erro no interceptor XHR:', e);
+            }
+          });
+        }
+
+        if (_metodo === 'POST' && RE_CONFIRMAR_IMPORTACAO.test(_url)) {
+          xhr.addEventListener('load', async function () {
+            try {
+              _log('confirmar-importacao interceptada via XHR — status:', xhr.status);
+              if (xhr.status < 200 || xhr.status >= 300) return;
+              if (!_requestBody) { _warn('confirmar-importacao XHR: body vazio'); return; }
+              const body  = JSON.parse(_requestBody);
+              const itens = (body.SugestoesDeProduto || [])
+                .filter(p => p.IdProduto && p.Quantidade > 0)
+                .map(p => ({
+                  idProduto: String(p.IdProduto),
+                  nome:      p.NomeProdutoGrade || '',
+                  unidade:   p.SiglaUnidadeMedida || 'UN',
+                  qtd:       p.Quantidade,
+                }));
+              if (!itens.length) { _warn('confirmar-importacao XHR: nenhum item'); return; }
+              window.postMessage({
+                type: 'HIPER_ENTRADA_ESTOQUE',
+                payload: {
+                  id_nfe:      String(body.IdNfe),
+                  itens,
+                  valor_total: body.InformacoesFiscais?.ValorTotalNfe || 0,
+                  descricao:   `Entrada NF-e ${body.IdNfe}`,
+                },
+              }, '*');
+              _log(`NF-e ${body.IdNfe} — ${itens.length} produto(s) para entrada de estoque.`);
+            } catch (e) {
+              _warn('Erro no interceptor XHR confirmar-importacao:', e);
             }
           });
         }

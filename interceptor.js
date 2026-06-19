@@ -292,6 +292,23 @@ window.addEventListener('message', async (event) => {
     }
   }
 
+  if (msg.type === 'HIPER_ENTRADA_ESTOQUE') {
+    try {
+      const res = await fetch(`https://api.sistema.santin.tec.br/entrada-estoque`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(msg.payload),
+      });
+      if (res.ok) {
+        console.log('[Interceptor] ✅ Entrada de estoque NF-e registrada:', msg.payload.id_nfe);
+      } else {
+        console.warn('[Interceptor] ⚠️ Falha ao registrar entrada NF-e:', res.status);
+      }
+    } catch(e) {
+      console.warn('[Interceptor] ❌ Erro ao registrar entrada NF-e:', e);
+    }
+  }
+
   if (msg.type === 'HIPER_MOV_PATCH') {
     try {
       const res  = await fetch(`https://api.sistema.santin.tec.br/pedido-venda/${msg.pedidoId}/movimento`, { method: 'PATCH' });
