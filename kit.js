@@ -186,8 +186,9 @@ function paredeGerarFormulas(cfg) {
 
   const formulas = {};
 
-  // Estrutura
-  for (const cod of PAREDE_COD_ESTRUTURA) {
+  // Estrutura — gera fórmula para todos os tamanhos (48/70/90) para que
+  // recalcularTudo encontre a fórmula independente do montante/guia selecionado.
+  for (const cod of Object.keys(PAREDE_FORMULAS_ESTRUTURA)) {
     formulas[cod] = (A) => PAREDE_FORMULAS_ESTRUTURA[cod](A, fatorEstrutura);
   }
 
