@@ -76,7 +76,7 @@ try {
       const { numOrc, cliente } = msg;
       console.log('[Interceptor] 📡 BC recebeu cliente — orçamento:', numOrc, '| nome:', cliente);
       try {
-        const res = await fetch(`https://sistema.santin.tec.br/api/pedido/${encodeURIComponent(numOrc)}`, {
+        const res = await fetch(`https://api.sistema.santin.tec.br/pedido/${encodeURIComponent(numOrc)}`, {
           method:  'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ cliente }),
@@ -237,7 +237,7 @@ window.addEventListener('message', async (event) => {
   if (msg.type === 'HIPER_SYNC_CUSTOS_REQ') {
     (async () => {
       try {
-        const API = 'https://sistema.santin.tec.br/api';
+        const API = 'https://api.sistema.santin.tec.br';
         const metaRes = await fetch(`${API}/custos/metadata`, {
           cache: 'no-store',
           signal: AbortSignal.timeout(8000),
@@ -269,7 +269,7 @@ window.addEventListener('message', async (event) => {
 
   if (msg.type === 'HIPER_EVENTO_SEND') {
     try {
-      const res = await fetch(`https://sistema.santin.tec.br/api/hiper-evento`, {
+      const res = await fetch(`https://api.sistema.santin.tec.br/hiper-evento`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(msg.payload),
@@ -284,7 +284,7 @@ window.addEventListener('message', async (event) => {
 
   if (msg.type === 'HIPER_MOV_GET') {
     try {
-      const res  = await fetch(`https://sistema.santin.tec.br/api/pedido-venda/${msg.pedidoId}`);
+      const res  = await fetch(`https://api.sistema.santin.tec.br/pedido-venda/${msg.pedidoId}`);
       const data = res.ok ? await res.json() : null;
       window.postMessage({ type: 'HIPER_MOV_GET_RESULT', seq: msg.seq, ok: res.ok, data }, '*');
     } catch (e) {
@@ -294,7 +294,7 @@ window.addEventListener('message', async (event) => {
 
   if (msg.type === 'HIPER_MOV_PATCH') {
     try {
-      const res  = await fetch(`https://sistema.santin.tec.br/api/pedido-venda/${msg.pedidoId}/movimento`, { method: 'PATCH' });
+      const res  = await fetch(`https://api.sistema.santin.tec.br/pedido-venda/${msg.pedidoId}/movimento`, { method: 'PATCH' });
       const data = await res.json();
       window.postMessage({ type: 'HIPER_MOV_PATCH_RESULT', seq: msg.seq, ok: res.ok, data }, '*');
     } catch (e) {

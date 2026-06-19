@@ -29,7 +29,7 @@
     const MIN_ITEMS_THRESHOLD = 100;
 
     // ── Sincronização de custos com servidor ──────────────────────────────────
-    const SYNC_API_BASE       = 'https://sistema.santin.tec.br/api';
+    const SYNC_API_BASE       = 'https://api.sistema.santin.tec.br';
     const SYNC_INTERVAL_MS    = 60 * 60 * 1000;  // 1 hora (intervalo normal)
     const SYNC_RETRY_STEPS_MS = [5 * 60 * 1000, 15 * 60 * 1000]; // backoff offline
     const CUSTOS_HASH_KEY     = 'hc:custos_hash';  // chave no chrome.storage

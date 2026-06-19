@@ -1,7 +1,7 @@
 ﻿(function _hiperCpfAutofill() {
   'use strict';
 
-  const API_BASE = 'https://sistema.santin.tec.br/api/consulta-pessoa';
+  const API_BASE = 'https://api.sistema.santin.tec.br/consulta-pessoa';
   const ROTA     = /clientes\/cadastro/;
 
   const SEL_CPF  = '#cpf-edit > input';

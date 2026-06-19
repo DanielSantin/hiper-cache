@@ -12,7 +12,7 @@
     if (cod) window.__hiperRecuperarCodigo = cod.trim().toUpperCase();
   })();
 
-  const API_BASE   = 'https://sistema.santin.tec.br/api';
+  const API_BASE   = 'https://api.sistema.santin.tec.br';
   const TIMEOUT_MS = 4000;
 
   // ── Utilitários ──────────────────────────────────────────────────────────────
