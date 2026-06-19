@@ -592,7 +592,12 @@ function removerKit(id) {
     });
 
     estadoRemovido.linhas.forEach(({ codigo, $linha }) => {
-      if (!codigosAindaAtivos.has(codigo) && $.contains(document, $linha[0])) {
+      // Verifica pela referência DOM — não pelo código — porque dois kits podem
+      // ter linhas separadas para o mesmo produto (ex: montante 70 em duas paredes).
+      const usadaEmOutroKit = [...kitsAtivos.values()].some(est =>
+        est.linhas.some(l => l.$linha[0] === $linha[0])
+      );
+      if (!usadaEmOutroKit && $.contains(document, $linha[0])) {
         $linha.remove();
       }
     });
@@ -702,11 +707,15 @@ async function aplicarParedeCfg(cfg) {
   const produtos = codigos.map(c => buscarNaMaster(c));
   if (produtos.some(p => !p)) { console.error('[HiperCache] ❌ Produtos de parede faltando.'); return null; }
 
-  // Aproveita linhas já abertas por outros kits
+  // Aproveita linhas já abertas por outros kits.
+  // Montante e guia (BLACKLIST_SETAR) nunca são compartilhados — cada parede
+  // precisa de uma linha própria para poder ter um tamanho independente.
   const linhasExistentes = new Map();
   kitsAtivos.forEach((estado) => {
     estado.linhas.forEach(({ codigo, $linha }) => {
-      if ($.contains(document, $linha[0])) linhasExistentes.set(codigo, $linha);
+      if ($.contains(document, $linha[0]) && !BLACKLIST_SETAR.has(codigo)) {
+        linhasExistentes.set(codigo, $linha);
+      }
     });
   });
 
