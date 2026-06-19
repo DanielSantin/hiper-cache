@@ -80,7 +80,7 @@
       const mov = data.movimento;
       if (!mov) { _render(false, false); return; }
       if (data.situacao === 'cancelado' && !mov.ativo) {
-        txtEl.textContent = 'Mov. cancelada';
+        txtEl.textContent = 'Ativar mov. estoque';
         return;
       }
       _render(mov.ativo, mov.existe);
