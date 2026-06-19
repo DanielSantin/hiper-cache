@@ -58,12 +58,12 @@
         flex-wrap: wrap;
       }
       #hiper-mov-widget .hmw-label {
-        font-size: 11px;
+        font-size: 13px;
         color: #555;
         white-space: nowrap;
       }
       #hiper-mov-widget .hmw-status {
-        font-size: 10px;
+        font-size: 13px;
         font-weight: bold;
         padding: 1px 7px;
         border-radius: 3px;
@@ -77,14 +77,14 @@
         border: 1px solid #bbb;
         border-radius: 3px;
         background: #fff;
-        font-size: 10px;
+        font-size: 13px;
         cursor: pointer;
         white-space: nowrap;
       }
       #hiper-mov-widget .hmw-btn:hover:not(:disabled) { background: #f0f0f0; }
       #hiper-mov-widget .hmw-btn:disabled { opacity: 0.5; cursor: default; }
-      #hiper-mov-widget .hmw-msg { font-size: 10px; color: #e00; }
-      #hiper-mov-widget .hmw-ok  { font-size: 10px; color: #1a6e1a; }
+      #hiper-mov-widget .hmw-msg { font-size: 13px; color: #e00; }
+      #hiper-mov-widget .hmw-ok  { font-size: 13px; color: #1a6e1a; }
     `;
     document.head.appendChild(s);
   }
