@@ -16,7 +16,6 @@
   function isAtivo()      { return localStorage.getItem(LS_KEY) === '1'; }
   function isNovoPedido() { return location.hash.startsWith('#/pedido-venda/novo'); }
 
-  // Comandos de console para ativar/desativar
   window.hiperIaAtivar   = () => { localStorage.setItem(LS_KEY, '1');  atualizarVisibilidade(); console.log('[IA] Bot ativado.'); };
   window.hiperIaDesativar = () => { localStorage.removeItem(LS_KEY);   atualizarVisibilidade(); console.log('[IA] Bot desativado.'); };
 
@@ -30,16 +29,14 @@
 
   window.addEventListener('hashchange', atualizarVisibilidade);
 
-  // ── Importação dos produtos no Hiper ERP ─────────────────────────────────────
+  // ── Importação direta (tipo lista) ───────────────────────────────────────────
 
   function _buscarProdutoMaster(codigo) {
     const master = window.__hiperMaster;
     if (!master?.length) return null;
     const id = String(codigo);
-    // Busca por idProduto (ID longo do Hiper, armazenado no estoque.codigo)
     return (
       master.find(p => String(p.idProduto ?? '') === id) ||
-      // Fallback: busca por prefixo no Nome (para códigos curtos tipo "3073")
       master.find(p => (p.Nome ?? '').startsWith(id + ' ')) ||
       master.find(p => (p.Nome ?? '').startsWith(id + ' - ')) ||
       null
@@ -88,6 +85,55 @@
         '.quantidade-produto input, input.quantidade-unitaria, input[ng-model*="quantidade"]'
       ).first();
       if ($qtd.length) await setarQuantidade($qtd, item.quantidade);
+    }
+  }
+
+  // ── Carregamento de kit forro ────────────────────────────────────────────────
+
+  async function carregarForro(data) {
+    if (!window.aplicarKitGesso || !window.kitsAtivos) {
+      throw new Error('kit.js não está disponível.');
+    }
+    const subtipo = data.subtipo || 'estruturado';
+    await window.aplicarKitGesso(subtipo);
+
+    // Encontra o último kit com esse nomeKit (Map preserva ordem de inserção)
+    let kitId = null;
+    window.kitsAtivos.forEach((estado, id) => {
+      if (estado.nomeKit === subtipo) kitId = id;
+    });
+
+    if (kitId) {
+      const estado = window.kitsAtivos.get(kitId);
+      estado.A = parseFloat(data.area_m2) || 0;
+      estado.P = parseFloat(data.perimetro_ml) || 0;
+      if (data.alt_pend != null) estado.altPend = parseFloat(data.alt_pend);
+      if (data.tabica)           estado.tabica  = data.tabica;
+      window.recalcularTudo?.();
+      window.renderizarPainel?.();
+    }
+  }
+
+  // ── Carregamento de kit parede ───────────────────────────────────────────────
+
+  const PAREDE_CFG_MAP = {
+    'stst': { faceA: 'ST', faceB: 'ST', faces: 2, estrutura: 'simples' },
+    'stru': { faceA: 'ST', faceB: 'RU', faces: 2, estrutura: 'simples' },
+  };
+
+  async function carregarParede(data) {
+    if (!window.aplicarParedeCfg || !window.kitsAtivos) {
+      throw new Error('kit.js não está disponível.');
+    }
+    const cfg     = PAREDE_CFG_MAP[data.subtipo] || PAREDE_CFG_MAP['stst'];
+    const paredeId = await window.aplicarParedeCfg(cfg);
+
+    if (paredeId) {
+      const estado  = window.kitsAtivos.get(paredeId);
+      const totalA  = (data.paredes || []).reduce((s, w) => s + (w.ml || 0) * (w.altura || 0), 0);
+      estado.A = parseFloat(totalA.toFixed(2));
+      window.recalcularTudo?.();
+      window.renderizarPainel?.();
     }
   }
 
@@ -174,7 +220,7 @@
     }
     #hiper-ia-enviar:hover:not(:disabled) { background: #5535b8; }
     #hiper-ia-enviar:disabled { background: #b0a0e0; cursor: not-allowed; }
-    #hiper-ia-importar {
+    #hiper-ia-acao {
       background: #1a7f37;
       color: #fff;
       border: none;
@@ -186,14 +232,37 @@
       transition: background .2s;
       display: none;
     }
-    #hiper-ia-importar:hover:not(:disabled) { background: #155d27; }
-    #hiper-ia-importar:disabled { background: #8ec99e; cursor: not-allowed; }
+    #hiper-ia-acao:hover:not(:disabled) { background: #155d27; }
+    #hiper-ia-acao:disabled { background: #8ec99e; cursor: not-allowed; }
+    #hiper-ia-acao.kit-btn { background: #4a6fa5; }
+    #hiper-ia-acao.kit-btn:hover:not(:disabled) { background: #3a5a8a; }
+    #hiper-ia-acao.kit-btn:disabled { background: #9ab0cc; }
     #hiper-ia-resultado {
       margin-top: 4px;
       border-top: 1px solid #eee;
       padding-top: 8px;
       max-height: 260px;
       overflow-y: auto;
+    }
+    .ia-tipo-info {
+      font-size: 12px;
+      color: #333;
+      background: #f0eaf8;
+      padding: 6px 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      border-left: 3px solid #6c47d1;
+      line-height: 1.5;
+    }
+    .ia-tipo-info strong { display: block; margin-bottom: 2px; }
+    .ia-pergunta {
+      font-size: 12px;
+      color: #7a5200;
+      background: #fff8e1;
+      padding: 6px 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      border-left: 3px solid #f0a000;
     }
     .ia-item {
       display: flex;
@@ -222,17 +291,62 @@
     document.head.appendChild(s);
   }
 
-  // ── Renderiza resultado e retorna os itens para importação ───────────────────
+  // ── Estado da última resposta ────────────────────────────────────────────────
 
-  let _ultimosItens = [];
+  let _ultimaResposta = null;
+  let _ultimosItens   = [];
+
+  function _labelBotao(data) {
+    if (data.tipo === 'forro') {
+      const label = data.subtipo === 'aramado' ? 'Aramado' : 'Estruturado';
+      return `🏗 Carregar Kit Forro ${label}`;
+    }
+    if (data.tipo === 'parede') return '🧱 Carregar Kit Parede';
+    return '✅ Importar produtos no pedido';
+  }
+
+  // ── Renderiza resultado ──────────────────────────────────────────────────────
 
   function renderizarResultado(data, container) {
     container.innerHTML = '';
-    _ultimosItens = data.itens || [];
+    _ultimaResposta = data;
+    _ultimosItens   = data.itens || [];
 
-    if (!_ultimosItens.length) {
-      container.innerHTML = '<div class="ia-erro">Nenhum produto identificado.</div>';
-      return false;
+    // Pergunta pendente (bloqueia ação)
+    if (data.pergunta) {
+      const div = document.createElement('div');
+      div.className = 'ia-pergunta';
+      div.textContent = '❓ ' + data.pergunta;
+      container.appendChild(div);
+    }
+
+    // Cabeçalho de medidas para forro/parede
+    if (data.tipo === 'forro') {
+      const div = document.createElement('div');
+      div.className = 'ia-tipo-info';
+      const labelTipo = data.subtipo === 'aramado' ? 'Forro Aramado' : 'Forro Estruturado';
+      const partes = [];
+      if (data.area_m2)      partes.push(`Área: ${data.area_m2} m²`);
+      if (data.perimetro_ml) partes.push(`Perímetro: ${data.perimetro_ml} ml`);
+      if (data.alt_pend)     partes.push(`Pendural: ${data.alt_pend}m`);
+      if (data.tabica)       partes.push(`Tabica: ${data.tabica}`);
+      div.innerHTML = `<strong>${labelTipo}</strong>${partes.join(' | ')}`;
+      container.appendChild(div);
+    } else if (data.tipo === 'parede') {
+      const div = document.createElement('div');
+      div.className = 'ia-tipo-info';
+      const paredes = (data.paredes || []).map(p => `${p.ml}m × ${p.altura}m`).join(', ');
+      const totalA  = (data.paredes || []).reduce((s, w) => s + (w.ml || 0) * (w.altura || 0), 0);
+      div.innerHTML = `<strong>Parede Drywall</strong>${paredes}${data.portas ? ` | Portas: ${data.portas}` : ''} — Total: ${totalA.toFixed(1)} m²`;
+      container.appendChild(div);
+    }
+
+    // Lista de itens
+    if (!_ultimosItens.length && !data.pergunta) {
+      const div = document.createElement('div');
+      div.className = 'ia-erro';
+      div.textContent = 'Nenhum produto identificado.';
+      container.appendChild(div);
     }
 
     _ultimosItens.forEach(item => {
@@ -258,7 +372,11 @@
       container.appendChild(obs);
     }
 
-    return _ultimosItens.some(i => i.codigo);
+    // Decide se mostra botão de ação
+    if (data.pergunta) return false; // pergunta pendente bloqueia ação
+
+    if (data.tipo === 'forro' || data.tipo === 'parede') return 'kit';
+    return _ultimosItens.some(i => i.codigo) ? 'lista' : false;
   }
 
   // ── Monta o painel ────────────────────────────────────────────────────────────
@@ -268,7 +386,6 @@
 
     injetarCSS();
 
-    // Botão flutuante
     const btn = document.createElement('button');
     btn.id = BTN_ID;
     btn.title = 'Interpretar pedido WhatsApp';
@@ -276,7 +393,6 @@
     btn.style.display = (isAtivo() && isNovoPedido()) ? 'flex' : 'none';
     document.body.appendChild(btn);
 
-    // Painel
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
     panel.innerHTML = `
@@ -287,16 +403,16 @@
       <div id="hiper-ia-body">
         <textarea id="hiper-ia-textarea" placeholder="Cole aqui o pedido do WhatsApp..."></textarea>
         <button id="hiper-ia-enviar">Interpretar</button>
-        <button id="hiper-ia-importar">✅ Importar produtos no pedido</button>
+        <button id="hiper-ia-acao">✅ Importar produtos no pedido</button>
         <div id="hiper-ia-resultado"></div>
       </div>
     `;
     document.body.appendChild(panel);
 
-    const enviarBtn   = document.getElementById('hiper-ia-enviar');
-    const importarBtn = document.getElementById('hiper-ia-importar');
-    const resultado   = document.getElementById('hiper-ia-resultado');
-    const textarea    = document.getElementById('hiper-ia-textarea');
+    const enviarBtn  = document.getElementById('hiper-ia-enviar');
+    const acaoBtn    = document.getElementById('hiper-ia-acao');
+    const resultado  = document.getElementById('hiper-ia-resultado');
+    const textarea   = document.getElementById('hiper-ia-textarea');
 
     btn.addEventListener('click', () => {
       panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
@@ -315,7 +431,7 @@
 
       enviarBtn.disabled = true;
       enviarBtn.textContent = 'Interpretando...';
-      importarBtn.style.display = 'none';
+      acaoBtn.style.display = 'none';
       resultado.innerHTML = '<div class="ia-carregando">⏳ Aguardando IA...</div>';
 
       try {
@@ -330,9 +446,16 @@
           throw new Error(err.detail || `Erro ${resp.status}`);
         }
 
-        const data = await resp.json();
-        const temCodigoValido = renderizarResultado(data, resultado);
-        if (temCodigoValido) importarBtn.style.display = 'block';
+        const data   = await resp.json();
+        const acao   = renderizarResultado(data, resultado);
+
+        if (acao) {
+          const label = _labelBotao(data);
+          acaoBtn.textContent = label;
+          acaoBtn.className   = (acao === 'kit') ? 'kit-btn' : '';
+          acaoBtn.style.display = 'block';
+          acaoBtn.disabled = false;
+        }
 
       } catch (e) {
         resultado.innerHTML = `<div class="ia-erro">Erro: ${e.message}</div>`;
@@ -342,24 +465,47 @@
       }
     });
 
-    importarBtn.addEventListener('click', async () => {
-      importarBtn.disabled = true;
-      importarBtn.textContent = 'Importando...';
+    acaoBtn.addEventListener('click', async () => {
+      const data = _ultimaResposta;
+      if (!data) return;
+
+      acaoBtn.disabled = true;
+      acaoBtn.textContent = 'Carregando...';
 
       try {
-        await importarProdutos(_ultimosItens);
-        importarBtn.style.display = 'none';
-        const ok = document.createElement('div');
-        ok.className = 'ia-sucesso';
-        ok.textContent = '✅ Produtos importados com sucesso!';
-        resultado.prepend(ok);
+        if (data.tipo === 'forro') {
+          await carregarForro(data);
+          acaoBtn.style.display = 'none';
+          const ok = document.createElement('div');
+          ok.className = 'ia-sucesso';
+          const label = data.subtipo === 'aramado' ? 'Aramado' : 'Estruturado';
+          ok.textContent = `✅ Kit Forro ${label} carregado!`;
+          resultado.prepend(ok);
+
+        } else if (data.tipo === 'parede') {
+          await carregarParede(data);
+          acaoBtn.style.display = 'none';
+          const ok = document.createElement('div');
+          ok.className = 'ia-sucesso';
+          ok.textContent = '✅ Kit Parede carregado!';
+          resultado.prepend(ok);
+
+        } else {
+          await importarProdutos(_ultimosItens);
+          acaoBtn.style.display = 'none';
+          const ok = document.createElement('div');
+          ok.className = 'ia-sucesso';
+          ok.textContent = '✅ Produtos importados com sucesso!';
+          resultado.prepend(ok);
+        }
+
       } catch (e) {
         const err = document.createElement('div');
         err.className = 'ia-erro';
-        err.textContent = `Erro ao importar: ${e.message}`;
+        err.textContent = `Erro: ${e.message}`;
         resultado.prepend(err);
-        importarBtn.disabled = false;
-        importarBtn.textContent = '✅ Importar produtos no pedido';
+        acaoBtn.disabled = false;
+        acaoBtn.textContent = _labelBotao(data);
       }
     });
   }
