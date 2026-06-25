@@ -291,6 +291,18 @@
     document.head.appendChild(s);
   }
 
+  // ── Feedback de sucesso temporário ───────────────────────────────────────────
+
+  function _mostrarSucesso(container, texto) {
+    const existing = container.querySelector('.ia-sucesso');
+    if (existing) existing.remove();
+    const div = document.createElement('div');
+    div.className = 'ia-sucesso';
+    div.textContent = texto;
+    container.prepend(div);
+    setTimeout(() => div.remove(), 3000);
+  }
+
   // ── Estado da última resposta ────────────────────────────────────────────────
 
   let _ultimaResposta = null;
@@ -475,28 +487,16 @@
       try {
         if (data.tipo === 'forro') {
           await carregarForro(data);
-          acaoBtn.style.display = 'none';
-          const ok = document.createElement('div');
-          ok.className = 'ia-sucesso';
           const label = data.subtipo === 'aramado' ? 'Aramado' : 'Estruturado';
-          ok.textContent = `✅ Kit Forro ${label} carregado!`;
-          resultado.prepend(ok);
+          _mostrarSucesso(resultado, `✅ Kit Forro ${label} carregado!`);
 
         } else if (data.tipo === 'parede') {
           await carregarParede(data);
-          acaoBtn.style.display = 'none';
-          const ok = document.createElement('div');
-          ok.className = 'ia-sucesso';
-          ok.textContent = '✅ Kit Parede carregado!';
-          resultado.prepend(ok);
+          _mostrarSucesso(resultado, '✅ Kit Parede carregado!');
 
         } else {
           await importarProdutos(_ultimosItens);
-          acaoBtn.style.display = 'none';
-          const ok = document.createElement('div');
-          ok.className = 'ia-sucesso';
-          ok.textContent = '✅ Produtos importados com sucesso!';
-          resultado.prepend(ok);
+          _mostrarSucesso(resultado, '✅ Produtos importados com sucesso!');
         }
 
       } catch (e) {
@@ -504,6 +504,7 @@
         err.className = 'ia-erro';
         err.textContent = `Erro: ${e.message}`;
         resultado.prepend(err);
+      } finally {
         acaoBtn.disabled = false;
         acaoBtn.textContent = _labelBotao(data);
       }
