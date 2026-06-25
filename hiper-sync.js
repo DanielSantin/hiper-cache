@@ -176,8 +176,9 @@
 
     // O backend determina a transição e executa a ação de estoque.
     // Marca o orçamento customizado como faturado se for → pedido (fire-and-forget).
-    if (estadoNovo === 'pedido' && typeof window._tentarMarcarFaturado === 'function' && meta.codigoPedidoVenda) {
-      window._tentarMarcarFaturado(meta.codigoPedidoVenda);
+    // Usa __hiperPedidoAberto (código do orçamento salvo/carregado), não o código do Hiper PV.
+    if (estadoNovo === 'pedido' && typeof window._tentarMarcarFaturado === 'function' && window.__hiperPedidoAberto) {
+      window._tentarMarcarFaturado(window.__hiperPedidoAberto);
     }
 
     _registrarEvento(evento);
