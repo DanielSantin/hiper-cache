@@ -9,20 +9,23 @@
   const BTN_ID   = 'hiper-ia-btn-flutuante';
   const PANEL_ID = 'hiper-ia-panel';
 
-  // ── Visibilidade: só aparece em /pedido-venda/novo ────────────────────────────
+  // ── Visibilidade: só aparece em /pedido-venda/novo E se ativado via localStorage ──
 
-  function isNovoPedido() {
-    return location.hash.startsWith('#/pedido-venda/novo');
-  }
+  const LS_KEY = 'hiper_ia_ativo';
+
+  function isAtivo()      { return localStorage.getItem(LS_KEY) === '1'; }
+  function isNovoPedido() { return location.hash.startsWith('#/pedido-venda/novo'); }
+
+  // Comandos de console para ativar/desativar
+  window.hiperIaAtivar   = () => { localStorage.setItem(LS_KEY, '1');  atualizarVisibilidade(); console.log('[IA] Bot ativado.'); };
+  window.hiperIaDesativar = () => { localStorage.removeItem(LS_KEY);   atualizarVisibilidade(); console.log('[IA] Bot desativado.'); };
 
   function atualizarVisibilidade() {
-    const btn = document.getElementById(BTN_ID);
-    if (!btn) return;
-    btn.style.display = isNovoPedido() ? 'flex' : 'none';
-    if (!isNovoPedido()) {
-      const panel = document.getElementById(PANEL_ID);
-      if (panel) panel.style.display = 'none';
-    }
+    const btn   = document.getElementById(BTN_ID);
+    const panel = document.getElementById(PANEL_ID);
+    const visivel = isAtivo() && isNovoPedido();
+    if (btn)   btn.style.display   = visivel ? 'flex' : 'none';
+    if (panel && !visivel) panel.style.display = 'none';
   }
 
   window.addEventListener('hashchange', atualizarVisibilidade);
@@ -270,7 +273,7 @@
     btn.id = BTN_ID;
     btn.title = 'Interpretar pedido WhatsApp';
     btn.textContent = '🤖';
-    btn.style.display = isNovoPedido() ? 'flex' : 'none';
+    btn.style.display = (isAtivo() && isNovoPedido()) ? 'flex' : 'none';
     document.body.appendChild(btn);
 
     // Painel
