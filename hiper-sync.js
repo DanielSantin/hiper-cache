@@ -413,6 +413,16 @@
 
         console.log('[FETCH] pedidoId inicial:', pedidoId, '| situacaoUrl:', situacaoUrl);
 
+        // atualizar-situacao (PUT sem body) já é capturado de forma confiável
+        // pelo chrome.webRequest em background.js (mensagem HIPER_ATUALIZAR_SITUACAO_PAGE,
+        // ver listener no fim deste arquivo). Processar de novo aqui envia o
+        // mesmo evento duas vezes ao backend — causa raiz de pedidos duplicados
+        // no estoque (faturamento aplicado 2x para o mesmo op_id).
+        if (situacaoUrl != null) {
+          console.log('[FETCH] atualizar-situacao — ignorado aqui, tratado via background bridge.');
+          return;
+        }
+
         const contentType =
           responseClone.headers.get('content-type') || '';
 
@@ -510,6 +520,14 @@
 
               let pedidoId     = match[1] || null;
               const situacaoUrl = match[2] != null ? match[2] : null;
+
+              // atualizar-situacao já é tratado via background bridge (webRequest) —
+              // ver comentário equivalente em _interceptarFetch.
+              if (situacaoUrl != null) {
+                _log('[XHR] atualizar-situacao — ignorado aqui, tratado via background bridge.');
+                return;
+              }
+
               let responseBody  = null;
 
               try {
