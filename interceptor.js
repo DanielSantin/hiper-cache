@@ -13,6 +13,7 @@ const MODULES = [
   { src: 'unidades_padrao.js' },
   { src: 'hiper-icones.js' },
   { src: 'hiper-cache.js' },
+  { src: 'hiper-preco-sync.js' },
   { src: 'hiper-sync.js' },
   { src: 'hiper-widgets.js' },
   { src: 'hiper-ui.js' },
@@ -264,6 +265,61 @@ window.addEventListener('message', async (event) => {
         }
       } catch(e) {
         window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: false, error: e.message }, '*');
+      }
+    })();
+  }
+
+  // ── Preços de tabela: cache 24h da lista da dbApi ─────────────────────────
+  if (msg.type === 'HIPER_PRECOS_LOAD') {
+    (async () => {
+      const TTL = 24 * 60 * 60 * 1000;
+      let cached = null;
+      await safeStorage(async () => { cached = await chrome.storage.local.get('precos_tabela'); });
+      const entry = cached?.precos_tabela;
+
+      if (entry?.data && Date.now() - (entry.ts || 0) < TTL) {
+        window.postMessage({ type: 'HIPER_PRECOS_LOADED', precos: entry.data }, '*');
+        return;
+      }
+      try {
+        const res = await fetch('https://api.sistema.santin.tec.br/ia/precos', {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!res.ok) throw new Error('status ' + res.status);
+        const data   = await res.json();
+        const precos = {};
+        for (const p of data.precos || []) precos[String(p.id_produto)] = p.vl_unit_bruto;
+        await safeStorage(() => chrome.storage.local.set({ precos_tabela: { data: precos, ts: Date.now() } }));
+        console.log('[Interceptor] 📦 Cache de preços renovado:', Object.keys(precos).length, 'itens');
+        window.postMessage({ type: 'HIPER_PRECOS_LOADED', precos }, '*');
+      } catch (e) {
+        console.warn('[Interceptor] ⚠️ Falha ao renovar preços — usando cache vencido:', e.message);
+        window.postMessage({ type: 'HIPER_PRECOS_LOADED', precos: entry?.data || {} }, '*');
+      }
+    })();
+  }
+
+  // ── Preço divergente detectado no clique do item → atualiza a dbApi ───────
+  if (msg.type === 'HIPER_PRECO_UPDATE') {
+    (async () => {
+      try {
+        const res = await fetch('https://api.sistema.santin.tec.br/ia/precos/hiper', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ precos: msg.precos }),
+          signal:  AbortSignal.timeout(10000),
+        });
+        if (!res.ok) throw new Error('status ' + res.status);
+        console.log('[Interceptor] ✅ Preço de tabela atualizado na API:', msg.precos.length, 'item(ns)');
+        await safeStorage(async () => {
+          const cached = await chrome.storage.local.get('precos_tabela');
+          const entry  = cached?.precos_tabela || { data: {}, ts: Date.now() };
+          for (const p of msg.precos) entry.data[String(p.idProduto)] = p.preco;
+          await chrome.storage.local.set({ precos_tabela: entry });
+        });
+      } catch (e) {
+        console.warn('[Interceptor] ❌ Falha ao atualizar preço na API:', e.message);
       }
     })();
   }
