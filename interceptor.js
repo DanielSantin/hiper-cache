@@ -333,6 +333,12 @@ window.addEventListener('message', async (event) => {
       });
       if (res.ok) {
         console.log('[Interceptor] ✅ Evento registrado via bridge');
+      } else {
+        // Resposta não-2xx (ex: 500) não é exceção — sem isso o erro fica
+        // mudo no console e passa despercebido (já aconteceu: bug no backend
+        // derrubou TODOS os eventos por ~3 dias sem nenhum aviso aqui).
+        const corpo = await res.text().catch(() => '');
+        console.error('[Interceptor] ❌ /hiper-evento respondeu', res.status, '—', corpo.slice(0, 300), msg.payload);
       }
     } catch (e) {
       console.warn('[Interceptor] ❌ Falha ao registrar evento:', e);
