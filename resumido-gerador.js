@@ -564,12 +564,13 @@ function abrirOrcamentoResumido() {
   } else {
     kitsAtivos.forEach(function(estado, nome) {
       kitsArr.push({
-        nome:   nome,
-        A:      estado.A    || 0,
-        P:      estado.P    || 0,
-        cant:   estado.cant || 3.15,
-        grupos: estado.grupos || null,
-        cfg:    estado.cfg   || null,
+        nome:    nome,
+        A:       estado.A    || 0,
+        P:       estado.P    || 0,
+        cant:    estado.cant || 3.15,
+        altPend: estado.altPend || 0.6,
+        grupos:  estado.grupos || null,
+        cfg:     estado.cfg   || null,
       });
     });
   }
@@ -689,12 +690,13 @@ function abrirOrcamentoResumido() {
         var kitsArr = [];
         kitsAtivos.forEach(function(estado, nome) {
           kitsArr.push({
-            nome:   nome,
-            A:      estado.A    || 0,
-            P:      estado.P    || 0,
-            cant:   estado.cant || 3.15,
-            grupos: estado.grupos || null,
-            cfg:    estado.cfg   || null,
+            nome:    nome,
+            A:       estado.A    || 0,
+            P:       estado.P    || 0,
+            cant:    estado.cant || 3.15,
+            altPend: estado.altPend || 0.6,
+            grupos:  estado.grupos || null,
+            cfg:     estado.cfg   || null,
           });
         });
         var custoPorKit = resumido_custoPorKit(kitsArr, dadosOrc.itens);

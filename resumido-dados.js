@@ -218,7 +218,10 @@ function resumido_custoPorKit(kitsArr, itens) {
 
     const qtdBrutaPorKit = kitsComProduto.map(k => {
       const fn = formulasPorKit[k.nome][cod];
-      return Math.max(fn(k.A || 0, k.P || 0, k.cant || 3.15), 0);
+      const q  = fn(k.A || 0, k.P || 0, k.cant || 3.15, k.altPend || 0.6);
+      // Fórmulas com parâmetro faltando (ex: altPend) retornam NaN — trata como 0
+      // para não contaminar a soma e zerar o custo do kit inteiro.
+      return Number.isFinite(q) ? Math.max(q, 0) : 0;
     });
     const somaQtd = qtdBrutaPorKit.reduce((s, v) => s + v, 0);
 
@@ -248,7 +251,7 @@ function resumido_custoPorKit(kitsArr, itens) {
     });
   }
 
-  kitsArr.forEach(k => { if (resultado[k.nome] <= 0) resultado[k.nome] = 0.001; });
+  kitsArr.forEach(k => { if (!(resultado[k.nome] > 0)) resultado[k.nome] = 0.001; });
   return resultado;
 }
 
