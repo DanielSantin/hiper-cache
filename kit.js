@@ -61,10 +61,11 @@ const BLACKLIST_SETAR = new Set(["3007", "3008", "3042", "3043", "3044", "3060"]
 
 // ── 2. DEFINIÇÃO DOS KITS (não-parede) ────────────────────────────────
 const KITS_GESSO = {
-  aramado:     ["3076","3089","3019","3023","3132","3035","3037","3006","3021","3058","3020"],
-  estruturado: ["3073","3089","3018","3017","3029","3022","3132","3021","3006","3058","3020"],
-  cortineiro:  ["3073","3089","3021","3132","3009"],
-  portas:      ["3073","3089","3008","3007","3021","3058","3020","3132"],
+  aramado:       ["3076","3089","3019","3023","3132","3035","3037","3006","3021","3058","3020"],
+  estruturado:   ["3073","3089","3018","3017","3029","3022","3132","3021","3006","3058","3020"],
+  reforcoTrilho: ["3018","3017","3029","3022","3021"],
+  cortineiro:    ["3073","3089","3021","3132","3009"],
+  portas:        ["3073","3089","3008","3007","3021","3058","3020","3132"],
 };
 
 // ── 3. SISTEMA DE PAREDES PARAMETRIZADO ───────────────────────────────
@@ -326,6 +327,13 @@ const FORMULAS_GESSO = {
     "3132": (ML, _, cant) => ML * 1.5,
     "3009": (ML, _, cant) => ML * cant / 3,
   },
+  reforcoTrilho: {
+    "3018": (ML) => ML * 2 / 3,
+    "3017": (ML) => ML * 8 / 3,
+    "3029": (ML) => ML / 3,
+    "3022": (ML) => ML * 0.172,
+    "3021": (ML) => ML * 22 / 3,
+  },
   // Portas: equivalente a parede ST/ST simples 2 faces
   portas: {
     "3073": (A) => (A / 2.88) * 2,
@@ -341,9 +349,10 @@ const FORMULAS_GESSO = {
 
 // ── 5. CONFIG DE INPUTS E LABELS (não-parede) ─────────────────────────
 const KIT_INPUTS = {
-  aramado:     [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }, { key: "altPend", label: "Alt Pend (m)", title: "Altura do pendural em metros (padrão: 0,60 m)" }],
-  estruturado: [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }, { key: "altPend", label: "Alt Pend (m)", title: "Altura do pendural em metros (padrão: 0,60 m)" }],
-  cortineiro:  [{ key: "A", label: "ML" }, { key: "cant", label: "Cant/3ml", title: "Cantoneiras por metro linear (padrão: 3,15)" }],
+  aramado:       [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }, { key: "altPend", label: "Alt Pend (m)", title: "Altura do pendural em metros (padrão: 0,60 m)" }],
+  estruturado:   [{ key: "A", label: "Área (m²)" }, { key: "P", label: "Perímetro (ml)" }, { key: "altPend", label: "Alt Pend (m)", title: "Altura do pendural em metros (padrão: 0,60 m)" }],
+  cortineiro:    [{ key: "A", label: "ML" }, { key: "cant", label: "Cant/3ml", title: "Cantoneiras por metro linear (padrão: 3,15)" }],
+  reforcoTrilho: [{ key: "A", label: "ML" }],
   // portas e paredes não usam KIT_INPUTS — têm painéis próprios
 };
 
@@ -351,6 +360,7 @@ const KIT_LABELS = {
   aramado:     'Aramado',
   estruturado: 'Estruturado',
   cortineiro:  'Sanca',
+  reforcoTrilho: 'Reforço Embutir',
   portas:      'Fech. de Porta',
 };
 

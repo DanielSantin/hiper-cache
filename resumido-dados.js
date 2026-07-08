@@ -16,16 +16,18 @@ const RESUMIDO_TEXTOS = {
   },
   // Kits sem variação de tabica — texto único (paredes geradas dinamicamente, não usam este objeto)
   cortineiro: `Fornecimento de material completo para Sancas de gesso acartonado, sendo: Chapa de gesso acartonado ST (Standart) 12,5 × 600 × 2000mm Marca Trevo, Cantoneira de aço galvanizado, Parafuso TA-25, Parafuso 4,5 × 45mm com bucha plástica c/anel, Fita telada fibra de vidro e massa drywall.`,
+  reforcoTrilho: `Fornecimento de material completo para Reforço Trilho Embutir, sendo: Guia de aço galvanizado 90mm, Montante de aço galvanizado 90mm, Parafuso TA-25, Parafuso 4,5 × 45mm com bucha plástica c/anel.`,
   portas: `Fornecimento de material completo para Fechamento de portas em Drywall, sendo: Chapa de gesso acartonado ST (Standart) 12,5 × 1200 × 2400mm Marca Trevo, Perfis de aço galvanizado tipo montantes e guias de 70mm (Normatizados com gramatura de 0,50), Parafusos TA-25, Parafusos 4,5 × 45mm com bucha plástica c/anel, Fita telada fibra de vidro e massa drywall.`,
 };
 
 const RESUMIDO_NOMES = {
   estruturado: 'Forro Estruturado',
   aramado:     'Forro Aramado',
-  paredeStSt:  'Parede Drywall ST',
-  paredeStCim: 'Parede Drywall CIM/ST',
-  cortineiro:  'Sanca / Cortineiro',
-  portas:      'Fechamento de Porta',
+  paredeStSt:   'Parede Drywall ST',
+  paredeStCim:  'Parede Drywall CIM/ST',
+  cortineiro:   'Sanca / Cortineiro',
+  reforcoTrilho: 'Reforço Embutir',
+  portas:       'Fechamento de Porta',
 };
 
 // Resolve o nome legível de um kit, incluindo paredes parametrizadas (id = "parede_...")
@@ -137,10 +139,11 @@ const COD_TABICA_NATURAL = '3010';
 // Para portas: R$100/m² de área de fechamento (larg × alt de cada porta)
 // Paredes parametrizadas: calculado dinamicamente via paredeMoBase(cfg) em kit.js
 const RESUMIDO_MO_BASE = {
-  estruturado: 20,
-  aramado:     20,
-  cortineiro:  20,
-  portas:      100,
+  estruturado:   20,
+  aramado:       20,
+  cortineiro:    20,
+  reforcoTrilho: 20,
+  portas:        100,
 };
 
 // Resolve o custo base de MO para qualquer kit, incluindo paredes parametrizadas
