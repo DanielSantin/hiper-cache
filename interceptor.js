@@ -268,6 +268,24 @@ window.addEventListener('message', async (event) => {
     })();
   }
 
+  // ── Dados do produto: get-dados-produto-pedido servido do nosso cache ─────
+  if (msg.type === 'HIPER_DADOS_PRODUTO_LOAD') {
+    (async () => {
+      try {
+        const res = await fetch(
+          'https://api.sistema.santin.tec.br/produtos/dados/' + encodeURIComponent(msg.produtoId),
+          { cache: 'no-store', signal: AbortSignal.timeout(8000) }
+        );
+        if (!res.ok) throw new Error('status ' + res.status);
+        const envelope = await res.json();
+        window.postMessage({ type: 'HIPER_DADOS_PRODUTO_LOADED', seq: msg.seq, envelope }, '*');
+      } catch (e) {
+        console.warn('[Interceptor] ⚠️ Falha ao carregar dados-produto do servidor:', e.message);
+        window.postMessage({ type: 'HIPER_DADOS_PRODUTO_LOADED', seq: msg.seq, envelope: null }, '*');
+      }
+    })();
+  }
+
   // ── Master de produtos: lista montada server-side (substitui o preload) ───
   if (msg.type === 'HIPER_MASTER_LOAD') {
     (async () => {

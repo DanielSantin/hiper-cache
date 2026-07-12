@@ -114,6 +114,29 @@
         });
     }
 
+    // ── Dados do produto (get-dados-produto-pedido) servidos do nosso cache ───
+    // Pede ao interceptor os dados montados server-side (preço/unidade do bff +
+    // estoque do NOSSO sistema). Cada chamada tem um seq pra casar a resposta.
+    let _dadosSeq = 0;
+    function carregarDadosProduto(produtoId) {
+        return new Promise((resolve) => {
+            const seq = ++_dadosSeq;
+            const timeout = setTimeout(() => { cleanup(); resolve(null); }, 8000);
+            function cleanup() {
+                clearTimeout(timeout);
+                window.removeEventListener('message', handler);
+            }
+            function handler(ev) {
+                if (ev.source !== window) return;
+                if (ev.data?.type !== 'HIPER_DADOS_PRODUTO_LOADED' || ev.data.seq !== seq) return;
+                cleanup();
+                resolve(ev.data.envelope || null);
+            }
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'HIPER_DADOS_PRODUTO_LOAD', seq, produtoId }, '*');
+        });
+    }
+
     async function executarPreload() {
         if (preloading) return;
         preloading = true;
@@ -291,6 +314,35 @@
 
         const origSend = xhr.send;
         xhr.send = function() {
+            const sendArgs = arguments;
+
+            // get-dados-produto-pedido → servido do nosso cache (evita a chamada
+            // lenta ao api.hiper.com.br). Async: faz o round-trip ao interceptor
+            // e só então simula a resposta do XHR.
+            if (_url && /get-dados-produto-pedido/i.test(_url)) {
+                let produtoId = null;
+                try { produtoId = new URL(_url, location.origin).searchParams.get('produtoId'); } catch(_) {}
+                if (produtoId) {
+                    const self = this;
+                    carregarDadosProduto(produtoId).then((envelope) => {
+                        if (!envelope) { origSend.apply(self, sendArgs); return; }  // fallback: Hiper ao vivo
+                        try {
+                            const corpo = JSON.stringify(envelope);
+                            Object.defineProperty(self, 'readyState',   { get: () => 4,     configurable: true });
+                            Object.defineProperty(self, 'status',       { get: () => 200,   configurable: true });
+                            Object.defineProperty(self, 'responseText', { get: () => corpo, configurable: true });
+                            Object.defineProperty(self, 'response',     { get: () => corpo, configurable: true });
+                            self.dispatchEvent(new Event('readystatechange'));
+                            self.dispatchEvent(new Event('load'));
+                        } catch(e) {
+                            console.warn('[HiperCache] Erro ao simular get-dados, usando rede:', e);
+                            origSend.apply(self, sendArgs);
+                        }
+                    });
+                    return;
+                }
+            }
+
             // Apenas intercepta Select2 — deixa tudo mais passar normalmente
             if (_url && _url.includes(TARGET_PATH) && memMaster.length > 0) {
                 try {
