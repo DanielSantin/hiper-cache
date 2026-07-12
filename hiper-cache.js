@@ -50,6 +50,14 @@
     let memMaster = [];
     let preloading = false;
     let inicializado = false;
+    // Otimizações que o funcionário pode desligar pelo popup (padrão: ligadas).
+    // otimSelect = lista/busca de produtos servida do nosso cache (em vez do
+    //   GetSelect2ParaPedido do Hiper).
+    // otimPreco  = dados do produto (preço/estoque) servidos do nosso cache (em
+    //   vez da chamada lenta ao get-dados-produto-pedido).
+    // Desligado → cai no comportamento nativo do Hiper. Vale ao recarregar.
+    let otimSelect = true;
+    let otimPreco  = true;
     window.__hiperUnidades = (typeof UNIDADES_PADRAO !== 'undefined') ? UNIDADES_PADRAO : {};
 
     // ── Utilitário de Log ─────────────────────────────────────────────────────
@@ -65,6 +73,7 @@
 
     // ── 1. Select2 ───────────────────────────────────────────────────────────
     function reconfigurarSelect2sExistentes() {
+        if (!otimSelect) return;   // otimização do select desligada → Select2 nativo
         if (typeof $ === 'undefined') return;
         if (!window.__hiperMaster || window.__hiperMaster.length < MIN_ITEMS_THRESHOLD) return;
 
@@ -138,6 +147,7 @@
     }
 
     async function executarPreload() {
+        if (!otimSelect) return;   // otimização do select desligada → não carrega master
         if (preloading) return;
         preloading = true;
         try {
@@ -281,7 +291,7 @@
     window.fetch = async function(input, init) {
         const url = (typeof input === 'string') ? input : (input?.url ?? '');
 
-        if (url.includes(TARGET_PATH)) {
+        if (otimSelect && url.includes(TARGET_PATH)) {
             if (memMaster.length > 0) {
                 try {
                     const term = new URL(url, location.origin).searchParams.get('Filtro') || '';
@@ -319,7 +329,7 @@
             // get-dados-produto-pedido → servido do nosso cache (evita a chamada
             // lenta ao api.hiper.com.br). Async: faz o round-trip ao interceptor
             // e só então simula a resposta do XHR.
-            if (_url && /get-dados-produto-pedido/i.test(_url)) {
+            if (otimPreco && _url && /get-dados-produto-pedido/i.test(_url)) {
                 let produtoId = null;
                 try { produtoId = new URL(_url, location.origin).searchParams.get('produtoId'); } catch(_) {}
                 if (produtoId) {
@@ -330,8 +340,21 @@
                             const corpo = JSON.stringify(envelope);
                             Object.defineProperty(self, 'readyState',   { get: () => 4,     configurable: true });
                             Object.defineProperty(self, 'status',       { get: () => 200,   configurable: true });
+                            Object.defineProperty(self, 'statusText',   { get: () => 'OK',  configurable: true });
                             Object.defineProperty(self, 'responseText', { get: () => corpo, configurable: true });
-                            Object.defineProperty(self, 'response',     { get: () => corpo, configurable: true });
+                            // responseType 'json' → o consumidor lê .response já parseado (objeto);
+                            // caso contrário devolve a string, como o XHR nativo faria.
+                            Object.defineProperty(self, 'response', {
+                                get: () => (self.responseType === 'json' ? envelope : corpo),
+                                configurable: true,
+                            });
+                            // jQuery decide se faz JSON.parse pelo Content-Type da resposta.
+                            // Sem esse header ele entrega a resposta como STRING → o Hiper lê
+                            // response.dados[0].precoVendaFinal numa string → preço 0.
+                            self.getResponseHeader = (name) =>
+                                (String(name).toLowerCase() === 'content-type'
+                                    ? 'application/json; charset=utf-8' : null);
+                            self.getAllResponseHeaders = () => 'content-type: application/json; charset=utf-8\r\n';
                             self.dispatchEvent(new Event('readystatechange'));
                             self.dispatchEvent(new Event('load'));
                         } catch(e) {
@@ -344,7 +367,7 @@
             }
 
             // Apenas intercepta Select2 — deixa tudo mais passar normalmente
-            if (_url && _url.includes(TARGET_PATH) && memMaster.length > 0) {
+            if (otimSelect && _url && _url.includes(TARGET_PATH) && memMaster.length > 0) {
                 try {
                     const term = new URL(_url, location.origin).searchParams.get('Filtro') || '';
                     const res = normalizar(term).split(/\s+/).filter(Boolean)
@@ -379,7 +402,15 @@
         if (msg?.type === 'HIPER_CACHE_ALL') {
             const entries = msg.entries || {};
 
-            if (entries[MASTER_KEY]?.data?.length >= MIN_ITEMS_THRESHOLD) {
+            // Flags de otimização (booleanos crus no storage; só false desliga).
+            otimSelect = entries['otim_select'] !== false;
+            otimPreco  = entries['otim_preco']  !== false;
+            window.__hiperOtim = { select: otimSelect, preco: otimPreco };
+
+            if (!otimSelect) {
+                // Otimização do select desligada → deixa o Hiper carregar a lista nativamente.
+                DEBUG && console.log('[HiperCache] ⏸ Otimização do select DESLIGADA (comportamento nativo).');
+            } else if (entries[MASTER_KEY]?.data?.length >= MIN_ITEMS_THRESHOLD) {
                 memMaster = entries[MASTER_KEY].data;
                 window.__hiperMaster = memMaster;
                 reconfigurarSelect2sExistentes();

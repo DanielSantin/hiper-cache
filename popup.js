@@ -13,7 +13,7 @@ if (typeof chrome === 'undefined' || !chrome.storage?.local) {
 
 async function updateCount() {
   const all = await chrome.storage.local.get(null);
-  const ignorar = new Set(['hiper_ativo', 'hiper_orc_letra', 'hiper_orc_counter']);
+  const ignorar = new Set(['hiper_ativo', 'hiper_orc_letra', 'hiper_orc_counter', 'otim_select', 'otim_preco']);
   const cacheKeys = Object.keys(all).filter(k => !k.startsWith('custo:') && !ignorar.has(k));
   const custoKeys = Object.keys(all).filter(k => k.startsWith('custo:'));
   document.getElementById('count').textContent = cacheKeys.length;
@@ -44,6 +44,33 @@ toggleAtivo.addEventListener('change', () => {
   aplicarEstadoToggle(ativo);
   feedback(ativo ? '✅ Ativada — recarregue a página' : '⏸ Pausada — recarregue a página');
 });
+
+// ── Toggles de otimização (select e preço) ────────────────────────────────────
+// Desligar volta ao comportamento nativo do Hiper na busca / na seleção de item.
+function ligarToggleOtim(inputId, sliderId, thumbId, chave) {
+  const input  = document.getElementById(inputId);
+  const slider = document.getElementById(sliderId);
+  const thumb  = document.getElementById(thumbId);
+
+  function aplicar(ativo) {
+    input.checked          = ativo;
+    slider.style.background = ativo ? '#22c55e' : '#ef4444';
+    thumb.style.transform   = ativo ? 'translateX(18px)' : 'translateX(0)';
+  }
+
+  chrome.storage.local.get(chave, (r) => aplicar(r[chave] !== false)); // padrão: ligado
+
+  input.addEventListener('change', () => {
+    const ativo = input.checked;
+    chrome.storage.local.set({ [chave]: ativo });
+    aplicar(ativo);
+    feedback(ativo ? '✅ Otimização ligada — recarregue a página'
+                   : '⏸ Otimização desligada — recarregue a página');
+  });
+}
+
+ligarToggleOtim('toggleSelect', 'selectSlider', 'selectThumb', 'otim_select');
+ligarToggleOtim('togglePreco',  'precoSlider',  'precoThumb',  'otim_preco');
 
 // ── Config de orçamento (letra + contador) ────────────────────────────────────
 const letraSelect   = document.getElementById('orcLetra');
@@ -95,8 +122,9 @@ orcSaveBtn.addEventListener('click', async () => {
 
 // ── Botões ────────────────────────────────────────────────────────────────────
 document.getElementById('clearBtn').addEventListener('click', async () => {
-  // Preserva as configs de orçamento ao limpar o cache
-  const preserve = await chrome.storage.local.get(['hiper_orc_letra', 'hiper_orc_counter', 'hiper_ativo']);
+  // Preserva as configs (orçamento + toggles) ao limpar o cache
+  const preserve = await chrome.storage.local.get(
+    ['hiper_orc_letra', 'hiper_orc_counter', 'hiper_ativo', 'otim_select', 'otim_preco']);
   await chrome.storage.local.clear();
   await chrome.storage.local.set(preserve);
   feedback('✓ Cache limpo!');
