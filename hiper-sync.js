@@ -284,17 +284,6 @@
 
       console.log('[FETCH][GET] Status:', resp.status);
 
-      // Preço de tabela: resposta do clique no item vai pro watcher de preços
-      if (resp.ok && /get-dados-produto-pedido/i.test(url)) {
-        const clonePreco = resp.clone();
-        (async () => {
-          try {
-            const body = await clonePreco.json();
-            window.__hiperPrecoCheck?.(body?.dados);
-          } catch (_) { /* resposta não-JSON — ignora */ }
-        })();
-      }
-
       const matchGet = url.match(/api\.hiper\.com\.br\/pedido-venda\/(\d+)(?:[?#]|$)/i);
 
       console.log('[FETCH][GET] Match regex:', matchGet);
@@ -524,15 +513,6 @@
         _requestBody = typeof body === 'string' ? body : null;
 
         // Preço de tabela: mesma checagem do fetch, para o caminho XHR
-        if (_metodo === 'GET' && /get-dados-produto-pedido/i.test(_url)) {
-          xhr.addEventListener('load', function () {
-            try {
-              if (xhr.status < 200 || xhr.status >= 300) return;
-              const respBody = JSON.parse(xhr.responseText);
-              window.__hiperPrecoCheck?.(respBody?.dados);
-            } catch (_) { /* resposta não-JSON — ignora */ }
-          });
-        }
 
         if (['POST', 'PUT', 'DELETE'].includes(_metodo) && RE_PEDIDO_VENDA.test(_url)) {
           xhr.addEventListener('load', async function () {

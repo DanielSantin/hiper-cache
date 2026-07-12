@@ -44,8 +44,6 @@
     let _syncTimer       = null;
     let _syncEmAndamento = false;
 
-    const PRELOAD_TERMS = ["alçapão","arame","arremate","bucha","cantoneira","chapa","cola","fita","forro","gesso","lixa","manta","massa","metalon","painel","parafuso","perfil","pino","piso","placa","rodapé","suporte","junção","conector","sisal","cordão","portal","pendural","vidro","roda","alcool","eletrodo","broca","cimento","multichapisco","seladora","tinta","textura","presilha","kit","rebite","regulador","prego","fincapino","aumark","hgesso","xgesso"];
-
     const REAL_XML_HTTP = window.XMLHttpRequest;
     const NATIVE_FETCH = window.fetch.bind(window);
 
@@ -92,55 +90,57 @@
         });
     }
 
-    // ── 2. Preload ────────────────────────────────────────────────────────────
+    // ── 2. Master (carregado do servidor) ─────────────────────────────────────
+    // Antes: ~50 fetches paralelos ao GetSelect2ParaPedido do Hiper — travava e
+    // podia perder produto novo com nome fora dos termos de busca.
+    // Agora: 1 fetch ao /produtos/master da dbApi (montado server-side via
+    // hiper_client, fonte = bff completo). O fetch cross-origin passa pelo
+    // interceptor (contexto privilegiado, sem restrição de CSP).
+    function carregarMasterDoServidor() {
+        return new Promise((resolve) => {
+            const timeout = setTimeout(() => { cleanup(); resolve(null); }, 15000);
+            function cleanup() {
+                clearTimeout(timeout);
+                window.removeEventListener('message', handler);
+            }
+            function handler(ev) {
+                if (ev.source !== window) return;
+                if (ev.data?.type !== 'HIPER_MASTER_LOADED') return;
+                cleanup();
+                resolve(ev.data.produtos || null);
+            }
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'HIPER_MASTER_LOAD' }, '*');
+        });
+    }
+
     async function executarPreload() {
         if (preloading) return;
         preloading = true;
         try {
-            const ts = Date.now();
-            const promises = PRELOAD_TERMS.map(t =>
-                NATIVE_FETCH(`${location.origin}${TARGET_PATH}?Filtro=${encodeURIComponent(t)}&_=${ts}`)
-                .then(r => r.ok ? r.json() : [])
-                .catch(() => [])
-            );
-            const resultados = await Promise.all(promises);
-            const unico = new Map();
-            for (const lista of resultados) {
-                if (!Array.isArray(lista)) continue;
-                lista.forEach(item => {
-                    const codNome = (item.Nome || '').match(/^(\d+)/)?.[1];
-
-                    const id =
-                        item.idProduto ??
-                        item.id ??
-                        (item.Codigo && item.Codigo !== 0 ? item.Codigo : null) ??
-                        codNome ??
-                        item.Nome;
-
-                    if (id && !unico.has(id)) {
-                        item.text = item.Nome;
-                        const cod4 = (item.Nome || '').match(/^(\d{4})\b/)?.[1];
-                        item.und = (cod4 && window.__hiperUnidades[cod4]) ? window.__hiperUnidades[cod4] : 'UN';
-                        unico.set(id, item);
-                    }
-                });
+            const produtos = await carregarMasterDoServidor();
+            if (!Array.isArray(produtos) || produtos.length < MIN_ITEMS_THRESHOLD) {
+                DEBUG && console.warn('[HiperCache] ⚠️ Master do servidor vazio/insuficiente — mantém cache atual.');
+                return;
             }
-            if (unico.size >= MIN_ITEMS_THRESHOLD) {
-                memMaster = Array.from(unico.values()).sort((a, b) => {
-                    // Criamos versões para comparação ignorando os 7 primeiros caracteres
-                    // O .substring(7) pega do 8º caractere em diante
-                    const comparadorA = (a.Nome || '').substring(7).trim();
-                    const comparadorB = (b.Nome || '').substring(7).trim();
-
-                    // Comparamos as versões cortadas, mas o objeto 'a' e 'b' permanece intacto
-                    return comparadorA.localeCompare(comparadorB, 'pt-BR');
-                });  
-                window.__hiperMaster = memMaster;            
-                window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
-                // Salva timestamp do preload para o scheduler diário
-                window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_TS_KEY, data: Date.now(), ts: Date.now() }, '*');
-                reconfigurarSelect2sExistentes();
-            }
+            // O servidor já entrega deduplicado; aqui só o pós-processamento leve:
+            // text para o Select2 e und pela unidade padrão do código de 4 dígitos.
+            produtos.forEach(item => {
+                item.text = item.Nome;
+                const cod4 = (item.Nome || '').match(/^(\d{4})\b/)?.[1];
+                item.und = (cod4 && window.__hiperUnidades[cod4]) ? window.__hiperUnidades[cod4] : 'UN';
+            });
+            memMaster = produtos.sort((a, b) => {
+                // Ordena ignorando os 7 primeiros caracteres ("3112 - "), como antes.
+                const comparadorA = (a.Nome || '').substring(7).trim();
+                const comparadorB = (b.Nome || '').substring(7).trim();
+                return comparadorA.localeCompare(comparadorB, 'pt-BR');
+            });
+            window.__hiperMaster = memMaster;
+            window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
+            // Timestamp do último refresh — o scheduler diário usa isso.
+            window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_TS_KEY, data: Date.now(), ts: Date.now() }, '*');
+            reconfigurarSelect2sExistentes();
         } finally { preloading = false; }
     }
 
