@@ -8,7 +8,9 @@
   'use strict';
 
   const PIX     = 0.9523;
-  const IMP_DEF = 10.70;
+  // % da nota fiscal: fonte única = config.nfm_pct (chega pela sync de custos e
+  // fica em window.__hiperImpPct). 10.70 é só fallback se ainda não sincronizou.
+  const IMP_DEF = () => (window.__hiperImpPct ?? 10.70);
 
   function _injetarEstilos() {
     if (document.getElementById('hiper-lucro-style')) return;
@@ -88,7 +90,7 @@
     wrap.innerHTML = `
       <span class="hlw-label">imposto</span>
       <input class="hlw-imp-inp" id="hlw-imp" type="number" min="0" max="100"
-             step="0.01" value="${IMP_DEF}" title="% imposto sobre nota">
+             step="0.01" value="${IMP_DEF()}" title="% imposto sobre nota">
       <span class="hlw-label">%</span>
       <span class="hlw-sep">|</span>
       <span class="hlw-label">margem</span>
@@ -177,7 +179,7 @@
         return;
       }
       
-      const pctImp     = parseFloat(document.getElementById('hlw-imp')?.value) || IMP_DEF;
+      const pctImp     = parseFloat(document.getElementById('hlw-imp')?.value) || IMP_DEF();
       const imposto    = totalNota * pctImp / 100; // Imposto sobre o valor bruto da nota
       
       let custoTotal = 0;

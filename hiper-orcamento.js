@@ -475,7 +475,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
     <label><input type="checkbox" id="chkE" onchange="recalc()"> Entrega R$</label>
     <input type="number" id="iE" value="${frete0>0?frete0:50}" min="0" step="0.01" style="width:72px" oninput="recalc()">
     <span class="panel-sep">|</span>
-    <label>% imposto <input type="number" id="iImp" value="10.70" min="0" max="100" step="0.01" style="width:68px" oninput="recalc()"></label>
+    <label>% imposto <input type="number" id="iImp" value="${window.__hiperImpPct ?? 10.70}" min="0" max="100" step="0.01" style="width:68px" oninput="recalc()"></label>
     <span class="panel-sep">|</span>
     <label>% desc. PIX <input type="number" id="iPixDesc" value="4.77" min="0" max="100" step="0.01" style="width:62px" oninput="onPixDesc()" onblur="onBlurPixDesc()"></label><button class="lock-btn-inline" id="btnLockPix" onclick="setLock('desconto')" title="Travar % desc. PIX"><svg class="svg-open" xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="8" rx="1.5" fill="#555"/><path d="M3 6V4a3 3 0 0 1 6 0" stroke="#555" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="6" cy="10" r="1.2" fill="#eee"/></svg><svg class="svg-lock" xmlns="http://www.w3.org/2000/svg" width="12" height="14" viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="8" rx="1.5" fill="#1565c0"/><path d="M3 6V4a3 3 0 0 1 6 0v2" stroke="#1565c0" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="6" cy="10" r="1.2" fill="white"/></svg></button>
     <span class="panel-sep">|</span>

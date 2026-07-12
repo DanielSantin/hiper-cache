@@ -256,9 +256,10 @@ window.addEventListener('message', async (event) => {
           });
           if (!dataRes.ok) throw new Error(`data status ${dataRes.status}`);
           const payload = await dataRes.json();
-          const custos  = payload.custos || {};
-          const hash    = payload.hash   || hashRemoto;
-          window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: true, custos, hash }, '*');
+          const custos  = payload.custos  || {};
+          const hash    = payload.hash    || hashRemoto;
+          const nfmPct  = payload.nfm_pct;   // % da nota fiscal (fonte única)
+          window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: true, custos, hash, nfmPct }, '*');
         } else {
           window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: true, custos: null, hash: hashRemoto }, '*');
         }

@@ -33,6 +33,7 @@
     const SYNC_INTERVAL_MS    = 60 * 60 * 1000;  // 1 hora (intervalo normal)
     const SYNC_RETRY_STEPS_MS = [5 * 60 * 1000, 15 * 60 * 1000]; // backoff offline
     const CUSTOS_HASH_KEY     = 'hc:custos_hash';  // chave no chrome.storage
+    const NFM_KEY             = 'hc:nfm_pct';       // % da nota fiscal (fonte única)
 
     // ── Scheduler de preload diário ───────────────────────────────────────────
     const MASTER_TS_KEY        = 'hc:master_ts';       // timestamp do último preload
@@ -223,8 +224,14 @@
                     cleanup();
                     _syncEmAndamento = false;
 
-                    const { ok, custos, hash, error } = ev.data;
+                    const { ok, custos, hash, nfmPct, error } = ev.data;
                     if (ok) {
+                        // % da nota fiscal (chega junto quando há dados novos; entra no
+                        // hash, então se não veio é porque não mudou).
+                        if (nfmPct != null && !Number.isNaN(Number(nfmPct))) {
+                            window.__hiperImpPct = Number(nfmPct);
+                            window.postMessage({ type: 'HIPER_CACHE_SET', key: NFM_KEY, data: window.__hiperImpPct, ts: Date.now() }, '*');
+                        }
                         if (custos) {
                             Object.entries(custos).forEach(([id, val]) => {
                                 window.__hiperCustos[id] = (typeof val === 'object' && val !== null) ? val.valor : val;
@@ -443,6 +450,12 @@
             if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
             if (vendedorText    != null) window.__hiperVendedor.text    = String(vendedorText);
             if (vendedorChecked != null) window.__hiperVendedor.checked = vendedorChecked === true || vendedorChecked === 'true';
+
+            // % da nota fiscal salvo (disponível já no load, antes do 1º sync)
+            const nfmEntry = entries[NFM_KEY];
+            if (nfmEntry?.data != null && !Number.isNaN(Number(nfmEntry.data))) {
+                window.__hiperImpPct = Number(nfmEntry.data);
+            }
 
             if (!inicializado) {
                 // Lê hash de custos salvo (se houver)
