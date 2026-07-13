@@ -237,34 +237,57 @@ window.addEventListener('message', async (event) => {
   // ── Sincronização de custos via interceptor (bypass CSP) ─────────────────
   if (msg.type === 'HIPER_SYNC_CUSTOS_REQ') {
     (async () => {
+      const API   = 'https://api.sistema.santin.tec.br';
+      const seq   = msg.seq;
+      const force = msg.force === true;
       try {
-        const API = 'https://api.sistema.santin.tec.br';
+        // Botão "Atualizar": força o servidor a puxar do Hiper (/produtos/sync)
+        // ANTES de responder — por isso é mais lento.
+        if (force) {
+          const syncRes = await fetch(`${API}/produtos/sync`, {
+            method: 'POST', cache: 'no-store', signal: AbortSignal.timeout(80000),
+          });
+          if (!syncRes.ok) throw new Error(`sync status ${syncRes.status}`);
+        }
+
         const metaRes = await fetch(`${API}/custos/metadata`, {
           cache: 'no-store',
           signal: AbortSignal.timeout(8000),
         });
         if (!metaRes.ok) throw new Error(`metadata status ${metaRes.status}`);
-        const meta        = await metaRes.json();
-        const hashRemoto  = meta.hash        || '';
-        const forceUpdate = meta.force_update === true;
-        const hashLocal   = msg.hashLocal    || '';
+        const meta             = await metaRes.json();
+        const hashRemoto       = meta.hash          || '';
+        const forceUpdate      = meta.force_update === true;
+        const produtosRemoto   = meta.produtos_hash || '';
+        const hashLocal          = msg.hashLocal         || '';
+        const produtosHashLocal  = msg.produtosHashLocal || '';
 
-        if (forceUpdate || hashRemoto !== hashLocal) {
+        const result = { type: 'HIPER_SYNC_CUSTOS_RESULT', ok: true, seq,
+                         hash: hashRemoto, produtosHash: produtosRemoto };
+
+        // Custos: baixa quando mudou (ou no force).
+        if (force || forceUpdate || hashRemoto !== hashLocal) {
           const dataRes = await fetch(`${API}/custos/data`, {
-            cache: 'no-store',
-            signal: AbortSignal.timeout(15000),
+            cache: 'no-store', signal: AbortSignal.timeout(15000),
           });
           if (!dataRes.ok) throw new Error(`data status ${dataRes.status}`);
           const payload = await dataRes.json();
-          const custos  = payload.custos  || {};
-          const hash    = payload.hash    || hashRemoto;
-          const nfmPct  = payload.nfm_pct;   // % da nota fiscal (fonte única)
-          window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: true, custos, hash, nfmPct }, '*');
-        } else {
-          window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: true, custos: null, hash: hashRemoto }, '*');
+          result.custos = payload.custos  || {};
+          result.hash   = payload.hash    || hashRemoto;
+          result.nfmPct = payload.nfm_pct;   // % da nota fiscal (fonte única)
         }
+
+        // Nomes/lista de produtos: baixa quando o produtos_hash mudou (ou no force).
+        if (force || produtosRemoto !== produtosHashLocal) {
+          const mRes = await fetch(`${API}/produtos/master`, {
+            cache: 'no-store', signal: AbortSignal.timeout(15000),
+          });
+          if (mRes.ok) result.produtos = (await mRes.json()).produtos || [];
+        }
+
+        window.postMessage(result, '*');
       } catch(e) {
-        window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: false, error: e.message }, '*');
+        window.postMessage({ type: 'HIPER_SYNC_CUSTOS_RESULT', ok: false, seq, error: e.message }, '*');
       }
     })();
   }

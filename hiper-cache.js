@@ -34,6 +34,7 @@
     const SYNC_RETRY_STEPS_MS = [5 * 60 * 1000, 15 * 60 * 1000]; // backoff offline
     const CUSTOS_HASH_KEY     = 'hc:custos_hash';  // chave no chrome.storage
     const NFM_KEY             = 'hc:nfm_pct';       // % da nota fiscal (fonte única)
+    const PRODUTOS_HASH_KEY   = 'hc:produtos_hash'; // fingerprint dos nomes de produto
 
     // ── Scheduler de preload diário ───────────────────────────────────────────
     const MASTER_TS_KEY        = 'hc:master_ts';       // timestamp do último preload
@@ -44,6 +45,8 @@
     let _syncRetryIndex  = 0;   // índice no array de backoff (offline)
     let _syncTimer       = null;
     let _syncEmAndamento = false;
+    let _produtosHashLocal = '';  // fingerprint de nomes já aplicado (memória)
+    let _syncSeq         = 0;   // correlaciona req/resposta da sync (passiva vs botão)
 
     const REAL_XML_HTTP = window.XMLHttpRequest;
     const NATIVE_FETCH = window.fetch.bind(window);
@@ -147,34 +150,37 @@
         });
     }
 
+    // Aplica um master vindo do servidor: pós-processa (text/und), ordena, salva
+    // e reconfigura os Select2 ao vivo. Usado pelo preload e pela sync (passiva/botão).
+    function aplicarMaster(produtos) {
+        if (!Array.isArray(produtos) || produtos.length < MIN_ITEMS_THRESHOLD) return false;
+        produtos.forEach(item => {
+            item.text = item.Nome;
+            const cod4 = (item.Nome || '').match(/^(\d{4})\b/)?.[1];
+            item.und = (cod4 && window.__hiperUnidades[cod4]) ? window.__hiperUnidades[cod4] : 'UN';
+        });
+        memMaster = produtos.sort((a, b) => {
+            // Ordena ignorando os 7 primeiros caracteres ("3112 - "), como antes.
+            const comparadorA = (a.Nome || '').substring(7).trim();
+            const comparadorB = (b.Nome || '').substring(7).trim();
+            return comparadorA.localeCompare(comparadorB, 'pt-BR');
+        });
+        window.__hiperMaster = memMaster;
+        window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
+        window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_TS_KEY, data: Date.now(), ts: Date.now() }, '*');
+        reconfigurarSelect2sExistentes();
+        return true;
+    }
+
     async function executarPreload() {
         if (!otimSelect) return;   // otimização do select desligada → não carrega master
         if (preloading) return;
         preloading = true;
         try {
             const produtos = await carregarMasterDoServidor();
-            if (!Array.isArray(produtos) || produtos.length < MIN_ITEMS_THRESHOLD) {
+            if (!aplicarMaster(produtos)) {
                 DEBUG && console.warn('[HiperCache] ⚠️ Master do servidor vazio/insuficiente — mantém cache atual.');
-                return;
             }
-            // O servidor já entrega deduplicado; aqui só o pós-processamento leve:
-            // text para o Select2 e und pela unidade padrão do código de 4 dígitos.
-            produtos.forEach(item => {
-                item.text = item.Nome;
-                const cod4 = (item.Nome || '').match(/^(\d{4})\b/)?.[1];
-                item.und = (cod4 && window.__hiperUnidades[cod4]) ? window.__hiperUnidades[cod4] : 'UN';
-            });
-            memMaster = produtos.sort((a, b) => {
-                // Ordena ignorando os 7 primeiros caracteres ("3112 - "), como antes.
-                const comparadorA = (a.Nome || '').substring(7).trim();
-                const comparadorB = (b.Nome || '').substring(7).trim();
-                return comparadorA.localeCompare(comparadorB, 'pt-BR');
-            });
-            window.__hiperMaster = memMaster;
-            window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_KEY, data: memMaster, ts: Date.now() }, '*');
-            // Timestamp do último refresh — o scheduler diário usa isso.
-            window.postMessage({ type: 'HIPER_CACHE_SET', key: MASTER_TS_KEY, data: Date.now(), ts: Date.now() }, '*');
-            reconfigurarSelect2sExistentes();
         } finally { preloading = false; }
     }
 
@@ -188,6 +194,40 @@
     // ── Sincronização via interceptor (content script — sem restrição de CSP) ──
     // O fetch real acontece no interceptor.js (contexto privilegiado).
     // Esta função envia HIPER_SYNC_CUSTOS_REQ e aguarda HIPER_SYNC_CUSTOS_RESULT.
+    // Aplica o resultado de uma sync (nfm + custos + nomes de produto). Serve tanto
+    // pro ciclo passivo quanto pro botão "Atualizar".
+    function aplicarResultadoSync(data) {
+        const { custos, hash, nfmPct, produtos, produtosHash } = data;
+
+        if (nfmPct != null && !Number.isNaN(Number(nfmPct))) {
+            window.__hiperImpPct = Number(nfmPct);
+            window.postMessage({ type: 'HIPER_CACHE_SET', key: NFM_KEY, data: window.__hiperImpPct, ts: Date.now() }, '*');
+        }
+
+        if (custos) {
+            Object.entries(custos).forEach(([id, val]) => {
+                window.__hiperCustos[id] = (typeof val === 'object' && val !== null) ? val.valor : val;
+            });
+            Object.entries(custos).forEach(([id, val]) => {
+                const num = (typeof val === 'object' && val !== null) ? val.valor : val;
+                window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: num, ts: Date.now() }, '*');
+            });
+            window.postMessage({ type: 'HIPER_CACHE_SET', key: CUSTOS_HASH_KEY, data: hash, ts: Date.now() }, '*');
+            window.__hiperCustosHash = hash;
+            window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
+            console.info(`[HiperCache] ✅ ${Object.keys(custos).length} custos atualizados | hash: ${hash}`);
+        }
+
+        // Nomes/lista de produtos — só vêm quando o produtos_hash mudou (ou no botão).
+        if (Array.isArray(produtos) && aplicarMaster(produtos)) {
+            console.info(`[HiperCache] ✅ ${produtos.length} produtos (nomes) atualizados.`);
+        }
+        if (produtosHash != null) {
+            _produtosHashLocal = produtosHash;
+            window.postMessage({ type: 'HIPER_CACHE_SET', key: PRODUTOS_HASH_KEY, data: produtosHash, ts: Date.now() }, '*');
+        }
+    }
+
     async function verificarAtualizacaoCustos() {
         if (_syncEmAndamento) return;
 
@@ -203,6 +243,7 @@
             const hashLocal = await _lerHashLocal();
 
             await new Promise(resolve => {
+                const seq = ++_syncSeq;
                 const timer = setTimeout(() => {
                     cleanup();
                     _syncEmAndamento = false;
@@ -220,46 +261,25 @@
 
                 function handler(ev) {
                     if (ev.source !== window) return;
-                    if (ev.data?.type !== 'HIPER_SYNC_CUSTOS_RESULT') return;
+                    if (ev.data?.type !== 'HIPER_SYNC_CUSTOS_RESULT' || ev.data.seq !== seq) return;
                     cleanup();
                     _syncEmAndamento = false;
 
-                    const { ok, custos, hash, nfmPct, error } = ev.data;
-                    if (ok) {
-                        // % da nota fiscal (chega junto quando há dados novos; entra no
-                        // hash, então se não veio é porque não mudou).
-                        if (nfmPct != null && !Number.isNaN(Number(nfmPct))) {
-                            window.__hiperImpPct = Number(nfmPct);
-                            window.postMessage({ type: 'HIPER_CACHE_SET', key: NFM_KEY, data: window.__hiperImpPct, ts: Date.now() }, '*');
-                        }
-                        if (custos) {
-                            Object.entries(custos).forEach(([id, val]) => {
-                                window.__hiperCustos[id] = (typeof val === 'object' && val !== null) ? val.valor : val;
-                            });
-                            Object.entries(custos).forEach(([id, val]) => {
-                                const num = (typeof val === 'object' && val !== null) ? val.valor : val;
-                                window.postMessage({ type: 'HIPER_CACHE_SET', key: `custo:${id}`, data: num, ts: Date.now() }, '*');
-                            });
-                            window.postMessage({ type: 'HIPER_CACHE_SET', key: CUSTOS_HASH_KEY, data: hash, ts: Date.now() }, '*');
-                            window.__hiperCustosHash = hash;
-                            window.postMessage({ type: 'HIPER_CUSTO_LOADED', custos: window.__hiperCustos }, '*');
-                            console.info(`[HiperCache] ✅ ${Object.keys(custos).length} custos atualizados | hash: ${hash}`);
-                        } else {
-                            DEBUG && console.log('[HiperCache] ✅ Custos em dia.');
-                        }
+                    if (ev.data.ok) {
+                        aplicarResultadoSync(ev.data);
                         _syncRetryIndex = 0;
                         _agendarProximaVerificacao(SYNC_INTERVAL_MS);
                     } else {
                         const delay = SYNC_RETRY_STEPS_MS[_syncRetryIndex] ?? SYNC_INTERVAL_MS;
                         _syncRetryIndex = Math.min(_syncRetryIndex + 1, SYNC_RETRY_STEPS_MS.length);
-                        console.warn(`[HiperCache] ⚠️ Sem conexão — retry em ${delay / 60000}min.`, error);
+                        console.warn(`[HiperCache] ⚠️ Sem conexão — retry em ${delay / 60000}min.`, ev.data.error);
                         _agendarProximaVerificacao(delay);
                     }
                     resolve();
                 }
 
                 window.addEventListener('message', handler);
-                window.postMessage({ type: 'HIPER_SYNC_CUSTOS_REQ', hashLocal }, '*');
+                window.postMessage({ type: 'HIPER_SYNC_CUSTOS_REQ', seq, hashLocal, produtosHashLocal: _produtosHashLocal }, '*');
             });
             // Lock liberado automaticamente ao sair do callback
         });
@@ -293,6 +313,28 @@
     /** Expõe para uso externo (botão manual no widget de lucro) */
     window.__hiper.syncCustos = verificarAtualizacaoCustos;
     window.__hiperSyncCustos  = verificarAtualizacaoCustos;
+
+    // Botão "Atualizar": força o servidor a rodar /produtos/sync antes de responder,
+    // e aplica custos + nomes ao vivo. Retorna Promise (o botão mostra "Atualizando…").
+    function forcarAtualizacao() {
+        return new Promise((resolve, reject) => {
+            const seq = ++_syncSeq;
+            const timer = setTimeout(() => { cleanup(); reject(new Error('timeout')); }, 90000);
+            function cleanup() { clearTimeout(timer); window.removeEventListener('message', handler); }
+            function handler(ev) {
+                if (ev.source !== window) return;
+                if (ev.data?.type !== 'HIPER_SYNC_CUSTOS_RESULT' || ev.data.seq !== seq) return;
+                cleanup();
+                if (ev.data.ok) { aplicarResultadoSync(ev.data); resolve(); }
+                else reject(new Error(ev.data.error || 'falha'));
+            }
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'HIPER_SYNC_CUSTOS_REQ', seq, force: true,
+                                 hashLocal: window.__hiperCustosHash || '',
+                                 produtosHashLocal: _produtosHashLocal }, '*');
+        });
+    }
+    window.__hiperForcarAtualizacao = forcarAtualizacao;
 
     // ── 4. Interceptador de Rede (apenas Select2) ─────────────────────────────
     window.fetch = async function(input, init) {
@@ -456,6 +498,9 @@
             if (nfmEntry?.data != null && !Number.isNaN(Number(nfmEntry.data))) {
                 window.__hiperImpPct = Number(nfmEntry.data);
             }
+            // Hash de produtos já aplicado (pra sync passiva saber se precisa rebaixar).
+            const prodHashEntry = entries[PRODUTOS_HASH_KEY];
+            if (prodHashEntry?.data) _produtosHashLocal = prodHashEntry.data;
 
             if (!inicializado) {
                 // Lê hash de custos salvo (se houver)

@@ -95,7 +95,7 @@
       <span class="hlw-sep">|</span>
       <span class="hlw-label">margem</span>
       <span class="hlw-badge" id="hlw-badge">—</span>
-      <button class="hlw-sync-btn" id="hlw-sync-btn" title="Verificar atualização de custos">↻ custos</button>
+      <button class="hlw-sync-btn" id="hlw-sync-btn" title="Força atualizar custos e lista de produtos (puxa do Hiper na hora)">↻ Atualizar</button>
     `;
 
     // ── Botão de atualização manual de custos ─────────────────────────────────
@@ -108,7 +108,7 @@
       if (estado === 'loading') {
         syncBtn.classList.add('hlw-sync-spin');
         syncBtn.disabled  = true;
-        syncBtn.textContent = '⟳ buscando…';
+        syncBtn.textContent = '⟳ Atualizando…';
       } else if (estado === 'ok') {
         syncBtn.classList.add('hlw-sync-ok');
         syncBtn.textContent = '✓ atualizado';
@@ -118,18 +118,21 @@
         syncBtn.textContent = '✗ sem conexão';
         setTimeout(() => _setSyncStatus('idle'), 4000);
       } else {
-        syncBtn.textContent = '↻ custos';
+        syncBtn.textContent = '↻ Atualizar';
       }
     }
 
     syncBtn.addEventListener('click', async () => {
-      if (typeof window.__hiperSyncCustos !== 'function') {
+      // Força o servidor a rodar /produtos/sync antes de responder → traz custos,
+      // % da nota e a lista de produtos novos/renomeados na hora.
+      const forcar = window.__hiperForcarAtualizacao || window.__hiperSyncCustos;
+      if (typeof forcar !== 'function') {
         _setSyncStatus('err');
         return;
       }
       _setSyncStatus('loading');
       try {
-        await window.__hiperSyncCustos();
+        await forcar();
         _setSyncStatus('ok');
         _deb(); // recalcula margens com custos novos
       } catch (e) {
