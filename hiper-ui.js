@@ -124,11 +124,14 @@ function _estaNoFormulario() {
     }
 
     // Mesmo hash — verifica se algum widget desmontou (Angular re-renderizou)
+    // ou se nada montou ainda (Hiper lento no primeiro acesso: o retry de 15s
+    // pode ter expirado antes do anchor existir; qualquer mutação reabre a janela)
     if (ROTA_FORMULARIO.test(hash)) {
       const algumFaltando = _widgets.some(
         w => w.mounted && !document.getElementById(w.id)
       );
-      if (algumFaltando) {
+      const nenhumMontado = _widgets.length > 0 && _widgets.every(w => !w.mounted);
+      if (algumFaltando || nenhumMontado) {
         _widgets.forEach(w => { w.mounted = false; });
         _anchor = null;
         _iniciarRetry();
