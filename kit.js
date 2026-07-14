@@ -374,6 +374,24 @@ const PORTAS_MO_POR_M2 = 100;
 //   demais:   id = nome do kit,          estado.tipo = 'kit'
 const kitsAtivos = new Map();
 
+// O estado dos kits pertence a UM pedido. Ao sair da rota do formulário,
+// descarta tudo — senão os kits de um orçamento recuperado sobrevivem à
+// navegação do SPA e reaparecem (e são salvos!) no pedido seguinte.
+// Limpa apenas na SAÍDA da rota: re-render do Angular com o mesmo hash
+// (remount do painel) mantém as medidas do pedido em edição.
+const ROTA_PEDIDO_KITS = /pedido-venda\/(novo|editar|duplicar)(\/|$|\?)/;
+let _hashKitsAnterior = location.hash;
+window.addEventListener('hashchange', () => {
+  const saiuDoFormulario =
+    ROTA_PEDIDO_KITS.test(_hashKitsAnterior) && !ROTA_PEDIDO_KITS.test(location.hash);
+  _hashKitsAnterior = location.hash;
+  if (saiuDoFormulario && kitsAtivos.size) {
+    kitsAtivos.clear();
+    if (typeof renderizarPainel === 'function') renderizarPainel();
+    console.info('[HiperKit] 🧹 Rota saiu do pedido — kits descartados.');
+  }
+});
+
 // ── UTIL ───────────────────────────────────────────────────────────────
 const delay = ms => new Promise(r => setTimeout(r, ms));
 

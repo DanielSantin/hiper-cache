@@ -7,9 +7,17 @@
 
   // Captura o parâmetro ?recuperar= IMEDIATAMENTE — antes do Hiper reescrever o hash
   ;(function() {
-    const hashQuery = location.hash.split('?')[1] || '';
-    const cod = new URLSearchParams(hashQuery).get('recuperar');
-    if (cod) window.__hiperRecuperarCodigo = cod.trim().toUpperCase();
+    const [hashBase, hashQuery = ''] = location.hash.split('?');
+    const params = new URLSearchParams(hashQuery);
+    const cod = params.get('recuperar');
+    if (cod) {
+      window.__hiperRecuperarCodigo = cod.trim().toUpperCase();
+      // Remove o parâmetro da URL: se o Hiper não reescrever o hash, um F5
+      // re-dispararia a auto-recuperação por cima do pedido em edição.
+      params.delete('recuperar');
+      const resto = params.toString();
+      history.replaceState(null, '', location.pathname + location.search + hashBase + (resto ? '?' + resto : ''));
+    }
   })();
 
   const API_BASE   = 'https://api.sistema.santin.tec.br';
