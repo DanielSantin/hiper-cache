@@ -238,13 +238,13 @@ function gerarHtmlOrcamento(dados, opcoes) {
     '<tr class="vazia"><td></td><td></td><td></td><td></td><td></td><td></td></tr>'
   ).join('');
 
-  // ── Coluna de custo — clicável, abre custos.html com código preenchido ───────
+  // ── Coluna de custo — clicável, abre tabela.html com código preenchido ───────
   const linhasCusto = itens.map(item => {
     const key = item.idProduto;
     const c   = key != null ? custosMap[key] : undefined;
     const txt = c != null ? parseFloat(c).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—';
     const cls = c != null ? 'custo-val ok' : 'custo-val vazio';
-    const url = key != null ? 'https://sistema.santin.tec.br/custos/?q=' + encodeURIComponent(key) : 'https://sistema.santin.tec.br/custos/';
+    const url = key != null ? 'https://sistema.santin.tec.br/tabela/?q=' + encodeURIComponent(key) : 'https://sistema.santin.tec.br/tabela/';
     return '<div class="custo-row">' +
       '<a class="custo-link" href="' + url + '" target="_blank" title="Editar custo do produto">' +
         '<span class="' + cls + '">' + txt + '</span>' +
@@ -658,7 +658,7 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 
 <div class="zona-saida no-print">
   <button class="btn-sync-custos" id="btnSyncCustos" onclick="syncCustos()">↻ Sincronizar custos</button>
-  <button class="btn-edit-custos" onclick="window.open('https://sistema.santin.tec.br/custos/', '_blank')">✏️ Editar custos</button>
+  <button class="btn-edit-custos" onclick="window.open('https://sistema.santin.tec.br/tabela/', '_blank')">✏️ Editar custos</button>
   <span class="zona-saida-sep"></span>
   <a class="btn-mov" href="https://sistema.santin.tec.br/estoque/#movimentos" target="_blank">📋 Ver movimentações</a>
   <button class="btn-saida" id="btnSaida" onclick="removerDoEstoque()">🏗️ Remover do estoque</button>
