@@ -593,7 +593,10 @@ function _congelarInputsNumericos(scope) {
     // Copia estilo relevante do input
     span.style.cssText = inp.style.cssText;
     span.style.display = 'inline-block';
-    span.style.textAlign = 'right';
+    // Herda o alinhamento da célula: coluna ÁREA é centralizada (como a linha
+    // de MO desagrupada, que usa span puro); colunas monetárias são à direita.
+    var tdPai = inp.closest('td');
+    span.style.textAlign = (tdPai && tdPai.style.textAlign === 'center') ? 'center' : 'right';
     span.style.width = '100%';
     // Se a célula estiver marcada como oculta, mantém o texto invisível no PDF
     var hdCell = inp.closest('.hd-cell');
