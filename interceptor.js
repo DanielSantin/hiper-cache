@@ -26,7 +26,6 @@ const MODULES = [
   { src: 'resumido-runtime.js' },
   { src: 'resumido-gerador.js' },
   { src: 'hiper-cpf-autofill.js' },
-  { src: 'hiper-ia-widget.js' },
 ];
 
 function loadNextModule(modules, index) {

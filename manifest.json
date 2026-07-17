@@ -46,8 +46,7 @@
         "resumido-runtime.js",
         "resumido-gerador.js",
         "hiper-ui.js",
-        "hiper-cpf-autofill.js",
-        "hiper-ia-widget.js"
+        "hiper-cpf-autofill.js"
       ],
       "matches": [
         "https://tagdrywall.hiper.com.br/*"
