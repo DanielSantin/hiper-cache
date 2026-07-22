@@ -562,16 +562,14 @@
 
   // ── Aplica desconto via widget Valor Final ────────────────────────────────────
   async function aplicarDescontoWidget(valorFinal) {
-    const inp = document.getElementById('hiper-vf-input');
-    const btn = document.getElementById('hiper-vf-btn');
+    const aplicar = window.HiperWidgets?.aplicarValorFinal;
 
-    if (!inp || !btn) {
+    if (!aplicar) {
       console.warn('[HiperDB] Widget Valor Final não encontrado — desconto não aplicado.');
       return false;
     }
 
-    inp.value = valorFinal.toFixed(2).replace('.', ',');
-    btn.click();
+    await aplicar(valorFinal);
     return true;
   }
 

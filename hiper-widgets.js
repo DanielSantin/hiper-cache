@@ -15,6 +15,36 @@ const getValorTotal    = () => { const el = document.querySelector('.valor-total
 const getDescontoInput = () => document.querySelector('.input-desconto-no-total-valor');
 const dispararEvento   = (el, t) => el.dispatchEvent(new Event(t, { bubbles: true }));
 
+// ── Leitura das linhas de produto (mesmos seletores/lógica do CadastroPedidoVenda.js) ──
+function getLinhasAtivas() {
+  return Array.from(document.querySelectorAll('.tabela-produtos .corpo-tabela .linha-produto'))
+    .filter(el => !el.classList.contains('default') && !el.classList.contains('linha-cancelada'));
+}
+
+function lerCampoMoeda(linha, seletor) {
+  const el = linha.querySelector(`${seletor} input`);
+  return el ? parseMoeda(el.value) : NaN;
+}
+
+// Réplica de recalcularTabela(): quantidadeDeCasasDecimais=0 usa .val() puro (mask 0#),
+// os demais usam o valor com máscara de moeda (vírgula decimal) — daí o fallback.
+function lerQuantidade(linha) {
+  const el = linha.querySelector('.quantidade-produto input');
+  if (!el) return NaN;
+  const direto = Number(el.value);
+  return (el.value !== '' && !isNaN(direto)) ? direto : parseMoeda(el.value);
+}
+
+function setDescontoLinha(linha, valor) {
+  const el = linha.querySelector('.desconto-produto input');
+  if (!el) return false;
+  el.value = Math.max(0, valor).toFixed(6).replace('.', ',');
+  // O handler que recalcula a linha (recalcularLinha) está preso no 'keyup',
+  // não em input/change — sem esse evento específico nada é recalculado.
+  ['keyup', 'change', 'input'].forEach(e => dispararEvento(el, e));
+  return true;
+}
+
 function injetarWidget() {
   if (document.getElementById('hiper-widget-valor-final')) return;
   const descEl = getDescontoInput();
@@ -62,53 +92,110 @@ function injetarWidget() {
     });
   }
 
-  // ── Aplica valor final com loop de correção de arredondamento ─────────────
+  // ── Aplica valor final calculando o desconto exato de cada linha ──────────
+  //
+  // O campo agregado (.input-desconto-no-total-valor) não dá pra usar pra bater
+  // um valor exato: o Hiper reparte esse valor proporcionalmente entre as linhas
+  // (arredondando o desconto unitário de cada uma pra 6 casas) e DEPOIS soma os
+  // subtotais de cada linha JÁ arredondados pra 2 casas (recalcularLinha). O total
+  // final é a soma de N arredondamentos independentes, não um arredondamento único
+  // — por isso variava e às vezes não convergia.
+  //
+  // Em vez de adivinhar um valor pro campo agregado e torcer, calculamos aqui o
+  // desconto exato de CADA linha (método dos maiores restos, garante que a soma
+  // dos subtotais arredondados bate no centavo) e gravamos direto em cada
+  // ".desconto-produto input" — sem passar pelo rateio do Hiper.
   async function aplicar(valorDesejado) {
     const vd = valorDesejado !== undefined ? valorDesejado : parseMoeda(inp.value);
     const di = getDescontoInput();
 
     if (isNaN(vd) || vd <= 0) { msg.style.color='#c00'; msg.textContent='Valor inválido.'; return; }
-    if (!di)                  { msg.style.color='#c00'; msg.textContent='Campo de desconto não encontrado.'; return; }
+
+    const linhas = getLinhasAtivas();
+    if (!linhas.length) { msg.style.color='#c00'; msg.textContent='Nenhum item encontrado na tabela.'; return; }
 
     msg.style.color = '#888';
     msg.textContent = 'Calculando...';
 
-    await zerarDesconto(di);
+    // Zera tudo (campo agregado + linhas) pra partir de uma base limpa, sem
+    // desconto residual de uma aplicação anterior distorcendo o cálculo.
+    if (di) await zerarDesconto(di);
+    linhas.forEach(l => setDescontoLinha(l, 0));
+    await new Promise(r => setTimeout(r, 150));
 
-    const vt = getValorTotal();
-    if (isNaN(vt) || vt <= 0) { msg.style.color='#c00'; msg.textContent='Não foi possível ler o total.'; return; }
-    if (vd > vt)               { msg.style.color='#c00'; msg.textContent='Valor maior que o total bruto.'; return; }
+    const dados = linhas.map(l => ({
+      linha: l,
+      valorUnitario: lerCampoMoeda(l, '.valor-unitario-produto'),
+      quantidade: lerQuantidade(l),
+    })).filter(d => !isNaN(d.valorUnitario) && !isNaN(d.quantidade) && d.quantidade > 0);
 
-    // Loop de correção: ajusta desconto até total resultante bater com vd
-    let descAtual = vt - vd;
-    const MAX_TENTATIVAS = 6;
+    if (!dados.length) { msg.style.color='#c00'; msg.textContent='Não consegui ler valor/quantidade dos itens.'; return; }
 
-    for (let i = 0; i < MAX_TENTATIVAS; i++) {
-      di.value = descAtual.toFixed(6).replace('.', ',');
-      ['input', 'change', 'blur'].forEach(e => dispararEvento(di, e));
+    dados.forEach(d => { d.bruto = d.valorUnitario * d.quantidade; });
+    const totalBruto = dados.reduce((s, d) => s + d.bruto, 0);
 
-      await new Promise(r => setTimeout(r, 200));
+    const freteEl    = document.querySelector('input.valor-frete');
+    const totalFrete = freteEl ? (parseMoeda(freteEl.value) || 0) : 0;
 
-      const totalResultante = getValorTotal();
-      const diff = totalResultante - vd;
+    const targetItens = vd - totalFrete;
+    if (targetItens < 0)        { msg.style.color='#c00'; msg.textContent='Valor menor que o frete.'; return; }
+    if (targetItens > totalBruto + 0.005) { msg.style.color='#c00'; msg.textContent='Valor maior que o total bruto.'; return; }
 
-      if (Math.abs(diff) < 0.005) break; // ✅ convergiu
+    const targetCentavos = Math.round(targetItens * 100);
 
-      descAtual += diff;
+    // Distribuição proporcional ao peso de cada linha no bruto (mesmo critério
+    // do Hiper), com o resíduo de centavos alocado pelas maiores partes
+    // fracionárias — garante soma EXATA sem depender de tentativa e erro.
+    const rawCents = dados.map(d => (d.bruto / totalBruto) * targetCentavos);
+    const floors    = rawCents.map(Math.floor);
+    let deficit     = targetCentavos - floors.reduce((a, b) => a + b, 0);
+
+    const ordem = rawCents
+      .map((v, i) => ({ i, frac: v - floors[i] }))
+      .sort((a, b) => b.frac - a.frac);
+
+    const centsFinais = floors.slice();
+    for (let k = 0; k < deficit; k++) centsFinais[ordem[k].i] += 1;
+
+    dados.forEach((d, i) => {
+      const subtotalFinal = centsFinais[i] / 100;
+      const desconto = d.valorUnitario - (subtotalFinal / d.quantidade);
+      setDescontoLinha(d.linha, desconto);
+    });
+
+    await new Promise(r => setTimeout(r, 150));
+
+    let totalFinal = getValorTotal();
+    let exato = !isNaN(totalFinal) && Math.abs(totalFinal - vd) < 0.005;
+
+    // Rede de segurança: só entra em jogo se sobrar 1 centavo por causa de
+    // alguma diferença de modo de arredondamento do Hiper (não é mais o
+    // mecanismo principal, é só um ajuste fino de última milha).
+    if (!exato && !isNaN(totalFinal)) {
+      const maior = dados.reduce((m, d) => d.bruto > m.bruto ? d : m, dados[0]);
+      const ajuste = totalFinal - vd;
+      const descontoAtual = maior.valorUnitario - (centsFinais[dados.indexOf(maior)] / 100 / maior.quantidade);
+      setDescontoLinha(maior.linha, descontoAtual + (ajuste / maior.quantidade));
+      await new Promise(r => setTimeout(r, 150));
+      totalFinal = getValorTotal();
+      exato = !isNaN(totalFinal) && Math.abs(totalFinal - vd) < 0.005;
     }
 
-    const totalFinal = getValorTotal();
-    const descFinal  = vt - totalFinal;
-    const exato      = Math.abs(totalFinal - vd) < 0.005;
+    const descFinal = totalBruto + totalFrete - totalFinal;
 
     msg.style.color = exato ? '#1a7a1a' : '#b8860b';
     msg.textContent = exato
-      ? `Desconto R$ ${descFinal.toFixed(2).replace('.',',')} (${((descFinal/vt)*100).toFixed(2)}%)`
+      ? `Desconto R$ ${descFinal.toFixed(2).replace('.',',')} (${((descFinal/(totalBruto+totalFrete))*100).toFixed(2)}%)`
       : `⚠️ Final: R$ ${totalFinal.toFixed(2).replace('.',',')} (diff R$ ${(totalFinal-vd).toFixed(2).replace('.',',')})`;
   }
 
   btn.addEventListener('click', () => aplicar());
   inp.addEventListener('keydown', e => { if (e.key==='Enter') aplicar(); });
+
+  // Exposto pra outros módulos (ex: hiper-db.js na restauração de pedido)
+  // chamarem o cálculo direto, sem simular clique/digitação no widget.
+  window.HiperWidgets = window.HiperWidgets || {};
+  window.HiperWidgets.aplicarValorFinal = aplicar;
 
   // Botão desconto PIX 4,77%
   const pixBtn = document.createElement('button');
@@ -122,11 +209,15 @@ function injetarWidget() {
     if (!di) return;
 
     await zerarDesconto(di);
+    // Zera também as linhas: senão um desconto residual de uma linha (de uma
+    // aplicação anterior) contaminaria a leitura de vt como base do 4,77%.
+    getLinhasAtivas().forEach(l => setDescontoLinha(l, 0));
+    await new Promise(r => setTimeout(r, 150));
 
     const vt = getValorTotal();
     if (isNaN(vt) || vt <= 0) return;
 
-    // Reutiliza o loop de correção via aplicar()
+    // Reutiliza o cálculo exato por linha de aplicar()
     await aplicar(vt * (1 - 0.0477));
   });
 
