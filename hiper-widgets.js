@@ -54,21 +54,12 @@ function injetarWidget() {
 
   const w = document.createElement('div');
   w.id = 'hiper-widget-valor-final';
-  w.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;background:#f0f7ff;border:1px solid #b3d4f5;border-radius:4px;font-size:12px;';
+  w.style.cssText = 'display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:6px;';
   w.innerHTML = `
-    <span style="white-space:nowrap;color:#555;font-weight:600;">💰 Valor final:</span>
-    <input id="hiper-vf-input" type="text" placeholder="Ex: 2000,00"
-      style="width:110px;padding:3px 6px;border:1px solid #aac;border-radius:3px;font-size:12px;text-align:right;"/>
-    <button id="hiper-vf-btn"
-      style="padding:3px 10px;background:#1a73e8;color:#fff;border:none;border-radius:3px;font-size:12px;cursor:pointer;">
-      Aplicar
-    </button>
     <span id="hiper-vf-msg" style="color:#888;font-size:11px;"></span>
   `;
   anchor.parentElement.insertBefore(w, anchor.nextSibling);
 
-  const inp = document.getElementById('hiper-vf-input');
-  const btn = document.getElementById('hiper-vf-btn');
   const msg = document.getElementById('hiper-vf-msg');
 
   async function zerarDesconto(di) {
@@ -105,8 +96,7 @@ function injetarWidget() {
   // desconto exato de CADA linha (método dos maiores restos, garante que a soma
   // dos subtotais arredondados bate no centavo) e gravamos direto em cada
   // ".desconto-produto input" — sem passar pelo rateio do Hiper.
-  async function aplicar(valorDesejado) {
-    const vd = valorDesejado !== undefined ? valorDesejado : parseMoeda(inp.value);
+  async function aplicar(vd) {
     const di = getDescontoInput();
 
     if (isNaN(vd) || vd <= 0) { msg.style.color='#c00'; msg.textContent='Valor inválido.'; return; }
@@ -189,8 +179,84 @@ function injetarWidget() {
       : `⚠️ Final: R$ ${totalFinal.toFixed(2).replace('.',',')} (diff R$ ${(totalFinal-vd).toFixed(2).replace('.',',')})`;
   }
 
-  btn.addEventListener('click', () => aplicar());
-  inp.addEventListener('keydown', e => { if (e.key==='Enter') aplicar(); });
+  // ── Clique no valor total abre um input flutuante (overlay) na mesma posição ──
+  //
+  // Por que overlay e não tornar o próprio <strong class="valor-total"> editável:
+  // esse nó é reescrito pelo Hiper (recalcularTabela → .text(...)) em praticamente
+  // todo evento da tabela (keyup em quantidade/valor/desconto de QUALQUER linha,
+  // adicionar/duplicar item etc.) — não só quando o valor final muda. Um
+  // contenteditable nesse elemento brigaria com essas reescritas no meio da
+  // digitação do usuário. O overlay é um <input> nosso, isolado, que o Hiper
+  // nunca toca; ele só existe durante a edição e depois desaparece.
+  function ativarEdicaoTotal() {
+    const totalEl = document.querySelector('.valor-total');
+    if (!totalEl || totalEl.dataset.hiperEditavel) return;
+    totalEl.dataset.hiperEditavel = '1';
+    totalEl.style.cursor = 'pointer';
+    totalEl.style.borderBottom = '1px dashed #1a73e8';
+    totalEl.title = 'Clique para definir o valor final';
+    totalEl.addEventListener('click', () => abrirEdicaoTotal(totalEl));
+  }
+
+  function abrirEdicaoTotal(totalEl) {
+    if (document.getElementById('hiper-vf-overlay')) return; // já tem edição aberta
+
+    const valorAtual = getValorTotal();
+    const rect   = totalEl.getBoundingClientRect();
+    const estilo = getComputedStyle(totalEl);
+
+    const overlay = document.createElement('input');
+    overlay.id = 'hiper-vf-overlay';
+    overlay.type = 'text';
+    overlay.value = !isNaN(valorAtual) ? valorAtual.toFixed(2).replace('.', ',') : '';
+    // Inserido no fluxo normal (irmão do <strong>, que fica escondido) em vez
+    // de position:fixed com coordenadas calculadas: se algum ancestral do
+    // formulário tiver transform (comum em modal/painel), ele vira o
+    // "containing block" do fixed e as coordenadas de getBoundingClientRect
+    // (sempre relativas à viewport) não batem mais com a posição real —
+    // foi exatamente o desalinhamento visto nas fotos. No fluxo normal isso
+    // não existe: o navegador posiciona certo sozinho.
+    overlay.style.cssText = `
+      display:inline-block; width:${Math.max(rect.width, 100)}px;
+      font-size:${estilo.fontSize}; font-weight:${estilo.fontWeight};
+      font-family:${estilo.fontFamily}; color:#0a3d0a; text-align:right;
+      border:2px solid #1a73e8; border-radius:3px; background:#fffde7;
+      padding:0 4px; box-sizing:border-box; vertical-align:baseline;
+    `;
+
+    totalEl.style.display = 'none';
+    totalEl.insertAdjacentElement('afterend', overlay);
+    overlay.focus();
+    overlay.select();
+
+    let decidido = false;
+    function fechar() {
+      overlay.remove();
+      totalEl.style.display = '';
+    }
+    async function confirmar() {
+      if (decidido) return;
+      decidido = true;
+      const valor = parseMoeda(overlay.value);
+      fechar();
+      if (!isNaN(valor) && valor > 0) await aplicar(valor);
+    }
+    function cancelar() {
+      if (decidido) return;
+      decidido = true;
+      fechar();
+    }
+
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); confirmar(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancelar(); }
+    });
+    overlay.addEventListener('blur', () => confirmar());
+  }
+
+  // recalcularTabela() só faz .text() nesse nó, nunca recria o elemento —
+  // então um único addEventListener aqui basta, sobrevive a qualquer recálculo.
+  ativarEdicaoTotal();
 
   // Exposto pra outros módulos (ex: hiper-db.js na restauração de pedido)
   // chamarem o cálculo direto, sem simular clique/digitação no widget.
@@ -201,7 +267,7 @@ function injetarWidget() {
   const pixBtn = document.createElement('button');
   pixBtn.id = 'hiper-btn-pix';
   pixBtn.textContent = '💸 Desconto PIX 4,77%';
-  pixBtn.style.cssText = 'margin-top:6px;padding:3px 10px;background:#0d6b0d;color:#fff;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;';
+  pixBtn.style.cssText = 'padding:3px 10px;background:#0d6b0d;color:#fff;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;';
   w.appendChild(pixBtn);
 
   pixBtn.addEventListener('click', async function() {
