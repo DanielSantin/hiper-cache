@@ -26,10 +26,11 @@ descartar, não afeta nada no fluxo atual).
    que já fica fora da pasta da extensão).
 3. Em https://chrome.google.com/webstore/devconsole, abra o item, "Package" →
    "Upload new package" → selecione o zip → "Submit for review".
-4. Itens não listados normalmente passam por revisão automática (minutos a poucas
-   horas) — não precisa aprovação manual demorada como itens públicos, mas não é
-   instantâneo. O Chrome atualiza os clientes sozinho depois que a nova versão fica
-   pública (checagem periódica nativa, igual qualquer extensão da Web Store).
+4. Tempo de revisão: itens com `host_permissions` amplo + dados pessoais (nosso caso)
+   costumam cair em revisão manual — de alguns dias a ~2 semanas, principalmente nas
+   primeiras submissões da conta. Não é instantâneo mesmo sendo não listado. O Chrome
+   atualiza os clientes sozinho depois que a nova versão fica pública (checagem
+   periódica nativa, igual qualquer extensão da Web Store).
 
 ## Primeiro upload (setup único)
 
