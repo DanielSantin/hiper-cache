@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hiper TAG — Vendas, Estoque e Orçamentos",
-  "version": "1.10",
+  "version": "1.11",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtYrK0iJILJI1kA6/8OB9J5kNo3ZKmKumvqFiqXwwtwc8uzWcNKaGBMGhuyMbnqs7D1KbZddk9B66ewIvC27vmRCQ6O9Z0dsqIfmIn075e3huhHZHPOdh+GwICtXIWHuMXtcXhqbsluGvIYQeEf4qW1cFVJgliUdz0avcpURFjnZI8fInBK7CbxCCrwDuukaWMItSr70/wBVA195M0SgCx0kv8c8RLUUdRms4fCsGE8QF6elWUNLfkmRltaon/gR7XJqjamJGltS3nd+M46XHLSg8WhAeiZUFQNiZZoFZoknSW760w5F5BMGFfuQOnMozVUG6Jh0eSR1f2yV8xoR5IQIDAQAB",
   "description": "Ferramentas internas do Hiper ERP: orçamentos, estoque, margem de lucro e cadastro de clientes — TAG Drywall.",
   "icons": {
