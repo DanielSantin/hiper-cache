@@ -40,6 +40,13 @@ function loadNextModule(modules, index) {
   (document.head || document.documentElement).appendChild(s);
 }
 
+// Expõe a URL base da extensão pro contexto da página via atributo (não é
+// afetado por CSP nem depende de <script> continuar no DOM — os módulos abaixo
+// removem a própria tag logo após carregar). Usado por hiper-orcamento.js e
+// resumido-gerador.js pra referenciar vendor/html2canvas e vendor/jspdf com
+// URL absoluta no HTML do orçamento (que vira um documento blob: separado).
+document.documentElement.setAttribute('data-hiper-ext-base', chrome.runtime.getURL(''));
+
 chrome.storage.local.get('hiper_ativo', (r) => {
   if (r.hiper_ativo === false) {
     console.info('[HiperCache] ⏸ Extensão desativada pelo usuário.');

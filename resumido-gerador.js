@@ -524,15 +524,13 @@ async function _baixarDetalhadoEmBackground(dados, opcoes) {
   }
 }
 
-// Base URL deste próprio script (chrome-extension://<id>/) — mesma técnica do
-// resumido-loader.js. As libs ficam empacotadas em vendor/ (Web Store não permite
-// carregar código de CDN externo, precisa vir dentro do pacote da extensão).
+// Base URL da extensão (chrome-extension://<id>/) — gravada por interceptor.js
+// num atributo do <html>. As libs ficam empacotadas em vendor/ (Web Store não
+// permite carregar código de CDN externo, precisa vir dentro do pacote da
+// extensão). Não usa mais a <script> tag do próprio módulo pra descobrir a
+// base porque interceptor.js remove a tag do DOM logo após carregar.
 function _baseUrlResumido() {
-  var scripts = document.querySelectorAll('script[src]');
-  var thisScript = Array.prototype.find.call(scripts, function(s) {
-    return s.src.indexOf('resumido-gerador') !== -1;
-  });
-  return thisScript ? thisScript.src.replace(/resumido-gerador\.js.*$/, '') : './';
+  return document.documentElement.getAttribute('data-hiper-ext-base') || '';
 }
 
 function _garantirLibs() {

@@ -167,14 +167,14 @@ function _extrairDadosPedidoV2(linhas) {
 }
 
 
-// Base URL deste próprio script (chrome-extension://<id>/) — usada pra referenciar
+// Base URL da extensão (chrome-extension://<id>/) — usada pra referenciar
 // vendor/html2canvas e vendor/jspdf com URL absoluta dentro do HTML do orçamento
 // (esse HTML vira um documento blob: separado, aberto em outra aba — não pode
-// carregar de CDN externo, Manifest V3 proíbe código remoto).
+// carregar de CDN externo, Manifest V3 proíbe código remoto). Gravada por
+// interceptor.js num atributo do <html> — não depende de nenhuma <script> tag
+// continuar no DOM (elas são removidas logo após carregar).
 function _baseUrlOrcamento() {
-  const scripts = document.querySelectorAll('script[src]');
-  const thisScript = Array.prototype.find.call(scripts, (s) => s.src.includes('hiper-orcamento'));
-  return thisScript ? thisScript.src.replace(/hiper-orcamento\.js.*$/, '') : '';
+  return document.documentElement.getAttribute('data-hiper-ext-base') || '';
 }
 
 function gerarHtmlOrcamento(dados, opcoes) {
