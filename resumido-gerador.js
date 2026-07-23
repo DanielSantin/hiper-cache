@@ -364,13 +364,15 @@ function resumido_gerarHtml(payload, opcoes) {
     '</div>\n' +
     '</div>\n';
 
+  var baseExt = _baseUrlResumido();
+
   return '<!DOCTYPE html>\n' +
     '<html lang="pt-BR">\n' +
     '<head>\n' +
     '<meta charset="UTF-8">\n' +
     '<title>Or\u00e7amento Resumido ' + numeroOrcamento + ' \u2014 ' + dataHoje + '</title>\n' +
-    S + ' src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">' + E + '\n' +
-    S + ' src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">' + E + '\n' +
+    S + ' src="' + baseExt + 'vendor/html2canvas.min.js">' + E + '\n' +
+    S + ' src="' + baseExt + 'vendor/jspdf.umd.min.js">' + E + '\n' +
     '<style>\n' + _resumido_css() + '\n</style>\n' +
     '</head>\n<body>\n' +
     S + '>\n' +

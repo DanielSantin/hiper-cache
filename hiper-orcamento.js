@@ -167,6 +167,16 @@ function _extrairDadosPedidoV2(linhas) {
 }
 
 
+// Base URL deste próprio script (chrome-extension://<id>/) — usada pra referenciar
+// vendor/html2canvas e vendor/jspdf com URL absoluta dentro do HTML do orçamento
+// (esse HTML vira um documento blob: separado, aberto em outra aba — não pode
+// carregar de CDN externo, Manifest V3 proíbe código remoto).
+function _baseUrlOrcamento() {
+  const scripts = document.querySelectorAll('script[src]');
+  const thisScript = Array.prototype.find.call(scripts, (s) => s.src.includes('hiper-orcamento'));
+  return thisScript ? thisScript.src.replace(/hiper-orcamento\.js.*$/, '') : '';
+}
+
 function gerarHtmlOrcamento(dados, opcoes) {
   const { itens } = dados;
   const { parcelas, incluirEntrega, taxaEntrega, numeroOrcamento } = opcoes;
@@ -227,14 +237,15 @@ function gerarHtmlOrcamento(dados, opcoes) {
   const LOGO = window.__hiperLogo || window.__hiperLogoBase64 || '';
   const IMG_TEL = window.__hiperIconeTel || '';
   const IMG_WHATS = window.__hiperIconeWhats || '';
+  const baseExt = _baseUrlOrcamento();
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <title>Orçamento TAG ${numeroOrcamento} - ${dataHoje}</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+<script src="${baseExt}vendor/html2canvas.min.js"><\/script>
+<script src="${baseExt}vendor/jspdf.umd.min.js"><\/script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
