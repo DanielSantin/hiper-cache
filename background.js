@@ -1,27 +1,52 @@
 // Service worker — mantém a extensão ativa e serializa operações críticas
+const API_BASE = 'https://api.sistema.santin.tec.br';
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log('[HiperCache] Extensão instalada.');
 });
 
-// ── Geração atômica de número de orçamento ────────────────────────────────────
-// O service worker é single-threaded: onMessage processa uma mensagem por vez.
-// Isso garante que nunca duas abas obtêm o mesmo número, sem necessidade de lock.
+// ── Geração de número de orçamento ────────────────────────────────────────────
+// O contador vive no backend (sync_meta.orc_seq:<LETRA>), compartilhado entre
+// todos os perfis do Chrome e todas as máquinas — chrome.storage.local é
+// isolado por perfil, então dois perfis podiam gerar o mesmo número e
+// sobrescrever o orçamento um do outro. O backend serializa a alocação
+// (BEGIN IMMEDIATE), então não há risco de colisão com requests concorrentes.
+//
+// A letra é definida por política (chrome.storage.managed, populada via
+// ExtensionSettings no registro do Windows — ver scripts/install-policy.ps1),
+// não por perfil. Isso garante que todos os perfis de uma mesma máquina
+// compartilhem a mesma letra automaticamente, sem configuração manual.
+
+const LETRA_PADRAO = 'A';
+
+function obterLetra() {
+  return new Promise((resolve) => {
+    if (!chrome.storage?.managed) return resolve(LETRA_PADRAO);
+    chrome.storage.managed.get('letra', (r) => {
+      const letra = (r?.letra || '').trim().toUpperCase();
+      resolve(/^[A-Z]{1,3}$/.test(letra) ? letra : LETRA_PADRAO);
+    });
+  });
+}
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type !== 'HIPER_ORC_NEXT_NUM') return false;
 
-  chrome.storage.local.get(['hiper_orc_letra', 'hiper_orc_counter'], (r) => {
-    const letra   = ((r.hiper_orc_letra) || 'A').toUpperCase();
-    const current = parseInt(r.hiper_orc_counter ?? '999', 10) || 999;
-    const next    = current >= 999999 ? 1000 : current + 1;
-
-    chrome.storage.local.set({ hiper_orc_counter: next }, () => {
-      console.log('[HiperCache] Número de orçamento gerado:', letra + next, '| aba:', sender.tab?.id);
-      sendResponse({ numero: letra + String(next), counter: next });
+  obterLetra()
+    .then((letra) =>
+      fetch(`${API_BASE}/pedido/proximo-numero?letra=${encodeURIComponent(letra)}`, { method: 'POST' })
+    )
+    .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+    .then((data) => {
+      console.log('[HiperCache] Número de orçamento gerado:', data.numero, '| aba:', sender.tab?.id);
+      sendResponse({ numero: data.numero, counter: data.counter });
+    })
+    .catch((err) => {
+      console.error('[HiperCache] Falha ao gerar número de orçamento via API:', err);
+      sendResponse({}); // sem 'numero' → interceptor.js entende como falha e faz retry
     });
-  });
 
-  return true; // mantém sendResponse ativo até o callback assíncrono responder
+  return true; // mantém sendResponse ativo até a resposta assíncrona
 });
 
 // ── Suprime window.print() na página de impressão quando tag_view=1 ──────────

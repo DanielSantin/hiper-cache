@@ -18,67 +18,36 @@ function parseMoedaOrc(str) {
 }
 
 
-// ── Geração de número de orçamento sequencial ─────────────────────────────────
-(function _bootOrcConfig() {
-  window.addEventListener('message', function _onOrcConfig(ev) {
+// ── Config de vendedor (persistida via chrome.storage.local) ─────────────────
+(function _bootVendedorConfig() {
+  window.addEventListener('message', function _onVendedorConfig(ev) {
     if (ev.source !== window) return;
     const msg = ev.data;
 
     if (msg?.type === 'HIPER_CACHE_ALL') {
       const entries = msg.entries || {};
-      const letra   = entries['hiper_orc_letra']   || 'A';
-      const counter = entries['hiper_orc_counter'] ?? 999;
-      window.__hiperOrcConfig = {
-        letra:   String(letra).toUpperCase(),
-        counter: parseInt(counter, 10) || 999,
-      };
       const vendedorText    = entries['vendedor']?.text    ?? null;
       const vendedorChecked = entries['vendedor']?.checked ?? null;
       if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
       if (vendedorText    != null) window.__hiperVendedor.text    = String(vendedorText);
       if (vendedorChecked != null) window.__hiperVendedor.checked = vendedorChecked === true || vendedorChecked === 'true';
     }
-
-    if (msg?.type === 'HIPER_ORC_CONFIG_CHANGED') {
-      if (!window.__hiperOrcConfig) window.__hiperOrcConfig = { letra: 'A', counter: 999 };
-      if (msg.letra   != null) window.__hiperOrcConfig.letra   = String(msg.letra).toUpperCase();
-      if (msg.counter != null) window.__hiperOrcConfig.counter = parseInt(msg.counter, 10) || 999;
-    }
   });
 
   if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    chrome.storage.local.get(['hiper_orc_letra', 'hiper_orc_counter', 'hiper_vendedor_text', 'hiper_vendedor_checked'], (r) => {
-      window.__hiperOrcConfig = {
-        letra:   ((r.hiper_orc_letra)   || 'A').toUpperCase(),
-        counter: parseInt(r.hiper_orc_counter ?? '999', 10) || 999,
-      };
+    chrome.storage.local.get(['hiper_vendedor_text', 'hiper_vendedor_checked'], (r) => {
       window.__hiperVendedor = {
         text:    r.hiper_vendedor_text    || '',
         checked: r.hiper_vendedor_checked || false,
       };
     });
     chrome.storage.onChanged.addListener((changes) => {
-      if (!window.__hiperOrcConfig) window.__hiperOrcConfig = { letra: 'A', counter: 999 };
-      if (changes.hiper_orc_letra)   window.__hiperOrcConfig.letra   = (changes.hiper_orc_letra.newValue   || 'A').toUpperCase();
-      if (changes.hiper_orc_counter) window.__hiperOrcConfig.counter = parseInt(changes.hiper_orc_counter.newValue ?? '999', 10) || 999;
       if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
       if (changes.hiper_vendedor_text)    window.__hiperVendedor.text    = changes.hiper_vendedor_text.newValue    || '';
       if (changes.hiper_vendedor_checked) window.__hiperVendedor.checked = changes.hiper_vendedor_checked.newValue || false;
     });
   }
 })();
-
-function gerarNumeroOrcamento() {
-  // ATENÇÃO: mantido apenas para compatibilidade — use gerarNumeroOrcamentoAsync()
-  // Este caminho local pode gerar duplicatas em múltiplas abas simultâneas.
-  const cfg = window.__hiperOrcConfig || { letra: 'A', counter: 999 };
-  let next = cfg.counter + 1;
-  if (next > 999999) next = 1000;
-  cfg.counter = next;
-  window.__hiperOrcConfig = cfg;
-  window.postMessage({ type: 'HIPER_CACHE_SET', key: 'hiper_orc_counter', data: next, ts: Date.now() }, '*');
-  return cfg.letra + String(next);
-}
 
 // ── Geração atômica via background (serializada, sem colisão entre abas) ─────
 // O interceptor faz até 5 retries com backoff (~3 s no total) para acordar o

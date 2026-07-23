@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "letra": {
+      "type": "string",
+      "title": "Letra do número de orçamento para esta máquina (ex: A, B, C...)"
+    }
+  }
+}

@@ -135,12 +135,8 @@ window.addEventListener('message', async (event) => {
   }
 
   if (msg.type === 'HIPER_CACHE_SET') {
-    // hiper_orc_* são salvos como primitivos pelo popup — mantém consistência
-    const ORC_PLAIN_KEYS = new Set(['hiper_orc_letra', 'hiper_orc_counter']);
     await safeStorage(() =>
-      ORC_PLAIN_KEYS.has(msg.key)
-        ? chrome.storage.local.set({ [msg.key]: msg.data })
-        : chrome.storage.local.set({ [msg.key]: { data: msg.data, ts: msg.ts } })
+      chrome.storage.local.set({ [msg.key]: { data: msg.data, ts: msg.ts } })
     );
   }
 
@@ -163,8 +159,6 @@ window.addEventListener('message', async (event) => {
     const _tentarGerarNumero = (tentativa) => {
       chrome.runtime.sendMessage({ type: 'HIPER_ORC_NEXT_NUM' }, (resp) => {
         if (!chrome.runtime.lastError && resp?.numero) {
-          // Sucesso — mantém __hiperOrcConfig sincronizado na aba
-          if (window.__hiperOrcConfig) window.__hiperOrcConfig.counter = resp.counter;
           window.postMessage({ type: 'HIPER_ORC_NEXT_NUM_ACK', numero: resp.numero, counter: resp.counter }, '*');
           return;
         }

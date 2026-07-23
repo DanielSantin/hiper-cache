@@ -27,9 +27,6 @@
 
   const _nativeFetch = window.__nativeFetch || window.fetch.bind(window);
 
-  // __hiperOrcConfig é carregado e mantido sincronizado por hiper-orcamento.js.
-  // hiper-db.js não duplica essa lógica — apenas consome window.__hiperOrcConfig.
-
   function fetchComTimeout(url, opts) {
     const ctrl  = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);

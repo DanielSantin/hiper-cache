@@ -1,1 +1,5 @@
 PLANO_REFATORACAO.md
+keys/
+*.crx
+*.pem
+

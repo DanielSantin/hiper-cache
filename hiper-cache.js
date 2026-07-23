@@ -474,16 +474,6 @@
                 }
             });
 
-            // Propaga config de orçamento para __hiperOrcConfig (consumido por hiper-orcamento.js)
-            // Essas chaves chegam como primitivos (o popup e interceptor não usam wrapper { data, ts })
-            const letra   = entries['hiper_orc_letra']   ?? null;
-            const counter = entries['hiper_orc_counter'] ?? null;
-            if (letra != null || counter != null) {
-                if (!window.__hiperOrcConfig) window.__hiperOrcConfig = { letra: 'A', counter: 999 };
-                if (letra   != null) window.__hiperOrcConfig.letra   = String(letra).toUpperCase();
-                if (counter != null) window.__hiperOrcConfig.counter = parseInt(counter, 10) || 999;
-            }
-
             // Propaga vendedor salvo para __hiperVendedor (consumido por hiper-orcamento.js e hiper-db.js)
             // IMPORTANTE: sempre sobrescreve — o objeto pode ter sido criado vazio por hiper-orcamento.js
             // antes do storage responder, e o `if (!window.__hiperVendedor)` antigo impedia a atualização.
