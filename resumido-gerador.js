@@ -522,12 +522,24 @@ async function _baixarDetalhadoEmBackground(dados, opcoes) {
   }
 }
 
+// Base URL deste próprio script (chrome-extension://<id>/) — mesma técnica do
+// resumido-loader.js. As libs ficam empacotadas em vendor/ (Web Store não permite
+// carregar código de CDN externo, precisa vir dentro do pacote da extensão).
+function _baseUrlResumido() {
+  var scripts = document.querySelectorAll('script[src]');
+  var thisScript = Array.prototype.find.call(scripts, function(s) {
+    return s.src.indexOf('resumido-gerador') !== -1;
+  });
+  return thisScript ? thisScript.src.replace(/resumido-gerador\.js.*$/, '') : './';
+}
+
 function _garantirLibs() {
+  var base = _baseUrlResumido();
   var promises = [];
   if (!window.html2canvas) {
     promises.push(new Promise(function(res, rej) {
       var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.src = base + 'vendor/html2canvas.min.js';
       s.onload = res; s.onerror = rej;
       document.head.appendChild(s);
     }));
@@ -535,7 +547,7 @@ function _garantirLibs() {
   if (!window.jspdf) {
     promises.push(new Promise(function(res, rej) {
       var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.src = base + 'vendor/jspdf.umd.min.js';
       s.onload = res; s.onerror = rej;
       document.head.appendChild(s);
     }));

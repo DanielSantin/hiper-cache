@@ -47,7 +47,12 @@ depois do primeiro upload, mas é barato manter por segurança).
      de situação de pedido) que não passam pelo `fetch` interceptável.
    - Precisa de uma URL de política de privacidade — pode ser uma página simples
      dizendo que os dados ficam só entre o navegador do usuário e o backend interno
-     da loja, sem terceiros.
+     da loja, sem terceiros. **Seja explícito sobre o CPF**: `hiper-cpf-autofill.js`
+     consulta `api.sistema.santin.tec.br/consulta-pessoa` pra autopreencher nome e
+     telefone de clientes a partir do CPF no cadastro — isso é dado pessoal de
+     terceiros (clientes da loja, não do usuário da extensão), e precisa aparecer
+     na declaração de "dados coletados" do dashboard (categoria "dados pessoais"),
+     mesmo saindo só pro backend próprio.
 5. Em "Visibility", marque **Unlisted** (não Public, não Private).
 6. Depois de aprovado, o link de instalação fica em
    `https://chromewebstore.google.com/detail/beegoeddmoobncnpjliopfddjedehhib`
