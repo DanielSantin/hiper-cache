@@ -13,7 +13,7 @@ if (typeof chrome === 'undefined' || !chrome.storage?.local) {
 
 async function updateCount() {
   const all = await chrome.storage.local.get(null);
-  const ignorar = new Set(['hiper_ativo', 'otim_select', 'otim_preco']);
+  const ignorar = new Set(['hiper_ativo', 'otim_select', 'otim_preco', 'hiper_orc_letra']);
   const cacheKeys = Object.keys(all).filter(k => !k.startsWith('custo:') && !ignorar.has(k));
   const custoKeys = Object.keys(all).filter(k => k.startsWith('custo:'));
   document.getElementById('count').textContent = cacheKeys.length;
@@ -72,11 +72,27 @@ function ligarToggleOtim(inputId, sliderId, thumbId, chave) {
 ligarToggleOtim('toggleSelect', 'selectSlider', 'selectThumb', 'otim_select');
 ligarToggleOtim('togglePreco',  'precoSlider',  'precoThumb',  'otim_preco');
 
+// ── Letra do orçamento (por perfil — o contador é do servidor, não guardamos aqui) ──
+const LETRA_PADRAO = 'T';
+const orcLetraInput = document.getElementById('orcLetra');
+
+chrome.storage.local.get('hiper_orc_letra', (r) => {
+  orcLetraInput.value = (r.hiper_orc_letra || LETRA_PADRAO).toUpperCase();
+});
+
+orcLetraInput.addEventListener('change', () => {
+  let letra = orcLetraInput.value.trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  if (!letra) letra = LETRA_PADRAO;
+  orcLetraInput.value = letra;
+  chrome.storage.local.set({ hiper_orc_letra: letra });
+  feedback('✅ Letra salva: ' + letra);
+});
+
 // ── Botões ────────────────────────────────────────────────────────────────────
 document.getElementById('clearBtn').addEventListener('click', async () => {
-  // Preserva as configs (toggles) ao limpar o cache
+  // Preserva as configs (toggles + letra) ao limpar o cache
   const preserve = await chrome.storage.local.get(
-    ['hiper_ativo', 'otim_select', 'otim_preco']);
+    ['hiper_ativo', 'otim_select', 'otim_preco', 'hiper_orc_letra']);
   await chrome.storage.local.clear();
   await chrome.storage.local.set(preserve);
   feedback('✓ Cache limpo!');

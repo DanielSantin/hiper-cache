@@ -95,6 +95,33 @@
       min-height: 16px;
     }
 
+    .orc-row { display: flex; align-items: center; gap: 8px; }
+
+    .orc-row label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      color: #64748b;
+    }
+
+    input.orc-letra {
+      flex: 0 0 52px;
+      padding: 4px 6px;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 5px;
+      color: #38bdf8;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    input.orc-letra:focus {
+      outline: none;
+      border-color: #38bdf8;
+    }
+
     /* Toggle */
     .toggle-wrap {
       display: flex;
@@ -170,6 +197,14 @@
     <div class="label">Custos salvos</div>
     <div class="value-sm" id="custoCount">—</div>
     <div class="sub">Persistem entre sessões</div>
+  </div>
+
+  <div class="card">
+    <div class="orc-row">
+      <label for="orcLetra">Letra do orçamento</label>
+      <input id="orcLetra" class="orc-letra" type="text" maxlength="3" placeholder="T" />
+    </div>
+    <div class="sub" style="margin-top:6px">O número (ex: T1005) é gerado pelo servidor — não colide mesmo com várias pessoas usando a mesma letra.</div>
   </div>
 
   <button class="btn-export" id="exportBtn">⬇️ Exportar custos (JSON)</button>

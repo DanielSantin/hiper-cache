@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hiper Cache - Produtos",
-  "version": "1.7",
+  "version": "1.8",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtYrK0iJILJI1kA6/8OB9J5kNo3ZKmKumvqFiqXwwtwc8uzWcNKaGBMGhuyMbnqs7D1KbZddk9B66ewIvC27vmRCQ6O9Z0dsqIfmIn075e3huhHZHPOdh+GwICtXIWHuMXtcXhqbsluGvIYQeEf4qW1cFVJgliUdz0avcpURFjnZI8fInBK7CbxCCrwDuukaWMItSr70/wBVA195M0SgCx0kv8c8RLUUdRms4fCsGE8QF6elWUNLfkmRltaon/gR7XJqjamJGltS3nd+M46XHLSg8WhAeiZUFQNiZZoFZoknSW760w5F5BMGFfuQOnMozVUG6Jh0eSR1f2yV8xoR5IQIDAQAB",
   "description": "Cache local para o endpoint de produtos do Hiper, eliminando fetches repetidos.",
   "icons": {
@@ -23,9 +23,6 @@
   ],
   "background": {
     "service_worker": "background.js"
-  },
-  "storage": {
-    "managed_schema": "storage_managed_schema.json"
   },
   "content_scripts": [
     {

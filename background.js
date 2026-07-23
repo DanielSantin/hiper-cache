@@ -6,24 +6,20 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 // ── Geração de número de orçamento ────────────────────────────────────────────
-// O contador vive no backend (sync_meta.orc_seq:<LETRA>), compartilhado entre
-// todos os perfis do Chrome e todas as máquinas — chrome.storage.local é
-// isolado por perfil, então dois perfis podiam gerar o mesmo número e
-// sobrescrever o orçamento um do outro. O backend serializa a alocação
-// (BEGIN IMMEDIATE), então não há risco de colisão com requests concorrentes.
+// O contador vive no backend (sync_meta.orc_seq:<LETRA>), incrementado
+// atomicamente (BEGIN IMMEDIATE) a cada requisição — mesmo que várias pessoas
+// usem a mesma letra ao mesmo tempo, em perfis/máquinas diferentes, não há
+// colisão nem sobrescrita de orçamento.
 //
-// A letra é definida por política (chrome.storage.managed, populada via
-// ExtensionSettings no registro do Windows — ver scripts/install-policy.ps1),
-// não por perfil. Isso garante que todos os perfis de uma mesma máquina
-// compartilhem a mesma letra automaticamente, sem configuração manual.
+// A letra é config local por perfil (chrome.storage.local, editável no popup),
+// com padrão "T" — só identifica quem gerou o orçamento, não precisa ser única.
 
-const LETRA_PADRAO = 'A';
+const LETRA_PADRAO = 'T';
 
 function obterLetra() {
   return new Promise((resolve) => {
-    if (!chrome.storage?.managed) return resolve(LETRA_PADRAO);
-    chrome.storage.managed.get('letra', (r) => {
-      const letra = (r?.letra || '').trim().toUpperCase();
+    chrome.storage.local.get('hiper_orc_letra', (r) => {
+      const letra = (r?.hiper_orc_letra || '').trim().toUpperCase();
       resolve(/^[A-Z]{1,3}$/.test(letra) ? letra : LETRA_PADRAO);
     });
   });
