@@ -5,13 +5,15 @@ busca, só quem tem o link instala. Isso substitui o antigo `atualizar.bat` (mod
 desenvolvedor + git pull): a instalação passa a ser "abrir o link → Adicionar ao Chrome",
 sem dev mode, sem política de registro, sem CBCM. O auto-update é 100% nativo do Chrome.
 
-## Chave privada
+## Extension ID
 
-`../keys/extension-key.pem` garante que o extension ID continua sendo sempre
-`beegoeddmoobncnpjliopfddjedehhib` — a Web Store respeita o campo `"key"` do
-`manifest.json` no primeiro upload do item. **Nunca versionar esse arquivo, nunca gerar
-outro.** Guarde uma cópia de backup fora deste PC (não é mais estritamente necessária
-depois do primeiro upload, mas é barato manter por segurança).
+O dashboard da Web Store **rejeita upload com o campo `"key"` no manifest.json**
+("O campo key não é permitido no manifesto") — diferente do que a documentação antiga
+sugeria. Não dá pra preservar o ID `beegoeddmoobncnpjliopfddjedehhib` (usado durante a
+fase self-hosted); o Google atribui um ID novo automaticamente no primeiro upload.
+Não é um problema real, já que ninguém instalou pela Web Store ainda — só significa que
+`../keys/extension-key.pem` não tem mais utilidade daqui pra frente (pode manter ou
+descartar, não afeta nada no fluxo atual).
 
 ## Publicar uma nova versão
 
@@ -55,8 +57,8 @@ depois do primeiro upload, mas é barato manter por segurança).
      mesmo saindo só pro backend próprio.
 5. Em "Visibility", marque **Unlisted** (não Public, não Private).
 6. Depois de aprovado, o link de instalação fica em
-   `https://chromewebstore.google.com/detail/beegoeddmoobncnpjliopfddjedehhib`
-   (assumindo que o ID é preservado — confirme no dashboard depois do upload).
+   `https://chromewebstore.google.com/detail/<ID-NOVO>` — o ID é gerado pelo Google
+   nesse primeiro upload, veja no dashboard do item.
 7. Compartilhe esse link com as 5 máquinas — cada uma instala clicando "Adicionar ao
    Chrome", sem precisar de PowerShell nem admin.
 
