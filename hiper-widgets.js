@@ -254,9 +254,80 @@ function injetarWidget() {
     overlay.addEventListener('blur', () => confirmar());
   }
 
+  // ── Clique no valor de desconto abre o mesmo tipo de overlay ──────────────
+  //
+  // aplicar() trabalha em cima do valor final (total após desconto), não do
+  // desconto em si. Pra editar o desconto diretamente, convertemos: a partir
+  // dos valores já renderizados (total atual + desconto atual) recuperamos a
+  // base (bruto + frete) sem precisar reler/recalcular a tabela, e chamamos
+  // aplicar(base - descontoDesejado).
+  function ativarEdicaoDesconto() {
+    const descEl = document.querySelector('.totais-desconto b.valor');
+    if (!descEl || descEl.dataset.hiperEditavel) return;
+    descEl.dataset.hiperEditavel = '1';
+    descEl.style.cursor = 'pointer';
+    descEl.style.borderBottom = '1px dashed #1a73e8';
+    descEl.title = 'Clique para definir o desconto';
+    descEl.addEventListener('click', () => abrirEdicaoDesconto(descEl));
+  }
+
+  function abrirEdicaoDesconto(descEl) {
+    if (document.getElementById('hiper-vf-overlay')) return; // já tem edição aberta
+
+    const descontoAtual = parseMoeda(descEl.textContent.trim());
+    const totalAtual = getValorTotal();
+    if (isNaN(descontoAtual) || isNaN(totalAtual)) return;
+    const base = totalAtual + descontoAtual; // bruto + frete
+
+    const rect   = descEl.getBoundingClientRect();
+    const estilo = getComputedStyle(descEl);
+
+    const overlay = document.createElement('input');
+    overlay.id = 'hiper-vf-overlay';
+    overlay.type = 'text';
+    overlay.value = descontoAtual.toFixed(2).replace('.', ',');
+    overlay.style.cssText = `
+      display:inline-block; width:${Math.max(rect.width, 100)}px;
+      font-size:${estilo.fontSize}; font-weight:${estilo.fontWeight};
+      font-family:${estilo.fontFamily}; color:#0a3d0a; text-align:right;
+      border:2px solid #1a73e8; border-radius:3px; background:#fffde7;
+      padding:0 4px; box-sizing:border-box; vertical-align:baseline;
+    `;
+
+    descEl.style.display = 'none';
+    descEl.insertAdjacentElement('afterend', overlay);
+    overlay.focus();
+    overlay.select();
+
+    let decidido = false;
+    function fechar() {
+      overlay.remove();
+      descEl.style.display = '';
+    }
+    async function confirmar() {
+      if (decidido) return;
+      decidido = true;
+      const desconto = parseMoeda(overlay.value);
+      fechar();
+      if (!isNaN(desconto) && desconto >= 0) await aplicar(base - desconto);
+    }
+    function cancelar() {
+      if (decidido) return;
+      decidido = true;
+      fechar();
+    }
+
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); confirmar(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancelar(); }
+    });
+    overlay.addEventListener('blur', () => confirmar());
+  }
+
   // recalcularTabela() só faz .text() nesse nó, nunca recria o elemento —
   // então um único addEventListener aqui basta, sobrevive a qualquer recálculo.
   ativarEdicaoTotal();
+  ativarEdicaoDesconto();
 
   // Exposto pra outros módulos (ex: hiper-db.js na restauração de pedido)
   // chamarem o cálculo direto, sem simular clique/digitação no widget.
