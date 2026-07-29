@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hiper TAG — Vendas, Estoque e Orçamentos",
-  "version": "1.13",
+  "version": "1.14",
   "description": "Ferramentas internas do Hiper ERP: orçamentos, estoque, margem de lucro e cadastro de clientes — TAG Drywall.",
   "icons": {
     "16": "icons/icon16.png",

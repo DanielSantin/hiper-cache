@@ -35,10 +35,10 @@ function lerQuantidade(linha) {
   return (el.value !== '' && !isNaN(direto)) ? direto : parseMoeda(el.value);
 }
 
-function setDescontoLinha(linha, valor) {
+function setDescontoLinha(linha, valor, casas = 6) {
   const el = linha.querySelector('.desconto-produto input');
   if (!el) return false;
-  el.value = Math.max(0, valor).toFixed(6).replace('.', ',');
+  el.value = Math.max(0, valor).toFixed(casas).replace('.', ',');
   // O handler que recalcula a linha (recalcularLinha) está preso no 'keyup',
   // não em input/change — sem esse evento específico nada é recalculado.
   ['keyup', 'change', 'input'].forEach(e => dispararEvento(el, e));
@@ -147,29 +147,91 @@ function injetarWidget() {
     const centsFinais = floors.slice();
     for (let k = 0; k < deficit; k++) centsFinais[ordem[k].i] += 1;
 
-    dados.forEach((d, i) => {
-      const subtotalFinal = centsFinais[i] / 100;
-      const desconto = d.valorUnitario - (subtotalFinal / d.quantidade);
-      setDescontoLinha(d.linha, desconto);
+    // Simula a mesma conta que o Hiper faz por linha (quantidade * (unitário -
+    // desconto), arredondada a 2 casas) pra decidir de antemão o desconto de
+    // cada linha que fecha o valor exato — sem escrever nada na tela, medir o
+    // total renderizado e tentar de novo.
+    const valorUnitarioCents = dados.map(d => Math.round(d.valorUnitario * 100));
+    const subtotalPrevisto = (i, cents) => Math.round(dados[i].quantidade * (valorUnitarioCents[i] - cents));
+
+    const descontoCents = dados.map((d, i) => {
+      const ideal = valorUnitarioCents[i] - (centsFinais[i] / d.quantidade);
+      return Math.min(valorUnitarioCents[i], Math.max(0, Math.round(ideal)));
     });
+
+    // Diferença entre o alvo exato de cada linha e o que a fórmula do Hiper
+    // realmente vai mostrar depois de arredondar o desconto a 2 casas.
+    let residuo = dados.reduce((s, d, i) => s + (centsFinais[i] - subtotalPrevisto(i, descontoCents[i])), 0);
+
+    // Antes de espalhar centavo a centavo por várias linhas, tenta fechar o
+    // resíduo INTEIRO numa única linha cuja quantidade divide ele certinho
+    // (ex: resíduo de 54 centavos e uma linha de quantidade 9 → só essa linha
+    // muda, 6 centavos de desconto a mais ou a menos, sem tocar em mais nada).
+    // Só vale pra quantidade inteira: aí a conta é exata, sem depender do
+    // arredondamento do Hiper.
+    if (residuo !== 0) {
+      const candidataUnica = dados
+        .map((d, i) => ({ i, quantidade: d.quantidade, bruto: d.bruto }))
+        .filter(c => Number.isInteger(c.quantidade) && c.quantidade > 0 && residuo % c.quantidade === 0)
+        .sort((a, b) => b.bruto - a.bruto)[0];
+
+      if (candidataUnica) {
+        const delta = -residuo / candidataUnica.quantidade; // mudança no desconto (centavos) dessa linha
+        const novo = descontoCents[candidataUnica.i] + delta;
+        if (novo >= 0 && novo <= valorUnitarioCents[candidataUnica.i]) {
+          descontoCents[candidataUnica.i] = novo;
+          residuo = 0;
+        }
+      }
+    }
+
+    // Fecha o resíduo centavo a centavo testando, em qualquer linha (não só
+    // quantidade 1), se 1 centavo de desconto muda o subtotal PREVISTO dela
+    // em exatamente 1 centavo — quantidade fracionária também dá esse passo
+    // exato às vezes, por causa do próprio arredondamento do Hiper, então não
+    // faz sentido restringir a quantidade === 1. Espalha entre as maiores
+    // linhas em vez de concentrar numa só, e reavalia o passo a cada
+    // tentativa (a mesma linha pode dar passo diferente na próxima rodada).
+    if (residuo !== 0) {
+      const ordemLinhas = dados
+        .map((d, i) => ({ i, bruto: d.bruto }))
+        .sort((a, b) => b.bruto - a.bruto);
+
+      const passo = residuo > 0 ? -1 : 1; // desconto -1 centavo => subtotal deve andar +1 centavo
+      let k = 0, semProgresso = 0;
+      while (residuo !== 0 && semProgresso < ordemLinhas.length) {
+        const { i } = ordemLinhas[k % ordemLinhas.length];
+        const novo = descontoCents[i] + passo;
+        const delta = subtotalPrevisto(i, novo) - subtotalPrevisto(i, descontoCents[i]);
+        if (delta === -passo && novo >= 0 && novo <= valorUnitarioCents[i]) {
+          descontoCents[i] = novo;
+          residuo += passo;
+          semProgresso = 0;
+        } else {
+          semProgresso++; // essa linha não dá passo exato de 1 centavo agora, tenta a próxima
+        }
+        k++;
+      }
+    }
+
+    // Casas extras só pra compatibilizar com o formato que o Hiper usa
+    // internamente (ex: 0,510000) — o valor em si continua com 2 casas reais.
+    dados.forEach((d, i) => setDescontoLinha(d.linha, descontoCents[i] / 100));
+
+    // Se ainda sobrou resíduo (nenhuma linha conseguiu dar o passo exato de
+    // 1 centavo), a linha de maior peso absorve o restante com casas
+    // decimais de verdade — o alvo dela vem da conta, não de medir a tela.
+    if (residuo !== 0) {
+      const maior = dados.reduce((m, d) => d.bruto > m.bruto ? d : m, dados[0]);
+      const iMaior = dados.indexOf(maior);
+      const subtotalAjustado = (subtotalPrevisto(iMaior, descontoCents[iMaior]) + residuo) / 100;
+      setDescontoLinha(maior.linha, maior.valorUnitario - (subtotalAjustado / maior.quantidade));
+    }
 
     await new Promise(r => setTimeout(r, 150));
 
-    let totalFinal = getValorTotal();
-    let exato = !isNaN(totalFinal) && Math.abs(totalFinal - vd) < 0.005;
-
-    // Rede de segurança: só entra em jogo se sobrar 1 centavo por causa de
-    // alguma diferença de modo de arredondamento do Hiper (não é mais o
-    // mecanismo principal, é só um ajuste fino de última milha).
-    if (!exato && !isNaN(totalFinal)) {
-      const maior = dados.reduce((m, d) => d.bruto > m.bruto ? d : m, dados[0]);
-      const ajuste = totalFinal - vd;
-      const descontoAtual = maior.valorUnitario - (centsFinais[dados.indexOf(maior)] / 100 / maior.quantidade);
-      setDescontoLinha(maior.linha, descontoAtual + (ajuste / maior.quantidade));
-      await new Promise(r => setTimeout(r, 150));
-      totalFinal = getValorTotal();
-      exato = !isNaN(totalFinal) && Math.abs(totalFinal - vd) < 0.005;
-    }
+    const totalFinal = getValorTotal();
+    const exato = !isNaN(totalFinal) && Math.abs(totalFinal - vd) < 0.005;
 
     const descFinal = totalBruto + totalFrete - totalFinal;
 
