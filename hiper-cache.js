@@ -62,7 +62,6 @@
     // Desligado → cai no comportamento nativo do Hiper. Vale ao recarregar.
     let otimSelect = true;
     let otimPreco  = true;
-    window.__hiperUnidades = (typeof UNIDADES_PADRAO !== 'undefined') ? UNIDADES_PADRAO : {};
 
     // ── Utilitário de Log ─────────────────────────────────────────────────────
     const S = 'font-weight:bold;padding:1px 4px;border-radius:3px;';
@@ -150,14 +149,15 @@
         });
     }
 
-    // Aplica um master vindo do servidor: pós-processa (text/und), ordena, salva
+    // Aplica um master vindo do servidor: pós-processa (text/ordenação), salva
     // e reconfigura os Select2 ao vivo. Usado pelo preload e pela sync (passiva/botão).
+    // A unidade (item.und) já vem pronta do /produtos/master (extraída do
+    // dados_json sincronizado do bff) — sem mapa fixo no cliente.
     function aplicarMaster(produtos) {
         if (!Array.isArray(produtos) || produtos.length < MIN_ITEMS_THRESHOLD) return false;
         produtos.forEach(item => {
             item.text = item.Nome;
-            const cod4 = (item.Nome || '').match(/^(\d{4})\b/)?.[1];
-            item.und = (cod4 && window.__hiperUnidades[cod4]) ? window.__hiperUnidades[cod4] : 'UN';
+            if (!item.und) item.und = 'UN';
         });
         memMaster = produtos.sort((a, b) => {
             // Ordena ignorando os 7 primeiros caracteres ("3112 - "), como antes.
