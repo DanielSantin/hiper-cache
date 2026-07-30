@@ -18,7 +18,8 @@ function parseMoedaOrc(str) {
 }
 
 
-// ── Config de vendedor (persistida via chrome.storage.local) ─────────────────
+// ── Config de vendedor + letra do orçamento (persistidas via chrome.storage.local,
+// só chegam à página via broadcast do interceptor — page-world não tem chrome.*) ──
 (function _bootVendedorConfig() {
   window.addEventListener('message', function _onVendedorConfig(ev) {
     if (ev.source !== window) return;
@@ -31,6 +32,9 @@ function parseMoedaOrc(str) {
       if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
       if (vendedorText    != null) window.__hiperVendedor.text    = String(vendedorText);
       if (vendedorChecked != null) window.__hiperVendedor.checked = vendedorChecked === true || vendedorChecked === 'true';
+
+      const letra = (entries['hiper_orc_letra'] || '').toString().trim().toUpperCase();
+      if (/^[A-Z]{1,3}$/.test(letra)) window.__hiperOrcLetra = letra;
     }
   });
 
@@ -49,39 +53,25 @@ function parseMoedaOrc(str) {
   }
 })();
 
-// ── Geração atômica via background (serializada, sem colisão entre abas) ─────
-// O interceptor faz até 5 retries com backoff (~3 s no total) para acordar o
-// service worker. Aguardamos 5 s aqui para cobrir esse ciclo com folga.
-// Não há fallback local — o background é a única fonte da verdade.
-function gerarNumeroOrcamentoAsync() {
-  return new Promise((resolve, reject) => {
-    const onMsg = (ev) => {
-      if (ev.source !== window) return;
-
-      if (ev.data?.type === 'HIPER_ORC_NEXT_NUM_ACK') {
-        cleanup();
-        resolve(ev.data.numero);
-      }
-
-      if (ev.data?.type === 'HIPER_ORC_NEXT_NUM_ERR') {
-        cleanup();
-        reject(new Error('Não foi possível gerar o número de orçamento. Verifique a extensão e tente novamente.'));
-      }
-    };
-
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(new Error('Tempo esgotado ao gerar número de orçamento. Tente novamente.'));
-    }, 5000); // cobre os ~3 s de retries do interceptor com folga
-
-    function cleanup() {
-      window.removeEventListener('message', onMsg);
-      clearTimeout(timer);
-    }
-
-    window.addEventListener('message', onMsg);
-    window.postMessage({ type: 'HIPER_ORC_NEXT_NUM' }, '*');
-  });
+// ── Geração do número de orçamento — requisição direta ao backend ────────────
+// O CORS do backend já libera https://tagdrywall.hiper.com.br diretamente
+// (main.py), e a atomicidade do contador é garantida no servidor (BEGIN
+// IMMEDIATE em sync_meta.orc_seq) — o hop via background/content script só
+// existia pra alcançar chrome.storage (a letra) e chrome.runtime, e a letra
+// já chega na página pelo broadcast HIPER_CACHE_ALL. Sem esse hop, também não
+// há mais risco de "Extension context invalidated" nessa ação.
+async function gerarNumeroOrcamentoAsync() {
+  const letra = window.__hiperOrcLetra || 'T';
+  let res;
+  try {
+    res = await fetch(`https://api.sistema.santin.tec.br/pedido/proximo-numero?letra=${encodeURIComponent(letra)}`, { method: 'POST' });
+  } catch {
+    throw new Error('Não foi possível gerar o número de orçamento. Verifique sua conexão e tente novamente.');
+  }
+  if (!res.ok) throw new Error(`Não foi possível gerar o número de orçamento (HTTP ${res.status}). Tente novamente.`);
+  const data = await res.json();
+  if (!data?.numero) throw new Error('Não foi possível gerar o número de orçamento. Tente novamente.');
+  return data.numero;
 }
 
 function obterItensPedido() {
