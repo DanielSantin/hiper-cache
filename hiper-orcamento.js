@@ -9,12 +9,8 @@ function extrairCodigoProduto(nome) {
 }
 
 function parseMoedaOrc(str) {
-  if (!str) return 0.00;
-  const s = str.replace(/[^\d,\.]/g, '');
-  const commas = (s.match(/,/g)||[]).length, dots = (s.match(/\./g)||[]).length;
-  if (commas===1 && dots===0) return parseFloat(s.replace(',','.')) || 0;
-  if (dots===1 && commas===0) return parseFloat(s) || 0.00;
-  return parseFloat(s.replace(/\./g,'').replace(',','.')) || 0.00;
+  const v = parseNumeroBR(str);
+  return isNaN(v) ? 0 : v;
 }
 
 
@@ -274,6 +270,8 @@ body{font-family:Arial,sans-serif;font-size:10pt;color:#000;background:#fff}
 .custo-body{display:flex;flex-direction:column}
 .custo-row{border-bottom:1px solid #e0c040;display:flex;align-items:center;padding:2px 6px;overflow:hidden;}
 .custo-row:last-child{border-bottom:none}
+/* Linhas de preenchimento (sem produto) — acompanha a altura de .tbl tr.vazia td */
+.custo-row:empty{height:20px}
 .custo-link{display:flex;align-items:center;gap:4px;width:100%;text-decoration:none;cursor:pointer;border-radius:3px;transition:background 0.12s}
 .custo-link:hover{background:#fff0b3}
 .custo-val{flex:1;text-align:right;font-size:9pt;font-family:Arial;color:#333}
@@ -729,6 +727,8 @@ window.addEventListener('beforeunload', function(e) {
 console.log('[HiperOrc] Orçamento', NUM_ORC, '| Custos carregados:', JSON.stringify(custos));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+// Esta janela (aberta via Blob) roda isolada — não carrega hiper-num-utils.js
+// nem nada do resto da extensão, então precisa da própria cópia autocontida.
 function parseMoedaOrc(str) {
   if (!str) return 0;
   const s = str.replace(/[^0-9,.]/g, '');

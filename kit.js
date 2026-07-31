@@ -400,7 +400,7 @@ function normalizar(s) {
 }
 
 function num(s) {
-  const v = parseFloat(String(s).replace(',', '.'));
+  const v = parseNumeroBR(s);
   return isNaN(v) ? 0 : v;
 }
 

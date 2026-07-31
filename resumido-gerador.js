@@ -3,8 +3,11 @@
 //
 // Depende de:
 //   • resumido-dados.js   — RESUMIDO_TEXTOS, RESUMIDO_NOMES, funções de cálculo
-//   • resumido-runtime.js — carregado como TEXTO em window.RESUMIDO_RUNTIME_SRC
-//                           pelo resumido-loader.js (via fetch, não como <script>)
+//   • resumido-runtime.js — carregado como <script> normal (MODULES do interceptor.js),
+//                           só expõe seu próprio código-fonte como texto em
+//                           window.RESUMIDO_RUNTIME_SRC pra ser embutido no HTML
+//                           do resumido gerado (que abre em janela própria, sem
+//                           acesso aos módulos da página principal)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Largura do layout ────────────────────────────────────────────────────────

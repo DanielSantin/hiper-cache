@@ -3,12 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function parseMoeda(str) {
-  if (!str) return NaN;
-  const s = str.replace(/[^\d,\.]/g, '');
-  const commas = (s.match(/,/g)||[]).length, dots = (s.match(/\./g)||[]).length;
-  if (commas===1 && dots===0) return parseFloat(s.replace(',','.'));
-  if (dots===1  && commas===0) return parseFloat(s);
-  return parseFloat(s.replace(/\./g,'').replace(',','.'));
+  return parseNumeroBR(str);
 }
 
 const getValorTotal    = () => { const el = document.querySelector('.valor-total'); return el ? parseMoeda(el.textContent.trim()) : NaN; };
