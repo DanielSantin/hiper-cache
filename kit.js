@@ -415,13 +415,20 @@ function resolverNivel(codigoBase, qtdBruta) {
 }
 
 // ── BUSCA NO MASTER ────────────────────────────────────────────────────
+// Prefere o campo codigo4 (comparação exata, vem pronto do /produtos/master).
+// O parsing de prefixo em Nome/text fica só de fallback pro master já em
+// cache local de antes desse campo existir — e mesmo depois de todo mundo
+// sincronizar, produto sem cod4 nunca teria prefixo em Nome pra achar por
+// aí mesmo (ver produtos_hiper.py: "Nome" só ganha prefixo "if codigo").
 function buscarNaMaster(codigo) {
   const master = window.__hiperMaster;
   if (!master?.length) return null;
-  const cod = normalizar(String(codigo));
+  const cod = String(codigo);
+  const codNorm = normalizar(cod);
   return (
-    master.find(p => normalizar(String(p.Nome ?? '')).startsWith(cod + ' ')) ||
-    master.find(p => normalizar(String(p.text ?? '')).startsWith(cod + ' ')) ||
+    master.find(p => p.codigo4 === cod) ||
+    master.find(p => normalizar(String(p.Nome ?? '')).startsWith(codNorm + ' ')) ||
+    master.find(p => normalizar(String(p.text ?? '')).startsWith(codNorm + ' ')) ||
     null
   );
 }
