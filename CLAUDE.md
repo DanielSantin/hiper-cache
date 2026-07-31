@@ -115,18 +115,18 @@ box-of-1000 SKU past that). Given a wall/ceiling area or an item count, it picks
 automatically instead of the user doing that math by hand.
 
 Every formula table in this file (`GRUPOS_VARIACAO`, `KITS_GESSO`, `FORMULAS_GESSO`, all `PAREDE_*`
-constants — ~150 references total) is keyed by the legacy 4-digit product code (cod4), **not** the
-real `idProduto`. Unlike the equivalent situation that used to exist in `ia_parser` (removed
-2026-07-31 — there it really was dead legacy, a static translation table nothing else depended on),
-here cod4 is load-bearing: `buscarNaMaster()` uses it to find the matching product in
-`window.__hiperMaster`. It first tries an exact match on `codigo4` (a field `/produtos/master` added
-2026-07-31 specifically for this), falling back to parsing the cod4 prefix off `Nome`/`text`
-(`"3073 - Chapa..."`) for any master still cached from before that field existed. Products registered
-without a cod4 have no prefix in `Nome` at all (see `produtos_hiper.py:listar_master`) — the old
-prefix-parsing path silently couldn't find those; `codigo4` fixes that going forward, but the ~150
-cod4 keys throughout this file were deliberately left alone (migrating those to `idProduto` would
-touch the whole file and affect live Select2/DOM interaction with no easy way to test it in isolation
-the way the Python side could be characterization-tested).
+constants) is keyed by the real `idProduto` — migrated 2026-07-31 from the legacy 4-digit product
+code (cod4). `buscarNaMaster()` looks products up by exact `idProduto` match against
+`window.__hiperMaster`; it used to parse the cod4 prefix off `Nome`/`text` (`"3073 - Chapa..."`),
+which silently failed for any product registered without a cod4 (`Nome` has no prefix at all in that
+case — see `produtos_hiper.py:listar_master`). The ~190 cod4 literals across this file were mechanically
+substituted for their real-`idProduto` equivalent and verified with a Node characterization test (pure
+formula/tier-resolution logic extracted and run for 19 representative kit/wall configs, comparing
+every resulting product quantity against the pre-migration output — see the reasoning trail in the
+`project-refactoring` memory if you need the full before/after methodology). Only `buscarNaMaster`
+itself and three small toggle maps (`COD_MONTANTE`/`COD_GUIA`/`COD_TABICA`, inside
+`_bindPainelEventos`) touch the DOM/live page and couldn't be exercised by that test — everything else
+here is pure calculation.
 
 ### Popup (`popup.html`/`popup.js`)
 

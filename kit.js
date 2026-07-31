@@ -5,32 +5,32 @@
 // ── 1. GRUPOS DE VARIAÇÃO ──────────────────────────────────────────────
 const GRUPOS_VARIACAO = {
   parafuso: [
-    { codigo: "3021", tamanho: 1,    limite: 450      },
-    { codigo: "3032", tamanho: 1000, limite: Infinity },
+    { codigo: "79899037", tamanho: 1,    limite: 450      },
+    { codigo: "79980030", tamanho: 1000, limite: Infinity },
   ],
   massa: [
-    { codigo: "3089", tamanho: 6,  limite: 6        },
-    { codigo: "3090", tamanho: 14, limite: 14       },
-    { codigo: "3113", tamanho: 25, limite: Infinity  },
+    { codigo: "100983990", tamanho: 6,  limite: 6        },
+    { codigo: "100984275", tamanho: 14, limite: 14       },
+    { codigo: "120638070", tamanho: 25, limite: Infinity  },
   ],
   fita: [
-    { codigo: "3132", tamanho: 45, limite: 45      },
-    { codigo: "3014", tamanho: 90, limite: Infinity },
+    { codigo: "142763406", tamanho: 45, limite: 45      },
+    { codigo: "79833178", tamanho: 90, limite: Infinity },
   ],
   // cimentícia: massa cimentícia (litros → unidades de embalagem)
   baldeCim: [
-    { codigo: "3084", tamanho: 3.6, limite: 3.6     }, // balde 3,6 L
-    { codigo: "3122", tamanho: 10,  limite: Infinity }, // balde 10 L
+    { codigo: "98073558", tamanho: 3.6, limite: 3.6     }, // balde 3,6 L
+    { codigo: "120773931", tamanho: 10,  limite: Infinity }, // balde 10 L
   ],
   // bucha 6mm: unitário até 899, pacote 1000 a partir de 900
   bucha: [
-    { codigo: "3020", tamanho: 1,    limite: 899      }, // unitário
-    { codigo: "3173", tamanho: 1000, limite: Infinity  }, // pacote 1000 un
+    { codigo: "79898849", tamanho: 1,    limite: 899      }, // unitário
+    { codigo: "195137276", tamanho: 1000, limite: Infinity  }, // pacote 1000 un
   ],
   // cimentícia: parafuso unitário → caixa a partir de 500 un
   parafusoCim: [
-    { codigo: "3163", tamanho: 1,   limite: 499      }, // unitário
-    { codigo: "3177", tamanho: 500, limite: Infinity  }, // caixa 500 un
+    { codigo: "186791200", tamanho: 1,   limite: 499      }, // unitário
+    { codigo: "195138246", tamanho: 500, limite: Infinity  }, // caixa 500 un
   ],
 };
 
@@ -46,26 +46,26 @@ for (const [nomeGrupo, niveis] of Object.entries(GRUPOS_VARIACAO)) {
 // Cada entrada é uma função (qtdBruta) => qtdArredondada.
 // O valor bruto original é sempre preservado e exibido no tooltip.
 const ARREDONDAMENTO_CODIGOS = {
-  "3021": (v) => Math.ceil(v / 50) * 50, // Parafuso TA-25 unitário
-  "3058": (v) => Math.ceil(v / 50) * 50, // Parafuso 6mm
-  "3020": (v) => Math.ceil(v / 50) * 50, // Bucha 6mm unitário
-  "3163": (v) => Math.ceil(v / 50) * 50, // Parafuso cimentícia unitário
-  "3035": (v) => Math.ceil(v / 0.5) * 0.5,   // Sisal
-  "3022": (v) => Math.ceil(v),           // Arame 10
-  "3023": (v) => Math.ceil(v),           // Arame 18
+  "79899037": (v) => Math.ceil(v / 50) * 50, // Parafuso TA-25 unitário
+  "85213799": (v) => Math.ceil(v / 50) * 50, // Parafuso 6mm
+  "79898849": (v) => Math.ceil(v / 50) * 50, // Bucha 6mm unitário
+  "186791200": (v) => Math.ceil(v / 50) * 50, // Parafuso cimentícia unitário
+  "79984586": (v) => Math.ceil(v / 0.5) * 0.5,   // Sisal
+  "79899298": (v) => Math.ceil(v),           // Arame 10
+  "79899328": (v) => Math.ceil(v),           // Arame 18
 };
 
 // Códigos que devem ser adicionados mas não devem ser modificados automaticamente
-const BLACKLIST_SETAR = new Set(["3007", "3008", "3042", "3043", "3044", "3060"]);
+const BLACKLIST_SETAR = new Set(["79831929", "79831932", "80704698", "80814793", "80815323", "88849464"]);
 
 
 // ── 2. DEFINIÇÃO DOS KITS (não-parede) ────────────────────────────────
 const KITS_GESSO = {
-  aramado:       ["3076","3089","3019","3023","3132","3035","3037","3006","3021","3058","3020"],
-  estruturado:   ["3073","3089","3018","3017","3029","3022","3132","3021","3006","3058","3020"],
-  reforcoTrilho: ["3018","3017","3029","3022","3021"],
-  cortineiro:    ["3073","3089","3021","3132","3009"],
-  portas:        ["3073","3089","3008","3007","3021","3058","3020","3132"],
+  aramado:       ["93974519","100983990","79898066","79899328","142763406","79984586","80065949","79830939","79899037","85213799","79898849"],
+  estruturado:   ["93938763","100983990","79897413","79896245","79948195","79899298","142763406","79899037","79830939","85213799","79898849"],
+  reforcoTrilho: ["79897413","79896245","79948195","79899298","79899037"],
+  cortineiro:    ["93938763","100983990","79899037","142763406","79831935"],
+  portas:        ["93938763","100983990","79831932","79831929","79899037","85213799","79898849","142763406"],
 };
 
 // ── 3. SISTEMA DE PAREDES PARAMETRIZADO ───────────────────────────────
@@ -76,7 +76,7 @@ const KITS_GESSO = {
 //   estrutura     : 'simples' | 'dupla'
 //
 // Para parede de 1 face, faceB é ignorada.
-// A estrutura dupla dobra montante (3008) e guia (3007).
+// A estrutura dupla dobra montante e guia (qualquer tamanho — ver PAREDE_FORMULAS_ESTRUTURA).
 // Itens ST e RU usam os mesmos produtos; CIM usa produtos exclusivos.
 
 // ── ORDEM DE EXIBIÇÃO DOS PRODUTOS DE PAREDE ─────────────────────────────
@@ -84,95 +84,97 @@ const KITS_GESSO = {
 // Adicione aqui os códigos de novos materiais (RU, CIM, etc.) na posição desejada.
 // Produtos fora desta lista são anexados ao final, na ordem em que aparecem.
 const PAREDE_ORDEM_PRODUTOS = [
-  "3073", // chapa ST
-  "3075", // chapa RU
-  "3016", // placa cimentícia
-  "3113", // massa drywall 25kg
-  "3008", // montante
-  "3007", // guia
-  "3021", // parafuso TA-25
-  "3058", // parafuso 6mm
-  "3020", // bucha 6mm
-  "3014", // fita telada 90m
-  "3132", // fita telada 45m
-  "3084", // cola cimentícia
-  "3027", // fita cimentícia
-  "3163", // parafuso cimentícia
+  "93938763", // chapa ST
+  "93939592", // chapa RU
+  "79884530", // placa cimentícia
+  "120638070", // massa drywall 25kg
+  "79831932", // montante
+  "79831929", // guia
+  "79899037", // parafuso TA-25
+  "85213799", // parafuso 6mm
+  "79898849", // bucha 6mm
+  "79833178", // fita telada 90m
+  "142763406", // fita telada 45m
+  "98073558", // cola cimentícia
+  "79932400", // fita cimentícia
+  "186791200", // parafuso cimentícia
 ];
 
 // Códigos da ESTRUTURA — sempre presentes, dobram na dupla
-// 3058 (parafuso 6mm) e 3020 (bucha 6mm) são da estrutura — aparecem em todos os tipos
-const PAREDE_COD_ESTRUTURA = ["3008", "3007", "3058", "3020"];
+// Parafuso 6mm e bucha 6mm são da estrutura — aparecem em todos os tipos
+const PAREDE_COD_ESTRUTURA = ["79831932", "79831929", "85213799", "79898849"];
 
 // Códigos de chapa ST — escalam pelo número de faces ST
-// Inclui todos os códigos resolvidos dos grupos (3090/3113 da massa, 3032 do parafuso, 3014 da fita)
-// para que recalcularTudo encontre a fórmula independente do código que estiver na linha do DOM
-const PAREDE_COD_CHAPA_ST = ["3073", "3089", "3090", "3113", "3021", "3032", "3132", "3014"];
+// Inclui todos os códigos resolvidos dos grupos (baldes 14/25kg da massa, caixa do
+// parafuso, rolo 90m da fita) para que recalcularTudo encontre a fórmula
+// independente do código que estiver na linha do DOM
+const PAREDE_COD_CHAPA_ST = ["93938763", "100983990", "100984275", "120638070", "79899037", "79980030", "142763406", "79833178"];
 
 // Códigos de chapa RU — escalam pelo número de faces RU
-// Chapa RU: 1,20×1,80 m (2,16 m²) — código 3075
-const PAREDE_COD_CHAPA_RU = ["3075", "3089", "3090", "3113", "3021", "3032", "3132", "3014"];
+// Chapa RU: 1,20×1,80 m (2,16 m²)
+const PAREDE_COD_CHAPA_RU = ["93939592", "100983990", "100984275", "120638070", "79899037", "79980030", "142763406", "79833178"];
 
 // Códigos exclusivos de face CIM — escalam pelo número de faces CIM
-// Inclui 3177 (caixa 500 parafuso cimentícia) pelo mesmo motivo
-const PAREDE_COD_CHAPA_CIM = ["3016", "3084", "3122", "3027", "3163", "3177"];
+// Inclui a caixa de 500 do parafuso cimentícia pelo mesmo motivo
+const PAREDE_COD_CHAPA_CIM = ["79884530", "98073558", "120773931", "79932400", "186791200", "195138246"];
 
 // ── CÓDIGOS CANÔNICOS (apenas para inserção de linhas no DOM) ─────────────
 // Contém somente um código por grupo de variação (o código base).
-// Os alternativos (3090/3113, 3032, 3014, 3122, 3177) são resolvidos em
+// Os alternativos (baldes maiores de massa, caixa de parafuso, rolo de fita,
+// balde maior cimentícia, caixa de parafuso cimentícia) são resolvidos em
 // tempo de execução por resolverNivel() dentro de trocarProdutoNaLinha().
 // Usar os alternativos aqui causaria linhas duplicadas no pedido.
-const PAREDE_COD_INSERIR_ST  = ["3073", "3089", "3021", "3132"];
-const PAREDE_COD_INSERIR_RU  = ["3075", "3089", "3021", "3132"];
-const PAREDE_COD_INSERIR_CIM = ["3016", "3084", "3027", "3163"];
+const PAREDE_COD_INSERIR_ST  = ["93938763", "100983990", "79899037", "142763406"];
+const PAREDE_COD_INSERIR_RU  = ["93939592", "100983990", "79899037", "142763406"];
+const PAREDE_COD_INSERIR_CIM = ["79884530", "98073558", "79932400", "186791200"];
 
 // Fórmulas base POR FACE ST (A = m² total da parede)
 // Chapa ST: 1,20×2,40 m = 2,88 m²
 const PAREDE_FORMULAS_FACE_ST = {
-  "3073": (A) => A / 2.88,            // chapa ST (un)
-  "3089": (A) => A * 0.45,            // massa drywall (kg) — código base
-  "3090": (A) => A * 0.45,            // massa drywall (kg) — balde 14kg
-  "3113": (A) => A * 0.45,            // massa drywall (kg) — saco 25kg
-  "3021": (A) => (A / 2.88) * 35,     // parafuso TA-25 (bruto — arredondamento via ARREDONDAMENTO_CODIGOS)
-  "3032": (A) => (A / 2.88) * 35,     // parafuso TA-25 caixa 1000 (bruto)
-  "3132": (A) => A * 1.5,             // fita telada (m) — rolo 45m
-  "3014": (A) => A * 1.5,             // fita telada (m) — rolo 90m
+  "93938763": (A) => A / 2.88,            // chapa ST (un)
+  "100983990": (A) => A * 0.45,            // massa drywall (kg) — código base
+  "100984275": (A) => A * 0.45,            // massa drywall (kg) — balde 14kg
+  "120638070": (A) => A * 0.45,            // massa drywall (kg) — saco 25kg
+  "79899037": (A) => (A / 2.88) * 35,     // parafuso TA-25 (bruto — arredondamento via ARREDONDAMENTO_CODIGOS)
+  "79980030": (A) => (A / 2.88) * 35,     // parafuso TA-25 caixa 1000 (bruto)
+  "142763406": (A) => A * 1.5,             // fita telada (m) — rolo 45m
+  "79833178": (A) => A * 1.5,             // fita telada (m) — rolo 90m
 };
 
 // Fórmulas base POR FACE RU (A = m² total da parede)
 const PAREDE_FORMULAS_FACE_RU = {
-  "3075": (A) => A / 2.88,            // chapa RU (un)
-  "3089": (A) => A * 0.45,            // massa drywall (kg) — código base
-  "3090": (A) => A * 0.45,            // massa drywall (kg) — balde 14kg
-  "3113": (A) => A * 0.45,            // massa drywall (kg) — saco 25kg
-  "3021": (A) => (A / 2.88) * 35,     // parafuso TA-25 (bruto — arredondamento via ARREDONDAMENTO_CODIGOS)
-  "3032": (A) => (A / 2.88) * 35,     // parafuso TA-25 caixa 1000 (bruto)
-  "3132": (A) => A * 1.5,             // fita telada (m) — rolo 45m
-  "3014": (A) => A * 1.5,             // fita telada (m) — rolo 90m
+  "93939592": (A) => A / 2.88,            // chapa RU (un)
+  "100983990": (A) => A * 0.45,            // massa drywall (kg) — código base
+  "100984275": (A) => A * 0.45,            // massa drywall (kg) — balde 14kg
+  "120638070": (A) => A * 0.45,            // massa drywall (kg) — saco 25kg
+  "79899037": (A) => (A / 2.88) * 35,     // parafuso TA-25 (bruto — arredondamento via ARREDONDAMENTO_CODIGOS)
+  "79980030": (A) => (A / 2.88) * 35,     // parafuso TA-25 caixa 1000 (bruto)
+  "142763406": (A) => A * 1.5,             // fita telada (m) — rolo 45m
+  "79833178": (A) => A * 1.5,             // fita telada (m) — rolo 90m
 };
 
 // Fórmulas base POR FACE CIM (A = m² total da parede)
 const PAREDE_FORMULAS_FACE_CIM = {
-  "3016": (A) => A / 2.88,            // placa cimentícia (un)
-  "3084": (A) => A * 0.324,           // massa cimentícia (litros) → grupo baldeCim — balde 3,6L
-  "3122": (A) => A * 0.324,           // massa cimentícia (litros) → grupo baldeCim — balde 10L
-  "3027": (A) => A * 1.5 / 46,        // fita cimentícia
-  "3163": (A) => (A / 2.88) * 35,     // parafuso cimentícia — unitário
-  "3177": (A) => (A / 2.88) * 35,     // parafuso cimentícia — caixa 500
+  "79884530": (A) => A / 2.88,            // placa cimentícia (un)
+  "98073558": (A) => A * 0.324,           // massa cimentícia (litros) → grupo baldeCim — balde 3,6L
+  "120773931": (A) => A * 0.324,           // massa cimentícia (litros) → grupo baldeCim — balde 10L
+  "79932400": (A) => A * 1.5 / 46,        // fita cimentícia
+  "186791200": (A) => (A / 2.88) * 35,     // parafuso cimentícia — unitário
+  "195138246": (A) => (A / 2.88) * 35,     // parafuso cimentícia — caixa 500
 };
 
 // Fórmulas da ESTRUTURA — fatorEstrutura = 2 se dupla, 1 se simples
-// 3058 e 3020 são da fixação da estrutura na laje/piso (independente de faces e chapas)
+// Parafuso 6mm e bucha 6mm são da fixação da estrutura na laje/piso (independente de faces e chapas)
 const PAREDE_FORMULAS_ESTRUTURA = {
-  "3008": (A, fe) => A * 2.11 / 3 * fe, // montante 70 (m)
-  "3042": (A, fe) => A * 2.11 / 3 * fe, // montante 48 (m)
-  "3043": (A, fe) => A * 2.11 / 3 * fe, // montante 90 (m)
-  "3007": (A, fe) => A * 0.7  / 3 * fe, // guia 70 (m)
-  "3060": (A, fe) => A * 0.7  / 3 * fe, // guia 48 (m)
-  "3044": (A, fe) => A * 0.7  / 3 * fe, // guia 90 (m)
-  "3058": (A, fe) => A * 0.7  / 3 * 11, // parafuso 6mm (un) — não dobra na dupla
-  "3020": (A, fe) => A * 0.7  / 3 * 11, // bucha 6mm (un)    — não dobra na dupla
-  "3173": (A, fe) => A * 0.7  / 3 * 11, // bucha 6mm pacote 1000 — mesmo cálculo
+  "79831932": (A, fe) => A * 2.11 / 3 * fe, // montante 70 (m)
+  "80704698": (A, fe) => A * 2.11 / 3 * fe, // montante 48 (m)
+  "80814793": (A, fe) => A * 2.11 / 3 * fe, // montante 90 (m)
+  "79831929": (A, fe) => A * 0.7  / 3 * fe, // guia 70 (m)
+  "88849464": (A, fe) => A * 0.7  / 3 * fe, // guia 48 (m)
+  "80815323": (A, fe) => A * 0.7  / 3 * fe, // guia 90 (m)
+  "85213799": (A, fe) => A * 0.7  / 3 * 11, // parafuso 6mm (un) — não dobra na dupla
+  "79898849": (A, fe) => A * 0.7  / 3 * 11, // bucha 6mm (un)    — não dobra na dupla
+  "195137276": (A, fe) => A * 0.7  / 3 * 11, // bucha 6mm pacote 1000 — mesmo cálculo
 };
 
 // Gera o objeto de fórmulas compatível com FORMULAS_GESSO para uma instância de parede
@@ -293,57 +295,57 @@ function paredeMoBase(cfg) {
 // ── 4. FÓRMULAS (não-parede) ──────────────────────────────────────────
 const FORMULAS_GESSO = {
   aramado: {
-    "3076": (A, P, cant, altPend) => A / 1.2,
-    "3089": (A, P, cant, altPend) => A * 0.45,
-    "3019": (A, P, cant, altPend) => A * 4 / 1.2,
-    "3023": (A, P, cant, altPend) => A * altPend / 10,  // arame 18: área × alt pendural (m)
-    "3132": (A, P, cant, altPend) => A * 2.6,
-    "3035": (A, P, cant, altPend) => A * 0.03,
-    "3037": (A, P, cant, altPend) => A / 30,
-    "3010": (A, P, cant, altPend) => P / 3,
-    "3006": (A, P, cant, altPend) => P / 3,
-    "3021": (A, P, cant, altPend) => P * 5,
-    "3058": (A, P, cant, altPend) => 11 * P / 3,
-    "3020": (A, P, cant, altPend) => 11 * P / 3,
+    "93974519": (A, P, cant, altPend) => A / 1.2,
+    "100983990": (A, P, cant, altPend) => A * 0.45,
+    "79898066": (A, P, cant, altPend) => A * 4 / 1.2,
+    "79899328": (A, P, cant, altPend) => A * altPend / 10,  // arame 18: área × alt pendural (m)
+    "142763406": (A, P, cant, altPend) => A * 2.6,
+    "79984586": (A, P, cant, altPend) => A * 0.03,
+    "80065949": (A, P, cant, altPend) => A / 30,
+    "79832337": (A, P, cant, altPend) => P / 3,
+    "79830939": (A, P, cant, altPend) => P / 3,
+    "79899037": (A, P, cant, altPend) => P * 5,
+    "85213799": (A, P, cant, altPend) => 11 * P / 3,
+    "79898849": (A, P, cant, altPend) => 11 * P / 3,
   },
   estruturado: {
-    "3073": (A, P, cant, altPend) => A / 2.88,
-    "3089": (A, P, cant, altPend) => A * 0.45,
-    "3018": (A, P, cant, altPend) => A * 1.68 / 3,
-    "3017": (A, P, cant, altPend) => A * 1.4,
-    "3029": (A, P, cant, altPend) => A * 0.3,
-    "3022": (A, P, cant, altPend) => A * altPend / 10,  // arame 10: área × alt pendural (m)
-    "3132": (A, P, cant, altPend) => A * 1.5,
-    "3021": (A, P, cant, altPend) => (A / 2.88) * 35 + (P / 3) * 11,
-    "3006": (A, P, cant, altPend) => P / 3,
-    "3010": (A, P, cant, altPend) => P / 3,
-    "3058": (A, P, cant, altPend) => (P / 3) * 11,
-    "3020": (A, P, cant, altPend) => (P / 3) * 11,
+    "93938763": (A, P, cant, altPend) => A / 2.88,
+    "100983990": (A, P, cant, altPend) => A * 0.45,
+    "79897413": (A, P, cant, altPend) => A * 1.68 / 3,
+    "79896245": (A, P, cant, altPend) => A * 1.4,
+    "79948195": (A, P, cant, altPend) => A * 0.3,
+    "79899298": (A, P, cant, altPend) => A * altPend / 10,  // arame 10: área × alt pendural (m)
+    "142763406": (A, P, cant, altPend) => A * 1.5,
+    "79899037": (A, P, cant, altPend) => (A / 2.88) * 35 + (P / 3) * 11,
+    "79830939": (A, P, cant, altPend) => P / 3,
+    "79832337": (A, P, cant, altPend) => P / 3,
+    "85213799": (A, P, cant, altPend) => (P / 3) * 11,
+    "79898849": (A, P, cant, altPend) => (P / 3) * 11,
   },
   cortineiro: {
-    "3073": (ML, _, cant) => ML * 0.4 / 2.88,
-    "3089": (ML, _, cant) => ML * 0.45,
-    "3021": (ML, _, cant) => ML * 29,
-    "3132": (ML, _, cant) => ML * 1.5,
-    "3009": (ML, _, cant) => ML * cant / 3,
+    "93938763": (ML, _, cant) => ML * 0.4 / 2.88,
+    "100983990": (ML, _, cant) => ML * 0.45,
+    "79899037": (ML, _, cant) => ML * 29,
+    "142763406": (ML, _, cant) => ML * 1.5,
+    "79831935": (ML, _, cant) => ML * cant / 3,
   },
   reforcoTrilho: {
-    "3018": (ML) => ML * 2 / 3,
-    "3017": (ML) => ML * 8 / 3,
-    "3029": (ML) => ML / 3,
-    "3022": (ML) => ML * 0.172,
-    "3021": (ML) => ML * 22 / 3,
+    "79897413": (ML) => ML * 2 / 3,
+    "79896245": (ML) => ML * 8 / 3,
+    "79948195": (ML) => ML / 3,
+    "79899298": (ML) => ML * 0.172,
+    "79899037": (ML) => ML * 22 / 3,
   },
   // Portas: equivalente a parede ST/ST simples 2 faces
   portas: {
-    "3073": (A) => (A / 2.88) * 2,
-    "3089": (A) => A * 0.9,
-    "3008": (A) => A * 2.11 / 3,
-    "3007": (A) => A * 0.7 / 3,
-    "3021": (A) => (A / 2.88 * 2) * 35,
-    "3058": (A) => (A * 0.7 / 3) * 11,
-    "3020": (A) => (A * 0.7 / 3) * 11,
-    "3132": (A) => A * 3,
+    "93938763": (A) => (A / 2.88) * 2,
+    "100983990": (A) => A * 0.9,
+    "79831932": (A) => A * 2.11 / 3,
+    "79831929": (A) => A * 0.7 / 3,
+    "79899037": (A) => (A / 2.88 * 2) * 35,
+    "85213799": (A) => (A * 0.7 / 3) * 11,
+    "79898849": (A) => (A * 0.7 / 3) * 11,
+    "142763406": (A) => A * 3,
   },
 };
 
@@ -415,22 +417,17 @@ function resolverNivel(codigoBase, qtdBruta) {
 }
 
 // ── BUSCA NO MASTER ────────────────────────────────────────────────────
-// Prefere o campo codigo4 (comparação exata, vem pronto do /produtos/master).
-// O parsing de prefixo em Nome/text fica só de fallback pro master já em
-// cache local de antes desse campo existir — e mesmo depois de todo mundo
-// sincronizar, produto sem cod4 nunca teria prefixo em Nome pra achar por
-// aí mesmo (ver produtos_hiper.py: "Nome" só ganha prefixo "if codigo").
-function buscarNaMaster(codigo) {
+// Todas as tabelas deste arquivo usam o ID real do produto (idProduto) desde
+// 2026-07-31 — antes usavam o código legado de 4 dígitos (cod4) e essa busca
+// dependia de parsing do prefixo de Nome/text ("3073 - Chapa..."), que falhava
+// silenciosamente pra produto cadastrado sem cod4 (Nome sem prefixo nesse
+// caso — ver produtos_hiper.py:listar_master). Comparação por idProduto é
+// exata e não depende de formatação nenhuma de string.
+function buscarNaMaster(idProdutoReal) {
   const master = window.__hiperMaster;
   if (!master?.length) return null;
-  const cod = String(codigo);
-  const codNorm = normalizar(cod);
-  return (
-    master.find(p => p.codigo4 === cod) ||
-    master.find(p => normalizar(String(p.Nome ?? '')).startsWith(codNorm + ' ')) ||
-    master.find(p => normalizar(String(p.text ?? '')).startsWith(codNorm + ' ')) ||
-    null
-  );
+  const id = String(idProdutoReal);
+  return master.find(p => String(p.idProduto) === id) || null;
 }
 
 // ── INSERÇÃO VIA CACHE ─────────────────────────────────────────────────
@@ -1164,8 +1161,8 @@ function _bindPainelEventos(lista) {
   }
 
   // Toggle de montante/guia (48 / 70 / 90)
-  const COD_MONTANTE = { '48': '3042', '70': '3008', '90': '3043' };
-  const COD_GUIA     = { '48': '3060', '70': '3007', '90': '3044' };
+  const COD_MONTANTE = { '48': '80704698', '70': '79831932', '90': '80814793' };
+  const COD_GUIA     = { '48': '88849464', '70': '79831929', '90': '80815323' };
   const TODOS_MONTANTES = new Set(Object.values(COD_MONTANTE));
   const TODOS_GUIAS     = new Set(Object.values(COD_GUIA));
 
@@ -1195,7 +1192,7 @@ function _bindPainelEventos(lista) {
   });
 
   // Toggle de tabica (branca / natural)
-  const COD_TABICA = { branca: '3006', natural: '3010' };
+  const COD_TABICA = { branca: '79830939', natural: '79832337' };
   lista.querySelectorAll('.hp-btn-tabica').forEach(btn => {
     btn.addEventListener('click', async function() {
       const id         = this.dataset.id;
