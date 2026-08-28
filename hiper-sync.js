@@ -363,7 +363,14 @@
                 idProduto: String(p.IdProduto),
                 nome:      p.NomeProdutoGrade || '',
                 unidade:   p.SiglaUnidadeMedida || 'UN',
-                qtd:       p.Quantidade,
+                // Quantidade vem antes do Multiplicador que a Hiper aplica na
+                // importação (ex: 60 chapas × 2,88 = 172,80m²) — o produto é
+                // sempre cadastrado no Hiper na menor unidade de venda, e o
+                // Multiplicador converte a unidade da NF (caixa, milheiro, etc.)
+                // pra essa unidade — vale 1 quando a NF já vem na própria unidade
+                // (compra de outro fornecedor). O backend faz a conversão inversa
+                // pra unidade interna via estoque_divisor (ex: unidade → caixa).
+                qtd:       p.Quantidade * (p.Multiplicador || 1),
               }));
             if (!itens.length) { _warn('confirmar-importacao: nenhum item encontrado'); return; }
             window.postMessage({
@@ -570,7 +577,10 @@
                   idProduto: String(p.IdProduto),
                   nome:      p.NomeProdutoGrade || '',
                   unidade:   p.SiglaUnidadeMedida || 'UN',
-                  qtd:       p.Quantidade,
+                  // Ver comentário equivalente em _interceptarFetch: Quantidade × Multiplicador
+                  // dá a quantidade real na menor unidade de venda (como o produto é cadastrado
+                  // no Hiper); o backend converte pra unidade interna via estoque_divisor.
+                  qtd:       p.Quantidade * (p.Multiplicador || 1),
                 }));
               if (!itens.length) { _warn('confirmar-importacao XHR: nenhum item'); return; }
               window.postMessage({

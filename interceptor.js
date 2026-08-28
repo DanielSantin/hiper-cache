@@ -328,6 +328,10 @@ window.addEventListener('message', async (event) => {
   }
 
   if (msg.type === 'HIPER_ENTRADA_ESTOQUE') {
+    // TODO: falha aqui (rede caiu, backend fora do ar, 5xx) só vira console.warn —
+    // diferente do fluxo de hiper-evento, não fica nada pendente no servidor pra
+    // reprocessar depois. Dar a essa entrada a mesma rede de segurança que
+    // /hiper-evento tem (persistir com processado=0 + endpoint de reprocessar).
     try {
       const res = await fetch(`https://api.sistema.santin.tec.br/entrada-estoque`, {
         method: 'POST',
