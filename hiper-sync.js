@@ -1,30 +1,34 @@
-﻿// ═══════════════════════════════════════════════════════════════════════════════
-// hiper-sync.js — Sincronização de pedidos-venda Hiper ↔ banco externo
+// ═══════════════════════════════════════════════════════════════════════════════
+// hiper-sync.js — Ponte entre as requisições do Hiper e o nosso backend
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Arquitetura orientada a eventos. Intercepta fetch/XHR do Hiper e dispara
-// ações de estoque no backend conforme a transição de estado detectada.
+// Três responsabilidades, todas via interceptação de fetch/XHR do Hiper:
 //
-// Mapeamento de estados (campo `situacao` na response do Hiper):
-//   1  → orçamento
-//   2  → pedido
-//   3  → cancelado (padrão)
-//   99 → cancelado (menu rápido / cancelamento direto)
-//   DELETE 204 → cancelado (inferido pelo método HTTP)
+// 1. PEDIDOS — só AVISA o backend (POST /hiper-pedido-mudou) que um pedido
+//    mudou, NO MOMENTO em que o Hiper recebe uma destas requisições da API nova
+//    (prd-ms-pedidodevenda-api):
+//      • POST v1/pedidos-de-venda/salvar                 (body: { id, situacao, … })
+//      • POST v1/atualizar-situacao-pedido-de-venda      (body: { selecao, situacao })
+//      • POST v1/faturamento/faturar-pedidos             (body: { modoSelecao, pedidosIds })
+//    Avisar antes da resposta (com fetch keepalive) garante que o aviso sai
+//    mesmo se o usuário fechar a página; o backend espera ~10 s antes de ler o
+//    pedido (o Hiper é lento pra refletir) e, se a operação tiver falhado,
+//    simplesmente lê o estado de sempre. Pedido novo (id null) ainda não tem
+//    GUID → aviso { recentes: true }, e o GUID segue quando a resposta chega.
+//    Seleção em lote por FILTRO (modoSelecao = 1) também vira { recentes: true }.
+//    O backend lê o pedido no Hiper ele mesmo e reconcilia o estoque
+//    (hiper-database/routers/pedidos_sync.py). A extensão não monta mais
+//    itens/estado — isso quebrava a cada mudança de tela do Hiper. Aviso
+//    perdido não é fatal: o check geral do backend pega divergências.
 //
-// Tabela de transições → ação de estoque:
-//   none/orc → pedido    : POST /estoque/faturar          (debita)
-//   pedido   → pedido    : POST /estoque/ajuste-pedido    (reconcilia delta)
-//   pedido   → cancelado : DELETE /estoque/op/L{id}       (estorna)
-//   cancelado→ pedido    : POST /estoque/faturar          (re-debita)
-//   qualquer → orc/canc  : nenhuma ação de estoque
+// 2. ENTRADA DE ESTOQUE por NF-e (confirmar-importacao) — inalterado.
 //
-// Deduplicação (ETAPA 3):
-//   Movida para o backend via idempotency_key (hash do pedido + estado + itens).
-//   Se o mesmo evento chegar 2x em menos de 30s, o servidor retorna 200 ok 
-//   e marca como duplicado — transparente para o cliente.
-//   O cliente dispara sem barreira — o servidor garante idempotência.
+// 3. CATÁLOGO EM CACHE — o XHRProxy responde busca/produto/preço/estoque do
+//    seletor de produto pelo cache (responderDoCache, hiper-pedido-store.js).
 //
+// A sincronização antiga (api.hiper.com.br/pedido-venda + atualizar-situacao
+// via webRequest do background.js) foi removida: a tela nova não usa mais
+// essa API.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 (function () {
@@ -33,480 +37,200 @@
   // ── Configuração ─────────────────────────────────────────────────────────────
 
   const API_BASE   = 'https://api.sistema.santin.tec.br';
-  const TIMEOUT_MS = 8_000;
+  const RETRY_MS   = 5_000;
 
-  // Regex que reconhece endpoints relevantes do Hiper
-  // Captur2a grupo 1 = pedidoId, grupo 2 = cod de situacao (atualizar-situacao/{cod})
-  const RE_PEDIDO_VENDA         = /api\.hiper\.com\.br\/pedido-venda(?:\/(\d+)(?:\/atualizar-situacao\/(\d+))?)?(?:[?#]|$)/i;
+  // grupo 1 = rota (salvar | atualizar-situacao | faturar)
+  const RE_API_PEDIDOS = /prd-ms-pedidodevenda-api\.hiper\.com\.br\/v1\/(pedidos-de-venda\/salvar|atualizar-situacao-pedido-de-venda|faturamento\/faturar-pedidos)(?:[/?#]|$)/i;
   const RE_CONFIRMAR_IMPORTACAO = /fiscal\/importacao-de-xml-de-documento-fiscal\/api\/confirmar-importacao/i;
 
-  // Nomes legíveis para logging
-  const NOME_SITUACAO = { 1: 'orçamento', 2: 'pedido', 3: 'cancelado', 9: 'entregue', 99: 'cancelado' };
-
-
-  // Estado local removido — o backend é a única fonte da verdade.
-  // A extensão envia apenas o que viu; o servidor determina a transição.
-
-  // Cache de filial por pedidoId — necessário para atualizar-situacao (204, sem body)
-  const _filialCache = new Map();
+  const MODO_SELECAO_IDS = 0;   // enum Vl do bundle: 0 = Ids, 1 = Filtro
+  const SITUACAO_PEDIDO  = 2;   // enum At do bundle
 
   // ── Utilitários ───────────────────────────────────────────────────────────────
 
   // Usa fetch nativo (salvo antes de qualquer interceptação)
   const _nativeFetch = window.__nativeFetch || window.fetch.bind(window);
 
-  function _log(msg, ...args) {
-    console.info(`[HiperSync] ${msg}`, ...args);
-  }
-  function _warn(msg, ...args) {
-    console.warn(`[HiperSync] ⚠️ ${msg}`, ...args);
-  }
+  function _log(msg, ...args)  { console.info(`[HiperSync] ${msg}`, ...args); }
+  function _warn(msg, ...args) { console.warn(`[HiperSync] ⚠️ ${msg}`, ...args); }
 
-  function _fetchComTimeout(url, opts = {}) {
-    const ctrl  = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    return _nativeFetch(url, { ...opts, signal: ctrl.signal })
-      .finally(() => clearTimeout(timer));
+  function _json(texto) {
+    if (!texto || typeof texto !== 'string') return null;
+    try { return JSON.parse(texto); } catch (_) { return null; }
   }
 
-  /** Extrai params de um body application/x-www-form-urlencoded */
-  function _parseFormBody(body) {
-    if (!body || typeof body !== 'string') return {};
-    const out = {};
-    for (const [k, v] of new URLSearchParams(body)) {
-      out[k] = v;
-    }
-    return out;
-  }
+  // ── 1. Aviso de pedido alterado ──────────────────────────────────────────────
 
-  /**
-   * Extrai itens do body form-urlencoded do Hiper.
-   * Campos relevantes por item: IdProduto, NomeProduto, Quantidade, Cancelado
-   * Retorna array de { idProduto, nome, quantidade } filtrando cancelados.
-   */
-  function _extrairItensDoBody(params) {
-    const itens = {};
+  /** Extrai do REQUEST quais pedidos mudaram (o aviso sai antes da resposta). */
+  function _montarAviso(rota, reqBody) {
+    const req = _json(reqBody) || {};
+    rota = rota.toLowerCase();
 
-    for (const [chave, valor] of Object.entries(params)) {
-      // ex: "ListaItemPedidoVenda[0][IdProduto]" → índice 0, campo IdProduto
-      const m = chave.match(/^ListaItemPedidoVenda\[(\d+)\]\[(\w+)\]$/);
-      if (!m) continue;
-      const idx   = m[1];
-      const campo = m[2];
-      if (!itens[idx]) itens[idx] = {};
-      itens[idx][campo] = valor;
+    if (rota === 'pedidos-de-venda/salvar') {
+      // Pedido novo (id null): o GUID só existe na resposta — avisa "recentes"
+      // agora e o GUID quando a resposta chegar (_avisarGuidNovo).
+      return req.id
+        ? { ids: [String(req.id)], recentes: false, situacao: req.situacao }
+        : { ids: [], recentes: true, situacao: req.situacao };
     }
 
-    // Monta índice de nomes por IdProduto usando os itens que têm NomeProduto
-    // (o Hiper omite NomeProduto em itens que não foram editados na requisição)
-    const nomesPorId = {};
-    for (const it of Object.values(itens)) {
-      if (it.IdProduto && it.NomeProduto) nomesPorId[it.IdProduto] = it.NomeProduto;
-    }
-
-    return Object.values(itens)
-      .filter(it => it.Cancelado !== 'true' && it.IdProduto)
-      .map(it => {
-        const nomeRaw = it.NomeProduto || nomesPorId[it.IdProduto] || '';
-        // Extrai código do padrão "3112 - Alçapão..." → "3112"
-        const codigoMatch = nomeRaw.match(/^(\S+)\s+-\s+/);
-        const vlUnitBruto = parseFloat((it.ValorUnitario || '').replace(',', '.')) || 0;
-        return {
-          // campos canônicos (ItemPedido)
-          idProduto:       String(it.IdProduto),
-          idProdutoGrade:  it.IdProdutoGrade ? parseInt(it.IdProdutoGrade, 10) : null,
-          codigo:          codigoMatch ? codigoMatch[1] : '',
-          nome:            nomeRaw,
-          quantidade:      parseFloat(it.Quantidade) || 0,
-          unidade:         it.SiglaDaUnidadeDeMedida || 'UN',
-          vlUnit:          Math.round(vlUnitBruto * 0.9523 * 100) / 100,
-          vlUnitBruto,
-          subtotal:        (parseFloat(it.Quantidade) || 0) * vlUnitBruto,
-          ehKit:           false,
-        };
-      })
-      .filter(it => it.quantidade > 0);
-  }
-
-
-  /**
-   * Registra o evento bruto no histórico do backend.
-   * Independente da ação de estoque — garante rastreabilidade completa.
-   */
-  async function _registrarEvento(evento) {
-    // Em vez de fetch direto, envia para o interceptor que tem permissões de extensão
-    window.postMessage({ 
-      type: 'HIPER_EVENTO_SEND', 
-      payload: evento 
-    }, '*');
-  }
-  // ── Ações de estoque ──────────────────────────────────────────────────────────
-
-  // ── Máquina de estados ────────────────────────────────────────────────────────
-
-  /**
-   * Processa a transição de estado e executa a ação de estoque correta.
-   * É o coração do sistema — toda lógica de negócio passa aqui.
-   */
-  async function _processarTransicao(pedidoId, _ignorado, estadoNovo, itens, meta) {
-    _log(`Evento pedido ${pedidoId}: → ${estadoNovo}`);
-
-    // Atualiza cache mesclando — nunca sobrescreve um campo bom com vazio
-    const _existing = _filialCache.get(pedidoId) || {};
-    const _merged   = { ..._existing };
-    if (meta.responseBody?.idFilial)              _merged.idFilial   = meta.responseBody.idFilial;
-    if (meta.responseBody?.nomeFilial)            _merged.nomeFilial = meta.responseBody.nomeFilial;
-    if ((meta.responseBody?.valorTotalPedido) > 0) _merged.valorTotal = meta.responseBody.valorTotalPedido;
-    _filialCache.set(pedidoId, _merged);
-    const filialCached = _merged;
-
-    const evento = {
-      pedido_id:        String(pedidoId),
-      codigo_pedido:    meta.codigoPedidoVenda || '',
-      estado_novo:      estadoNovo,
-      itens,
-      valor_total:      meta.responseBody?.valorTotalPedido || filialCached.valorTotal || 0,
-      id_filial:        meta.responseBody?.idFilial   ?? filialCached.idFilial   ?? null,
-      nome_filial:      meta.responseBody?.nomeFilial ?? filialCached.nomeFilial ?? null,
-      timestamp:        new Date().toISOString(),
-      origem_url:       location.href,
-      payload_request:  meta.requestBody  || null,
-      payload_response: meta.responseBody || null,
+    // Mudança de situação / faturamento em lote (listagem): não tem relação
+    // com o orçamento aberto na extensão, então não leva `situacao`.
+    const sel = rota === 'atualizar-situacao-pedido-de-venda' ? req.selecao : req;
+    if (!sel) return null;
+    const porIds = sel.modoSelecao === MODO_SELECAO_IDS && Array.isArray(sel.pedidosIds);
+    return {
+      ids:      porIds ? sel.pedidosIds.filter(Boolean).map(String) : [],
+      recentes: !porIds,
+      situacao: null,
     };
+  }
 
-    // O backend determina a transição e executa a ação de estoque.
-    // Marca o orçamento customizado como faturado se for → pedido (fire-and-forget).
-    // Usa __hiperPedidoAberto (código do orçamento salvo/carregado), não o código do Hiper PV.
-    if (estadoNovo === 'pedido' && typeof window._tentarMarcarFaturado === 'function' && window.__hiperPedidoAberto) {
+  // keepalive: o navegador termina de enviar mesmo se a página fechar logo
+  // depois do clique. text/plain de propósito: request "simples", sem preflight
+  // de CORS (o backend aceita o JSON com qualquer Content-Type).
+  async function _enviarAviso(aviso, tentativa = 1) {
+    try {
+      const r = await _nativeFetch(`${API_BASE}/hiper-pedido-mudou`, {
+        method:    'POST',
+        headers:   { 'Content-Type': 'text/plain' },
+        body:      JSON.stringify({ ids: aviso.ids, recentes: aviso.recentes }),
+        keepalive: true,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      _log(`Aviso enviado: ${aviso.ids.length} pedido(s)${aviso.recentes ? ' + recentes' : ''}.`);
+    } catch (e) {
+      if (tentativa < 2) {
+        setTimeout(() => _enviarAviso(aviso, tentativa + 1), RETRY_MS);
+      } else {
+        // O check geral do backend pega esse pedido depois.
+        _warn('Aviso de pedido não entregue ao backend:', e?.message || e);
+      }
+    }
+  }
+
+  /** Chamado no send() — antes do Hiper responder. */
+  function _pedidoEnviado(rota, reqBody) {
+    const aviso = _montarAviso(rota, reqBody);
+    if (!aviso || (!aviso.ids.length && !aviso.recentes)) return;
+    _enviarAviso(aviso);
+  }
+
+  /** Chamado quando o Hiper responde com sucesso. */
+  function _pedidoConfirmado(rota, reqBody, respBody) {
+    if (rota.toLowerCase() !== 'pedidos-de-venda/salvar') return;
+    const req = _json(reqBody) || {};
+
+    // Pedido novo: agora o GUID existe — aviso preciso (o "recentes" do envio
+    // já cobre, este só evita depender da listagem).
+    if (!req.id && typeof respBody?.data === 'string' && respBody.data) {
+      _enviarAviso({ ids: [respBody.data], recentes: false });
+    }
+
+    // Orçamento da extensão salvo como pedido na tela de cadastro → marca como
+    // faturado na estatística. Usa __hiperPedidoAberto (código do orçamento
+    // salvo/carregado pela extensão), não o código do pedido no Hiper.
+    if (req.situacao === SITUACAO_PEDIDO && window.__hiperPedidoAberto
+        && typeof window._tentarMarcarFaturado === 'function') {
       window._tentarMarcarFaturado(window.__hiperPedidoAberto);
     }
-
-    _registrarEvento(evento);
   }
 
-  // ── Núcleo do interceptor ─────────────────────────────────────────────────────
+  // ── 2. Entrada de estoque por NF-e ───────────────────────────────────────────
 
-  /**
-   * Ponto de entrada chamado para cada requisição relevante que completou com sucesso.
-   *
-   * @param {object} p
-   *   pedidoId      — ID numérico do pedido (string)
-   *   metodo        — 'POST' | 'PUT' | 'DELETE'
-   *   requestBody   — body original (string form-urlencoded)
-   *   responseBody  — objeto JSON parseado da response (ou null para DELETE)
-   *   statusHttp    — código HTTP retornado
-   */
-  async function _handleRequisicao({ pedidoId, metodo, requestBody, responseBody, statusHttp, situacaoUrl }) {
-    // ── Determina estado novo ───────────────────────────────────────────────────
-    let estadoNovo;
-
-    if (metodo === 'DELETE' && (statusHttp === 204 || statusHttp === 200)) {
-      estadoNovo = 'cancelado';
-    } else if (situacaoUrl != null) {
-      // PUT .../atualizar-situacao/{cod} — estado vem da URL (response é 204 vazio)
-      // Códigos rastreados: 1=orçamento, 2=pedido, 3=cancelado, 99=cancelado (menu rápido)
-      // Demais (ex: 9=entregue, faturado, etc.) são ignorados — sem ação de estoque.
-      const s = Number(situacaoUrl);
-      if      (s === 1) estadoNovo = 'orçamento';
-      else if (s === 2) estadoNovo = 'pedido';
-      else if (s === 3 || s === 99) estadoNovo = 'cancelado';
-      else {
-        _log(`atualizar-situacao: código ${s} (${NOME_SITUACAO[s] ?? 'desconhecido'}) para pedido ${pedidoId} — não rastreado, ignorando.`);
-        return;
-      }
-    } else if (responseBody && responseBody.situacao != null) {
-      const s = Number(responseBody.situacao);
-      if      (s === 1) estadoNovo = 'orçamento';
-      else if (s === 2) estadoNovo = 'pedido';
-      else {
-        _warn(`situacao desconhecida (${s}) para pedido ${pedidoId} — ignorando.`);
-        return;
-      }
-    } else {
-      // Sem body e não é DELETE relevante → ignorar (ex: OPTIONS preflight)
-      return;
-    }
-
-
-    // ── Extrai itens do request ─────────────────────────────────────────────────
-    const params = _parseFormBody(requestBody);
-    const itens   = _extrairItensDoBody(params);
-
-    // ── Envia evento para o backend (backend decide a transição e ação) ──────────
-    await _processarTransicao(
-      pedidoId,
-      null,   // estado_anterior não gerenciado pelo cliente
-      estadoNovo,
-      itens,
-      {
-        codigoPedidoVenda: responseBody?.codigoPedidoVenda || '',
-        requestBody,
-        responseBody,
-      }
-    );
+  function _processarNfe(bodyStr) {
+    const body = _json(bodyStr);
+    if (!body) { _warn('confirmar-importacao: body ausente ou inválido'); return; }
+    const itens = (body.SugestoesDeProduto || [])
+      .filter(p => p.IdProduto && p.Quantidade > 0)
+      .map(p => ({
+        idProduto: String(p.IdProduto),
+        nome:      p.NomeProdutoGrade || '',
+        unidade:   p.SiglaUnidadeMedida || 'UN',
+        // Quantidade vem antes do Multiplicador que a Hiper aplica na
+        // importação (ex: 60 chapas × 2,88 = 172,80m²) — o produto é
+        // sempre cadastrado no Hiper na menor unidade de venda, e o
+        // Multiplicador converte a unidade da NF (caixa, milheiro, etc.)
+        // pra essa unidade — vale 1 quando a NF já vem na própria unidade
+        // (compra de outro fornecedor). O backend faz a conversão inversa
+        // pra unidade interna via estoque_divisor (ex: unidade → caixa).
+        qtd:       p.Quantidade * (p.Multiplicador || 1),
+      }));
+    if (!itens.length) { _warn('confirmar-importacao: nenhum item encontrado'); return; }
+    window.postMessage({
+      type: 'HIPER_ENTRADA_ESTOQUE',
+      payload: {
+        id_nfe:      String(body.IdNfe),
+        itens,
+        valor_total: body.InformacoesFiscais?.ValorTotalNfe || 0,
+        descricao:   `Entrada NF-e ${body.IdNfe}`,
+      },
+    }, '*');
+    _log(`NF-e ${body.IdNfe} — ${itens.length} produto(s) para entrada de estoque.`);
   }
-
 
   // ── Interceptação de fetch ────────────────────────────────────────────────────
 
   function _interceptarFetch() {
-  const fetchOriginal = window.__nativeFetch || window.fetch;
+    const fetchOriginal = window.__nativeFetch || window.fetch;
 
-  window.fetch = async function (...args) {
-    const [input, init] = args;
+    window.fetch = async function (...args) {
+      const [input, init] = args;
+      const url    = typeof input === 'string' ? input : (input?.url || '');
+      const metodo = (init?.method || input?.method || 'GET').toUpperCase();
+      const body   = typeof init?.body === 'string' ? init.body : null;
 
-    const url = typeof input === 'string'
-      ? input
-      : input?.url || '';
+      if (metodo !== 'POST') return fetchOriginal.apply(this, args);
 
-    const metodo = (init?.method || 'GET').toUpperCase();
+      const mPedido = url.match(RE_API_PEDIDOS);
+      const ehNfe   = RE_CONFIRMAR_IMPORTACAO.test(url);
+      if (!mPedido && !ehNfe) return fetchOriginal.apply(this, args);
 
-    console.log('[FETCH] Interceptado:', {
-      metodo,
-      url,
-      body: init?.body
-    });
+      if (mPedido) _pedidoEnviado(mPedido[1], body);
 
-    // Ignora métodos sem alteração
-    if (!['GET', 'POST', 'PUT', 'DELETE'].includes(metodo)) {
-      console.log('[FETCH] Método ignorado:', metodo);
-      return fetchOriginal.apply(this, args);
-    }
-
-    // =========================
-    // GET
-    // =========================
-    if (metodo === 'GET') {
-
-      console.log('[FETCH][GET] Executando request...');
-
-      const resp = await fetchOriginal.apply(this, args);
-
-      console.log('[FETCH][GET] Status:', resp.status);
-
-      const matchGet = url.match(/api\.hiper\.com\.br\/pedido-venda\/(\d+)(?:[?#]|$)/i);
-
-      console.log('[FETCH][GET] Match regex:', matchGet);
-
-      if (matchGet) {
-
-        const clone = resp.clone();
-
-        (async () => {
-          try {
-
-            const body = await clone.json().catch((e) => {
-              console.warn('[FETCH][GET] Erro parse JSON:', e);
-              return null;
-            });
-
-            console.log('[FETCH][GET] Body recebido:', body);
-
-            if (!body?.idPedidoVenda || body.situacao == null) {
-              console.warn('[FETCH][GET] Body sem id/situacao');
-              return;
-            }
-
-            const s = Number(body.situacao);
-
-            const estado =
-              s === 1 ? 'orçamento'
-              : s === 2 ? 'pedido'
-              : null;
-
-            console.log('[FETCH][GET] Estado detectado:', estado);
-
-            if (estado) {
-              // GET captura estado atual — garante existência do registro no backend.
-              // Itens ficam vazios (não disponíveis no GET); idempotência no servidor
-              // garante que ops já corretas não são alteradas.
-              await _processarTransicao(
-                String(body.idPedidoVenda),
-                null,
-                estado,
-                [],
-                {
-                  codigoPedidoVenda: body.codigoPedidoVenda || '',
-                  requestBody:       null,
-                  responseBody:      body,
-                }
-              );
-            }
-
-          } catch (e) {
-            console.warn('[FETCH][GET] Erro geral:', e);
-          }
-        })();
-
-        return resp;
-      }
-
-      console.log('[FETCH][GET] URL não corresponde ao pedido-venda');
-
-      return resp;
-    }
-
-    // ── Confirmação de NF-e → entrada de estoque ─────────────────────────────
-    if (metodo === 'POST' && RE_CONFIRMAR_IMPORTACAO.test(url)) {
-      _log('confirmar-importacao interceptada via fetch, aguardando resposta...');
       const response = await fetchOriginal.apply(this, args);
-      _log('confirmar-importacao respondeu — status:', response.status);
       if (response.ok) {
-        (async () => {
-          try {
-            const bodyStr = typeof init?.body === 'string' ? init.body : null;
-            if (!bodyStr) { _warn('confirmar-importacao: body não é string'); return; }
-            const body  = JSON.parse(bodyStr);
-            const itens = (body.SugestoesDeProduto || [])
-              .filter(p => p.IdProduto && p.Quantidade > 0)
-              .map(p => ({
-                idProduto: String(p.IdProduto),
-                nome:      p.NomeProdutoGrade || '',
-                unidade:   p.SiglaUnidadeMedida || 'UN',
-                // Quantidade vem antes do Multiplicador que a Hiper aplica na
-                // importação (ex: 60 chapas × 2,88 = 172,80m²) — o produto é
-                // sempre cadastrado no Hiper na menor unidade de venda, e o
-                // Multiplicador converte a unidade da NF (caixa, milheiro, etc.)
-                // pra essa unidade — vale 1 quando a NF já vem na própria unidade
-                // (compra de outro fornecedor). O backend faz a conversão inversa
-                // pra unidade interna via estoque_divisor (ex: unidade → caixa).
-                qtd:       p.Quantidade * (p.Multiplicador || 1),
-              }));
-            if (!itens.length) { _warn('confirmar-importacao: nenhum item encontrado'); return; }
-            window.postMessage({
-              type: 'HIPER_ENTRADA_ESTOQUE',
-              payload: {
-                id_nfe:      String(body.IdNfe),
-                itens,
-                valor_total: body.InformacoesFiscais?.ValorTotalNfe || 0,
-                descricao:   `Entrada NF-e ${body.IdNfe}`,
-              },
-            }, '*');
-            _log(`NF-e ${body.IdNfe} — ${itens.length} produto(s) para entrada de estoque.`);
-          } catch (e) {
-            _warn('Erro ao processar confirmar-importacao:', e);
-          }
-        })();
+        if (ehNfe) {
+          _processarNfe(body);
+        } else {
+          response.clone().json()
+            .then(resp => { if (resp?.success !== false) _pedidoConfirmado(mPedido[1], body, resp); })
+            .catch(e => _warn('Resposta de pedido ilegível:', e));
+        }
       }
       return response;
-    }
-
-    // =========================
-    // POST / PUT / DELETE
-    // =========================
-
-    const match = url.match(RE_PEDIDO_VENDA);
-
-    console.log('[FETCH] Match RE_PEDIDO_VENDA:', match);
-
-    if (!match) {
-      console.log('[FETCH] URL ignorada');
-      return fetchOriginal.apply(this, args);
-    }
-
-    console.log('[FETCH] Executando request original...');
-
-    const response = await fetchOriginal.apply(this, args);
-
-    console.log('[FETCH] Response status:', response.status);
-
-    const responseClone = response.clone();
-
-    ;(async () => {
-      try {
-
-        let pedidoId     = match[1] || null;
-        const situacaoUrl = match[2] != null ? match[2] : null;
-
-        console.log('[FETCH] pedidoId inicial:', pedidoId, '| situacaoUrl:', situacaoUrl);
-
-        // atualizar-situacao (PUT sem body) já é capturado de forma confiável
-        // pelo chrome.webRequest em background.js (mensagem HIPER_ATUALIZAR_SITUACAO_PAGE,
-        // ver listener no fim deste arquivo). Processar de novo aqui envia o
-        // mesmo evento duas vezes ao backend — causa raiz de pedidos duplicados
-        // no estoque (faturamento aplicado 2x para o mesmo op_id).
-        if (situacaoUrl != null) {
-          console.log('[FETCH] atualizar-situacao — ignorado aqui, tratado via background bridge.');
-          return;
-        }
-
-        const contentType =
-          responseClone.headers.get('content-type') || '';
-
-        console.log('[FETCH] content-type:', contentType);
-
-        const temJson =
-          contentType.includes('application/json');
-
-        console.log('[FETCH] temJson:', temJson);
-
-        const responseBody =
-          temJson && responseClone.status !== 204
-            ? await responseClone.json().catch((e) => {
-                console.warn('[FETCH] Erro parse response JSON:', e);
-                return null;
-              })
-            : null;
-
-        console.log('[FETCH] responseBody:', responseBody);
-
-        if (!pedidoId && responseBody?.idPedidoVenda) {
-          pedidoId = String(responseBody.idPedidoVenda);
-
-          console.log('[FETCH] pedidoId obtido da response:', pedidoId);
-        }
-
-        if (!pedidoId) {
-          console.warn('[FETCH] Não encontrou pedidoId');
-          return;
-        }
-
-        if (responseClone.status < 200 || responseClone.status >= 300) {
-          console.warn('[FETCH] Status ignorado:', responseClone.status);
-          return;
-        }
-
-        const requestBody =
-          typeof init?.body === 'string'
-            ? init.body
-            : null;
-
-        console.log('[FETCH] requestBody:', requestBody);
-
-        console.log('[FETCH] Chamando _handleRequisicao...');
-
-        await _handleRequisicao({
-          pedidoId,
-          metodo,
-          requestBody,
-          responseBody,
-          statusHttp:   responseClone.status,
-          situacaoUrl,
-        });
-
-        console.log('[FETCH] _handleRequisicao concluído');
-
-      } catch (e) {
-        console.warn('[FETCH] Erro interceptor:', e);
-      }
-    })();
-
-    return response;
-  };
-
-  console.log('[FETCH] Interceptor instalado com sucesso.');
+    };
   }
 
   // ── Interceptação de XHR ──────────────────────────────────────────────────────
+
+  // Entrega uma resposta JSON pronta num XHR sem ir à rede. O axios (usado
+  // pelo microfrontend) lê readyState/status/responseText/response/headers e
+  // é avisado por 'loadend' (ou 'readystatechange' com readyState 4).
+  // Assíncrono de propósito: o chamador espera a resposta depois do send().
+  function _simularResposta(xhr, url, { status, corpo }) {
+    const texto = JSON.stringify(corpo);
+    const def = (k, get) => Object.defineProperty(xhr, k, { get, configurable: true });
+    setTimeout(() => {
+      def('readyState',   () => 4);
+      def('status',       () => status);
+      def('statusText',   () => 'OK');
+      def('responseURL',  () => url);
+      def('responseText', () => texto);
+      def('response',     () => (xhr.responseType === 'json' ? corpo : texto));
+      xhr.getAllResponseHeaders = () => 'content-type: application/json; charset=utf-8\r\n';
+      xhr.getResponseHeader = (n) => (String(n).toLowerCase() === 'content-type' ? 'application/json; charset=utf-8' : null);
+      ['readystatechange', 'load', 'loadend'].forEach(t => xhr.dispatchEvent(new Event(t)));
+    }, 0);
+  }
 
   function _interceptarXHR() {
     const XHROriginal = window.XMLHttpRequest;
 
     function XHRProxy() {
-      const xhr       = new XHROriginal();
-      let _url        = '';
-      let _metodo     = 'GET';
-      let _requestBody = null;
+      const xhr    = new XHROriginal();
+      let _url     = '';
+      let _metodo  = 'GET';
 
       const openOriginal = xhr.open.bind(xhr);
       xhr.open = function (method, url, ...rest) {
@@ -517,86 +241,40 @@
 
       const sendOriginal = xhr.send.bind(xhr);
       xhr.send = function (body) {
-        _requestBody = typeof body === 'string' ? body : null;
+        const requestBody = typeof body === 'string' ? body : null;
 
-        // Preço de tabela: mesma checagem do fetch, para o caminho XHR
-
-        if (['POST', 'PUT', 'DELETE'].includes(_metodo) && RE_PEDIDO_VENDA.test(_url)) {
-          xhr.addEventListener('load', async function () {
-            try {
-              const match = _url.match(RE_PEDIDO_VENDA);
-              if (!match) return;
-
-              let pedidoId     = match[1] || null;
-              const situacaoUrl = match[2] != null ? match[2] : null;
-
-              // atualizar-situacao já é tratado via background bridge (webRequest) —
-              // ver comentário equivalente em _interceptarFetch.
-              if (situacaoUrl != null) {
-                _log('[XHR] atualizar-situacao — ignorado aqui, tratado via background bridge.');
-                return;
-              }
-
-              let responseBody  = null;
-
-              try {
-                responseBody = JSON.parse(xhr.responseText);
-              } catch (_) { /* DELETE 204 não tem body */ }
-
-              if (!pedidoId && responseBody?.idPedidoVenda) {
-                pedidoId = String(responseBody.idPedidoVenda);
-              }
-
-              if (!pedidoId) return;
-              if (xhr.status < 200 || xhr.status >= 300) return;
-
-              await _handleRequisicao({
-                pedidoId,
-                metodo:       _metodo,
-                requestBody:  _requestBody,
-                responseBody,
-                statusHttp:   xhr.status,
-                situacaoUrl,
-              });
-            } catch (e) {
-              _warn('Erro no interceptor XHR:', e);
-            }
-          });
+        // 3. Catálogo em cache (busca/produto/preço/estoque do seletor de
+        // produto da tela nova do pedido) — ver responderDoCache em
+        // hiper-pedido-store.js.
+        let doCache = null;
+        try { doCache = window.__hiperPedido?.responderDoCache?.(_metodo, _url, requestBody); } catch (e) { _warn('responderDoCache falhou:', e); }
+        if (doCache && typeof doCache.then === 'function') {
+          // Resposta assíncrona (estoque do nosso backend): null → segue pro Hiper.
+          doCache
+            .then(r => (r ? _simularResposta(xhr, _url, r) : sendOriginal(body)))
+            .catch(() => sendOriginal(body));
+          return;
+        }
+        if (doCache) {
+          _simularResposta(xhr, _url, doCache);
+          return;
         }
 
-        if (_metodo === 'POST' && RE_CONFIRMAR_IMPORTACAO.test(_url)) {
-          xhr.addEventListener('load', async function () {
-            try {
-              _log('confirmar-importacao interceptada via XHR — status:', xhr.status);
+        if (_metodo === 'POST') {
+          const mPedido = typeof _url === 'string' && _url.match(RE_API_PEDIDOS);
+          if (mPedido) {
+            _pedidoEnviado(mPedido[1], requestBody);
+            xhr.addEventListener('load', () => {
               if (xhr.status < 200 || xhr.status >= 300) return;
-              if (!_requestBody) { _warn('confirmar-importacao XHR: body vazio'); return; }
-              const body  = JSON.parse(_requestBody);
-              const itens = (body.SugestoesDeProduto || [])
-                .filter(p => p.IdProduto && p.Quantidade > 0)
-                .map(p => ({
-                  idProduto: String(p.IdProduto),
-                  nome:      p.NomeProdutoGrade || '',
-                  unidade:   p.SiglaUnidadeMedida || 'UN',
-                  // Ver comentário equivalente em _interceptarFetch: Quantidade × Multiplicador
-                  // dá a quantidade real na menor unidade de venda (como o produto é cadastrado
-                  // no Hiper); o backend converte pra unidade interna via estoque_divisor.
-                  qtd:       p.Quantidade * (p.Multiplicador || 1),
-                }));
-              if (!itens.length) { _warn('confirmar-importacao XHR: nenhum item'); return; }
-              window.postMessage({
-                type: 'HIPER_ENTRADA_ESTOQUE',
-                payload: {
-                  id_nfe:      String(body.IdNfe),
-                  itens,
-                  valor_total: body.InformacoesFiscais?.ValorTotalNfe || 0,
-                  descricao:   `Entrada NF-e ${body.IdNfe}`,
-                },
-              }, '*');
-              _log(`NF-e ${body.IdNfe} — ${itens.length} produto(s) para entrada de estoque.`);
-            } catch (e) {
-              _warn('Erro no interceptor XHR confirmar-importacao:', e);
-            }
-          });
+              const resp = xhr.responseType === 'json' ? xhr.response : _json(xhr.responseText);
+              if (resp?.success === false) return;
+              _pedidoConfirmado(mPedido[1], requestBody, resp);
+            });
+          } else if (RE_CONFIRMAR_IMPORTACAO.test(_url)) {
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) _processarNfe(requestBody);
+            });
+          }
         }
 
         return sendOriginal(body);
@@ -619,48 +297,17 @@
     Object.assign(XHRProxy, XHROriginal);
     XHRProxy.prototype = XHROriginal.prototype;
     window.XMLHttpRequest = XHRProxy;
-
-    _log('Interceptor XHR instalado.');
   }
 
   // ── Inicialização ─────────────────────────────────────────────────────────────
 
-  function _init() {
-    _interceptarFetch();
-    _interceptarXHR();
-    _log('✅ Módulo de sincronização ativo. API:', API_BASE);
-  }
+  _interceptarFetch();
+  _interceptarXHR();
+  _log('✅ Ativo. API:', API_BASE);
 
-  // Executa imediatamente — content script roda antes do Hiper
-  _init();
-
-  // ── Escuta eventos do background (via interceptor.js) ────────────────────────
-  // O background detecta atualizar-situacao via webRequest e notifica o content
-  // script, que repassa aqui via postMessage.
-  window.addEventListener('message', (ev) => {
-    if (ev.source !== window) return;
-    const msg = ev.data;
-    if (msg?.type !== 'HIPER_ATUALIZAR_SITUACAO_PAGE') return;
-
-    const { pedidoId, situacaoCod } = msg;
-    _log(`atualizar-situacao recebido do background: pedido=${pedidoId} cod=${situacaoCod}`);
-
-    _handleRequisicao({
-      pedidoId:     String(pedidoId),
-      metodo:       'PUT',
-      requestBody:  null,
-      responseBody: null,
-      statusHttp:   204,
-      situacaoUrl:  String(situacaoCod),
-    });
-  });
-
-  // Expõe utilitários de diagnóstico no console
+  // Diagnóstico no console: força o aviso de um pedido (GUID do Hiper).
   window.__hiperSync = {
-    /** Força envio manual de um evento para um pedido (debug) */
-    enviar: async (pedidoId, estadoNovo, itens) => {
-      await _processarTransicao(String(pedidoId), null, estadoNovo, itens || [], {});
-    },
+    avisar: (...ids) => _enviarAviso({ ids: ids.map(String), recentes: false }),
+    avisarRecentes: () => _enviarAviso({ ids: [], recentes: true }),
   };
-
 })();

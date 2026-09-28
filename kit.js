@@ -41,6 +41,26 @@ for (const [nomeGrupo, niveis] of Object.entries(GRUPOS_VARIACAO)) {
   }
 }
 
+// Toggles do painel: tamanho do montante/guia e cor da tabica.
+const COD_MONTANTE = { '48': '80704698', '70': '79831932', '90': '80814793' };
+const COD_GUIA     = { '48': '88849464', '70': '79831929', '90': '80815323' };
+const COD_TABICA   = { branca: '79830939', natural: '79832337' };
+
+// Códigos que podem ocupar a MESMA linha de um kit (tier de embalagem,
+// tamanho de montante/guia, cor da tabica). Usado pra achar a linha de um
+// kit recuperado do banco, cujo produto pode não ser mais o código base.
+const FAMILIAS_TROCAVEIS = [
+  ...Object.values(GRUPOS_VARIACAO).map(niveis => niveis.map(n => n.codigo)),
+  Object.values(COD_MONTANTE),
+  Object.values(COD_GUIA),
+  Object.values(COD_TABICA),
+];
+
+function codigosEquivalentes(codigo) {
+  const c = String(codigo);
+  return new Set(FAMILIAS_TROCAVEIS.find(f => f.includes(c)) ?? [c]);
+}
+
 // ── ARREDONDAMENTOS ESPECIAIS ──────────────────────────────────────────
 // Códigos que precisam de arredondamento além do Math.ceil padrão.
 // Cada entrada é uma função (qtdBruta) => qtdArredondada.
@@ -376,23 +396,18 @@ const PORTAS_MO_POR_M2 = 100;
 //   demais:   id = nome do kit,          estado.tipo = 'kit'
 const kitsAtivos = new Map();
 
-// O estado dos kits pertence a UM pedido. Ao sair da rota do formulário,
+// O estado dos kits pertence a UM pedido. Ao sair do cadastro do pedido,
 // descarta tudo — senão os kits de um orçamento recuperado sobrevivem à
 // navegação do SPA e reaparecem (e são salvos!) no pedido seguinte.
-// Limpa apenas na SAÍDA da rota: re-render do Angular com o mesmo hash
-// (remount do painel) mantém as medidas do pedido em edição.
-const ROTA_PEDIDO_KITS = /pedido-venda\/(novo|editar|duplicar)(\/|$|\?)/;
-let _hashKitsAnterior = location.hash;
-window.addEventListener('hashchange', () => {
-  const saiuDoFormulario =
-    ROTA_PEDIDO_KITS.test(_hashKitsAnterior) && !ROTA_PEDIDO_KITS.test(location.hash);
-  _hashKitsAnterior = location.hash;
-  if (saiuDoFormulario && kitsAtivos.size) {
-    kitsAtivos.clear();
-    if (typeof renderizarPainel === 'function') renderizarPainel();
-    console.info('[HiperKit] 🧹 Rota saiu do pedido — kits descartados.');
-  }
-});
+// Chamado pelo aoDesmontar do painel (hiper-ui.js), que só dispara quando o
+// menu lateral do cadastro some da tela — re-render do microfrontend sem
+// sair da tela não desmonta, então as medidas em edição ficam.
+function _descartarKits() {
+  _hintsQuantidade.clear();
+  if (!kitsAtivos.size) return;
+  kitsAtivos.clear();
+  console.info('[HiperKit] 🧹 Saiu do cadastro do pedido — kits descartados.');
+}
 
 // ── UTIL ───────────────────────────────────────────────────────────────
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -416,111 +431,174 @@ function resolverNivel(codigoBase, qtdBruta) {
   return niveis[niveis.length - 1];
 }
 
-// ── BUSCA NO MASTER ────────────────────────────────────────────────────
-// Todas as tabelas deste arquivo usam o ID real do produto (idProduto) desde
-// 2026-07-31 — antes usavam o código legado de 4 dígitos (cod4) e essa busca
-// dependia de parsing do prefixo de Nome/text ("3073 - Chapa..."), que falhava
-// silenciosamente pra produto cadastrado sem cod4 (Nome sem prefixo nesse
-// caso — ver produtos_hiper.py:listar_master). Comparação por idProduto é
-// exata e não depende de formatação nenhuma de string.
-function buscarNaMaster(idProdutoReal) {
-  const master = window.__hiperMaster;
-  if (!master?.length) return null;
-  const id = String(idProdutoReal);
-  return master.find(p => String(p.idProduto) === id) || null;
+// ── LINHAS DO PEDIDO (store Pinia do microfrontend) ───────────────────
+// Cada linha de kit é referenciada pelo `id` (GUID) do item na store
+// 'cadastro-pedido-de-venda-produtos' — ver hiper-pedido-store.js. Nada aqui
+// toca o DOM do pedido: a store é a fonte que o Hiper serializa ao salvar.
+// Todas as tabelas deste arquivo usam idProduto = idProdutoHiperOnline.
+function _storeProdutos() {
+  return window.__hiperPedido?.produtos() ?? null;
 }
 
-// ── INSERÇÃO VIA CACHE ─────────────────────────────────────────────────
-function inserirViaCache($input, produto) {
-  if (!produto) {
-    console.warn('[HiperCache] ⚠ inserirViaCache chamado com produto undefined — ignorado.');
-    return;
+function _itemDaLinha(linhaId) {
+  return _storeProdutos()?.itens.find(i => i.id === linhaId) ?? null;
+}
+
+function _linhaExiste(linhaId) {
+  const item = _itemDaLinha(linhaId);
+  return !!item && !item.cancelado;
+}
+
+// ── HINT "≈ x" (valor bruto calculado, antes do arredondamento) ────────
+// Aparece embaixo do campo Quantidade da linha. Montante/guia só recebem
+// esse hint (BLACKLIST_SETAR), então é a única forma do vendedor ver quanto
+// o kit calculou pra eles. Fonte maior + valor em negrito preto de propósito:
+// leitura fácil pra quem tem vista cansada.
+const _hintsQuantidade = new Map();   // linhaId → valor bruto
+window.__hiperKitHints = _hintsQuantidade;
+
+// O campo de quantidade da linha i tem a classe "Itens[i].Quantidade" (usada
+// pela validação do Hiper), com i = índice em store.itens. Como remover uma
+// linha muda os índices, os hints são sempre re-sincronizados do zero.
+function _campoQuantidade(indice) {
+  return document
+    .querySelector(`#pedido-venda-produtos [class~="Itens[${indice}].Quantidade"]`)
+    ?.closest('.cadastro-pedido-de-venda-produtos__field') ?? null;
+}
+
+function _renderizarHints() {
+  const store = _storeProdutos();
+  const desejados = new Map();   // campo → texto
+  if (store) {
+    store.itens.forEach((item, i) => {
+      if (!_hintsQuantidade.has(item.id) || item.cancelado) return;
+      const campo = _campoQuantidade(i);
+      if (!campo) return;
+      const v = _hintsQuantidade.get(item.id);
+      desejados.set(campo, v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    });
   }
-  const data = { id: String(produto.id ?? produto.idProduto), text: produto.Nome ?? produto.text, ...produto };
-  const s2 = $input.data("select2");
-  if (!s2) return;
-  const anterior = s2.data();
-  $input.val(data.id);
-  s2.updateSelection(data);
-  $input.trigger({ type: "select2-selected", val: data.id, choice: data });
-  s2.triggerChange({ added: data, removed: anterior });
+
+  // Só mexe no DOM quando algo mudou — este render roda dentro de um
+  // MutationObserver e não pode se re-disparar indefinidamente.
+  document.querySelectorAll('#pedido-venda-produtos .hiper-kit-hint').forEach(el => {
+    if (!desejados.has(el.parentElement)) el.remove();
+  });
+  desejados.forEach((texto, campo) => {
+    let el = campo.querySelector(':scope > .hiper-kit-hint');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'hiper-kit-hint';
+      el.style.cssText = 'margin-top:3px;font-size:13px;color:#555;line-height:1.3;pointer-events:none';
+      el.innerHTML = 'Calculado: <b style="color:#000;font-size:14px">≈ <span></span></b>';
+      campo.appendChild(el);
+    }
+    const span = el.querySelector('span');
+    if (span.textContent !== texto) span.textContent = texto;
+  });
 }
 
-// ── AGUARDAR INPUT HABILITADO ──────────────────────────────────────────
-async function aguardarInputHabilitado($input, timeout = 3000) {
-  const inicio = Date.now();
-  while (Date.now() - inicio < timeout) {
-    const el = $input[0];
-    if (el && !el.disabled && !el.readOnly && $.contains(document, el)) return true;
-    await delay(50);
-  }
-  console.log('[HiperCache] ⏱ Timeout aguardando input de quantidade habilitar.');
-  return false;
+let _hintsAgendado = null;
+function _agendarHints() {
+  if (_hintsAgendado) return;
+  _hintsAgendado = setTimeout(() => { _hintsAgendado = null; _renderizarHints(); }, 100);
 }
 
-
+// Re-sincroniza quando o Hiper re-renderiza a lista de produtos (linha
+// removida, nova linha, troca de produto recriando o campo...). As próprias
+// mutações do render re-agendam uma vez, mas a 2ª passada não muda nada e
+// o ciclo para.
+new MutationObserver(() => {
+  if (_hintsQuantidade.size || document.querySelector('.hiper-kit-hint')) _agendarHints();
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 // ── SETAR QUANTIDADE ───────────────────────────────────────────────────
-async function setarQuantidade($inputQtd, valor, valorBruto = null, apenasHint=false) {
-  const pronto = await aguardarInputHabilitado($inputQtd);
-  if (!pronto) return;
-
-  const nativeInput = $inputQtd[0];
-  const valorAtual  = nativeInput.value;
-  const campoAceitaDecimal = valorAtual.includes(',') || valorAtual.includes('.');
-
-  const valorStr = campoAceitaDecimal
-    ? valor.toFixed(2).replace('.', ',')
-    : String(Math.ceil(valor));
-
-  let $hint = $inputQtd.data('$hint');
-  const bruto = (valorBruto ?? valor).toFixed(2).replace('.', ',');
-
-  if (!$hint || !$.contains(document, $hint[0])) {
-    $hint = $('<span style="display:block;font-size:10px;color:#999;text-align:right;margin-top:1px;pointer-events:none"></span>');
-    $inputQtd.after($hint);
-    $inputQtd.data('$hint', $hint);
-  }
-  $hint.text(`≈ ${bruto}`);
-
+function setarQuantidade(linhaId, valor, valorBruto = null, apenasHint = false) {
+  const item = _itemDaLinha(linhaId);
+  if (!item) return;
+  _hintsQuantidade.set(linhaId, valorBruto ?? valor);
+  _agendarHints();
   if (apenasHint) return;
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-  setter ? setter.call(nativeInput, valorStr) : (nativeInput.value = valorStr);
 
-  nativeInput.dispatchEvent(new Event('input',  { bubbles: true }));
-  nativeInput.dispatchEvent(new Event('change', { bubbles: true }));
-  nativeInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-  $inputQtd.trigger('input').trigger('change').trigger('keyup');
-  nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
-  nativeInput.dispatchEvent(new Event('focus', { bubbles: true }));
+  // Unidade inteira → arredonda pra cima (não vende meia chapa); com casas
+  // decimais → respeita a precisão da unidade de medida do produto.
+  const casas = item.quantidadeCasasDecimais || 0;
+  const fator = 10 ** casas;
+  const qtd = casas === 0 ? Math.ceil(valor - 1e-9) : Math.round(valor * fator) / fator;
+  if (item.quantidade !== qtd) _storeProdutos().setQuantidade(linhaId, qtd);
 }
 
 // ── TROCAR PRODUTO NA LINHA ────────────────────────────────────────────
-async function trocarProdutoNaLinha($linha, codigoNovo, qtdFinal, qtdBruta) {
-  const produto = buscarNaMaster(codigoNovo);
-  if (!produto) {
-    console.warn(`[HiperCache] ⚠ Produto ${codigoNovo} não encontrado — linha não atualizada.`);
-    const $qtd = $linha.find(
-      ".quantidade-produto input, input.quantidade-unitaria, input[ng-model*='quantidade']"
-    ).first();
-    if ($qtd.length) await setarQuantidade($qtd, qtdFinal, qtdBruta);
-    return;
+// Troca o produto mantendo a quantidade atual (preencherLinha, ver
+// hiper-pedido-store.js). `_seqTroca` descarta trocas antigas que resolvem
+// depois de uma mais nova na mesma linha (recalcularTudo pode disparar
+// várias seguidas enquanto o usuário digita).
+const _seqTroca = new Map();   // linhaId → nº da troca mais recente
+
+async function _trocarProduto(linhaId, codigoNovo) {
+  const seq = (_seqTroca.get(linhaId) ?? 0) + 1;
+  _seqTroca.set(linhaId, seq);
+
+  const item = _itemDaLinha(linhaId);
+  if (!item) return false;
+  if (String(item.idProdutoHiperOnline) === String(codigoNovo)) return true;
+
+  const dados = await window.__hiperPedido?.obterProduto(codigoNovo);
+  const atual = _itemDaLinha(linhaId);
+  if (_seqTroca.get(linhaId) !== seq || !atual) return false;
+  if (!dados) {
+    console.warn(`[HiperCache] ⚠ Produto ${codigoNovo} não encontrado no Hiper — linha não atualizada.`);
+    return false;
   }
 
-  const $inputProduto = $linha.find("input.produto");
-  if (!$inputProduto.length) return;
+  return window.__hiperPedido.preencherLinha(linhaId, dados, atual.quantidade);
+}
 
-  const s2 = $inputProduto.data("select2");
-  const atual = s2?.data();
-  const idAtual = String(atual?.id ?? atual?.idProduto ?? '');
-  const idNovo  = String(produto.id ?? produto.idProduto);
+async function trocarProdutoNaLinha(linhaId, codigoNovo, qtdFinal, qtdBruta) {
+  const ok = await _trocarProduto(linhaId, codigoNovo);
+  if (ok) setarQuantidade(linhaId, qtdFinal, qtdBruta);
+}
 
-  if (idAtual !== idNovo) inserirViaCache($inputProduto, produto);
+// ── ABRIR LINHAS DE UM KIT ─────────────────────────────────────────────
+// Reaproveita linhas que outro kit já abriu (linhasExistentes: codigo →
+// linhaId) e cria o resto. Tudo ou nada: se algum produto não existir no
+// Hiper, não cria nenhuma linha.
+async function _abrirLinhas(codigos, linhasExistentes) {
+  const store = _storeProdutos();
+  if (!store) { console.error('[HiperCache] ❌ Store do pedido não encontrada.'); return null; }
 
-  const $qtd = $linha.find(
-    ".quantidade-produto input, input.quantidade-unitaria, input[ng-model*='quantidade']"
-  ).first();
-  if ($qtd.length) await setarQuantidade($qtd, qtdFinal, qtdBruta);
+  const novos    = codigos.filter(c => !linhasExistentes.has(c));
+  const produtos = await Promise.all(novos.map(c => window.__hiperPedido.obterProduto(c)));
+  const faltando = novos.filter((_, i) => !produtos[i]);
+  if (faltando.length) {
+    console.error('[HiperCache] ❌ Produtos não encontrados no Hiper:', faltando);
+    return null;
+  }
+
+  // Quantidade inicial 1 — o recalcularTudo() preenche quando houver medida.
+  const novasLinhas = new Map();
+  novos.forEach((codigo, i) => {
+    novasLinhas.set(codigo, window.__hiperPedido.novaLinha(produtos[i], 1));
+  });
+  window.__hiperPedido.removerLinhasVazias();
+
+  return codigos.map(codigo => ({
+    codigo,
+    linhaId: linhasExistentes.get(codigo) ?? novasLinhas.get(codigo),
+  }));
+}
+
+// Linhas já abertas por kits ativos (codigo → linhaId).
+function _linhasAbertas({ excluirBlacklist = false } = {}) {
+  const mapa = new Map();
+  kitsAtivos.forEach((estado) => {
+    estado.linhas.forEach(({ codigo, linhaId }) => {
+      if (!_linhaExiste(linhaId)) return;
+      if (excluirBlacklist && BLACKLIST_SETAR.has(codigo)) return;
+      mapa.set(codigo, linhaId);
+    });
+  });
+  return mapa;
 }
 
 // ── CALCULAR ÁREA TOTAL DE PORTAS ──────────────────────────────────────
@@ -567,25 +645,24 @@ function recalcularTudo() {
     const altPend    = num(estado.altPend ?? 0.6);
     const fatorMargem = 1 + (num(estado.margem ?? 0) / 100);
 
-    estado.linhas.forEach(({ codigo, $linha }) => {
-      if (!$.contains(document, $linha[0])) return;
+    estado.linhas.forEach(({ codigo, linhaId }) => {
+      if (!_linhaExiste(linhaId)) return;
 
       const fn       = formulas[codigo];
       const qtdBruta = fn ? fn(A, P, cant, altPend) * fatorMargem : 0;
 
-      // Chave = elemento DOM: dois kits que compartilham a mesma $linha
+      // Chave = linha da store: dois kits que compartilham a mesma linha
       // (mesmo código base resolvido para o mesmo produto) acumulam na
       // mesma entrada em vez de criar duplicatas por string de código.
-      const domEl = $linha[0];
-      if (!totais.has(domEl)) {
-        totais.set(domEl, { codigo, qtdBruta: 0, $linha });
+      if (!totais.has(linhaId)) {
+        totais.set(linhaId, { codigo, qtdBruta: 0 });
       }
-      totais.get(domEl).qtdBruta += qtdBruta;
+      totais.get(linhaId).qtdBruta += qtdBruta;
     });
   });
 
-  totais.forEach(({ codigo, qtdBruta, $linha }, domEl) => {
-    if (!$.contains(document, domEl)) return;
+  totais.forEach(({ codigo, qtdBruta }, linhaId) => {
+    if (!_linhaExiste(linhaId)) return;
 
     const nivel = resolverNivel(codigo, qtdBruta);
 
@@ -599,16 +676,13 @@ function recalcularTudo() {
       const qtdFinal = arredondarFn
         ? arredondarFn(qtdRaw)
         : Math.round(qtdRaw * 100) / 100;
-      trocarProdutoNaLinha($linha, nivel.codigo, qtdFinal, qtdRaw);
+      trocarProdutoNaLinha(linhaId, nivel.codigo, qtdFinal, qtdRaw);
     } else {
       const qtdFinal = arredondarFn
         ? arredondarFn(qtdBruta)
         : Math.round(qtdBruta * 100) / 100;
-      const $qtd = $linha.find(
-        ".quantidade-produto input, input.quantidade-unitaria, input[ng-model*='quantidade']"
-      ).first();
-      const apenasHint = BLACKLIST_SETAR.has(codigoFinal)
-      if ($qtd.length) setarQuantidade($qtd, qtdFinal, qtdBruta, apenasHint);
+      const apenasHint = BLACKLIST_SETAR.has(codigoFinal);
+      setarQuantidade(linhaId, qtdFinal, qtdBruta, apenasHint);
     }
   });
 }
@@ -618,22 +692,20 @@ function removerKit(id) {
   const estadoRemovido = kitsAtivos.get(id);
   kitsAtivos.delete(id);
 
-  if (estadoRemovido) {
-    const codigosAindaAtivos = new Set();
-    kitsAtivos.forEach((estado) => {
-      estado.linhas.forEach(({ codigo }) => codigosAindaAtivos.add(codigo));
-    });
-
-    estadoRemovido.linhas.forEach(({ codigo, $linha }) => {
-      // Verifica pela referência DOM — não pelo código — porque dois kits podem
+  const store = _storeProdutos();
+  if (estadoRemovido && store) {
+    estadoRemovido.linhas.forEach(({ linhaId }) => {
+      // Verifica pelo id da linha — não pelo código — porque dois kits podem
       // ter linhas separadas para o mesmo produto (ex: montante 70 em duas paredes).
       const usadaEmOutroKit = [...kitsAtivos.values()].some(est =>
-        est.linhas.some(l => l.$linha[0] === $linha[0])
+        est.linhas.some(l => l.linhaId === linhaId)
       );
-      if (!usadaEmOutroKit && $.contains(document, $linha[0])) {
-        $linha.remove();
+      if (!usadaEmOutroKit && _linhaExiste(linhaId)) {
+        store.removerItem(linhaId);
+        _hintsQuantidade.delete(linhaId);
       }
     });
+    _agendarHints();
   }
 
   recalcularTudo();
@@ -651,71 +723,8 @@ async function aplicarKitGesso(nomeKit) {
   // Gera id único para todos os kits (exceto portas que mantém id fixo)
   const id = nomeKit === 'portas' ? 'portas' : nomeKit + '_' + Date.now();
 
-  $(".linha-produto:not(.default)").each(function() {
-    const $linha = $(this);
-    const textoChosen = $linha.find(".select2-chosen").text().trim();
-    if (textoChosen === "Nome, código de barras, código do produto ou referência interna") {
-      $linha.find(".btn-remover-linha, .btn-excluir-linha, [ng-click*='remover'], [ng-click*='excluir']")
-            .first().click();
-    }
-  });
-
-  let t = 0;
-  while (!window.__hiperMaster?.length && t++ < 100) await delay(100);
-  if (!window.__hiperMaster?.length) { console.error('[HiperCache] ❌ Master não disponível.'); return; }
-
-  const produtos = codigos.map(c => buscarNaMaster(c));
-  if (produtos.some(p => !p)) { console.error('[HiperCache] ❌ Produtos faltando.'); return; }
-
-  const linhasExistentes = new Map();
-  kitsAtivos.forEach((estado) => {
-    estado.linhas.forEach(({ codigo, $linha }) => {
-      if ($.contains(document, $linha[0])) linhasExistentes.set(codigo, $linha);
-    });
-  });
-
-  const codigosNovos = codigos.filter(c => !linhasExistentes.has(c));
-
-  // Captura total ANTES de adicionar, para saber exatamente quantas linhas novas aguardar
-  const totalAntes = $(".linha-produto:not(.default)").length;
-
-  for (let i = 0; i < codigosNovos.length; i++) $(".btn-adicionar-mais-produtos").click();
-
-  if (codigosNovos.length > 0) {
-    const inicio = Date.now();
-    while (Date.now() - inicio < 3000) {
-      if ($(".linha-produto:not(.default)").length >= totalAntes + codigosNovos.length) break;
-      await delay(50);
-    }
-  }
-
-  const todasLinhas = $(".linha-produto:not(.default)").toArray();
-  const linhasNovas = todasLinhas.slice(totalAntes);
-
-  for (let i = 0; i < linhasNovas.length; i++) {
-    const codigoNovo = codigosNovos[i];
-    if (!codigoNovo) continue;
-    const idxNoCodigos = codigos.indexOf(codigoNovo);
-    const produto = idxNoCodigos >= 0 ? produtos[idxNoCodigos] : undefined;
-    if (!produto) {
-      console.warn(`[HiperCache] ⚠ Produto para código "${codigoNovo}" não encontrado — linha ignorada.`);
-      continue;
-    }
-    const $input = $(linhasNovas[i]).find("input.produto");
-    if ($input.length) {
-      inserirViaCache($input, produto);
-      await delay(150);
-    }
-  }
-
-  let novasIdx = 0;
-  const linhasDoKit = codigos.map((codigo) => {
-    if (linhasExistentes.has(codigo)) {
-      return { codigo, $linha: linhasExistentes.get(codigo) };
-    } else {
-      return { codigo, $linha: $(linhasNovas[novasIdx++]) };
-    }
-  });
+  const linhasDoKit = await _abrirLinhas(codigos, _linhasAbertas());
+  if (!linhasDoKit) return;
 
   const estadoInicial = nomeKit === 'portas'
     ? { tipo: 'portas', nomeKit, A: 0, grupos: [{ id: Date.now(), qtd: 1, larg: 0.70, alt: 2.10 }], linhas: linhasDoKit }
@@ -732,64 +741,14 @@ async function aplicarKitGesso(nomeKit) {
 async function aplicarParedeCfg(cfg) {
   const id = 'parede_' + Date.now();
 
-  let t = 0;
-  while (!window.__hiperMaster?.length && t++ < 100) await delay(100);
-  if (!window.__hiperMaster?.length) { console.error('[HiperCache] ❌ Master não disponível.'); return null; }
-
-  const codigos = paredeCodigosAtivos(cfg);
-  const produtos = codigos.map(c => buscarNaMaster(c));
-  if (produtos.some(p => !p)) { console.error('[HiperCache] ❌ Produtos de parede faltando.'); return null; }
-
   // Aproveita linhas já abertas por outros kits.
   // Montante e guia (BLACKLIST_SETAR) nunca são compartilhados — cada parede
   // precisa de uma linha própria para poder ter um tamanho independente.
-  const linhasExistentes = new Map();
-  kitsAtivos.forEach((estado) => {
-    estado.linhas.forEach(({ codigo, $linha }) => {
-      if ($.contains(document, $linha[0]) && !BLACKLIST_SETAR.has(codigo)) {
-        linhasExistentes.set(codigo, $linha);
-      }
-    });
-  });
-
-  const codigosNovos = codigos.filter(c => !linhasExistentes.has(c));
-
-  // Captura total ANTES de adicionar, para saber exatamente quantas linhas novas aguardar
-  const totalAntes = $(".linha-produto:not(.default)").length;
-
-  for (let i = 0; i < codigosNovos.length; i++) $(".btn-adicionar-mais-produtos").click();
-
-  if (codigosNovos.length > 0) {
-    const inicio = Date.now();
-    while (Date.now() - inicio < 3000) {
-      if ($(".linha-produto:not(.default)").length >= totalAntes + codigosNovos.length) break;
-      await delay(50);
-    }
-  }
-
-  const todasLinhas = $(".linha-produto:not(.default)").toArray();
-  const linhasNovas = todasLinhas.slice(totalAntes);
-
-  for (let i = 0; i < linhasNovas.length; i++) {
-    const codigoNovo = codigosNovos[i];
-    if (!codigoNovo) continue;
-    const produto = buscarNaMaster(codigoNovo);
-    if (!produto) continue;
-    const $input = $(linhasNovas[i]).find("input.produto");
-    if ($input.length) {
-      inserirViaCache($input, produto);
-      await delay(150);
-    }
-  }
-
-  let novasIdx = 0;
-  const linhasDoKit = codigos.map((codigo) => {
-    if (linhasExistentes.has(codigo)) {
-      return { codigo, $linha: linhasExistentes.get(codigo) };
-    } else {
-      return { codigo, $linha: $(linhasNovas[novasIdx++]) };
-    }
-  });
+  const linhasDoKit = await _abrirLinhas(
+    paredeCodigosAtivos(cfg),
+    _linhasAbertas({ excluirBlacklist: true }),
+  );
+  if (!linhasDoKit) return null;
 
   kitsAtivos.set(id, { tipo: 'parede', cfg: { ...cfg }, A: 0, montante: '70', linhas: linhasDoKit });
   console.log(`[HiperCache] ✅ Parede "${id}" ativa — ${paredeLabelCfg(cfg)}`);
@@ -1161,13 +1120,11 @@ function _bindPainelEventos(lista) {
   }
 
   // Toggle de montante/guia (48 / 70 / 90)
-  const COD_MONTANTE = { '48': '80704698', '70': '79831932', '90': '80814793' };
-  const COD_GUIA     = { '48': '88849464', '70': '79831929', '90': '80815323' };
   const TODOS_MONTANTES = new Set(Object.values(COD_MONTANTE));
   const TODOS_GUIAS     = new Set(Object.values(COD_GUIA));
 
   lista.querySelectorAll('.hp-btn-montante').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', async function() {
       const id      = this.dataset.id;
       const novoTam = this.dataset.montante;
       const estado  = kitsAtivos.get(id);
@@ -1176,15 +1133,13 @@ function _bindPainelEventos(lista) {
       const linhaM = estado.linhas.find(l => TODOS_MONTANTES.has(l.codigo));
       const linhaG = estado.linhas.find(l => TODOS_GUIAS.has(l.codigo));
 
-      [{ linha: linhaM, mapa: COD_MONTANTE }, { linha: linhaG, mapa: COD_GUIA }].forEach(({ linha, mapa }) => {
+      // Montante/guia só recebem hint (BLACKLIST_SETAR) — a quantidade é a que
+      // o usuário digitou, e _trocarProduto a mantém na troca de tamanho.
+      await Promise.all([{ linha: linhaM, mapa: COD_MONTANTE }, { linha: linhaG, mapa: COD_GUIA }].map(async ({ linha, mapa }) => {
         if (!linha) return;
         const novoCod = mapa[novoTam];
-        const produto = buscarNaMaster(novoCod);
-        if (!produto) return;
-        const $inp = linha.$linha.find('input.produto');
-        if ($inp.length) inserirViaCache($inp, produto);
-        linha.codigo = novoCod;
-      });
+        if (await _trocarProduto(linha.linhaId, novoCod)) linha.codigo = novoCod;
+      }));
 
       estado.montante = novoTam;
       renderizarPainel();
@@ -1192,7 +1147,6 @@ function _bindPainelEventos(lista) {
   });
 
   // Toggle de tabica (branca / natural)
-  const COD_TABICA = { branca: '79830939', natural: '79832337' };
   lista.querySelectorAll('.hp-btn-tabica').forEach(btn => {
     btn.addEventListener('click', async function() {
       const id         = this.dataset.id;
@@ -1208,7 +1162,7 @@ function _bindPainelEventos(lista) {
         const fator    = 1 + (num(estado.margem) / 100);
         const qtdBruta = fn ? fn(num(estado.A), num(estado.P), 3.15, num(estado.altPend || 0.6)) * fator : 0;
         const qtdFinal = Math.round(qtdBruta * 100) / 100;
-        await trocarProdutoNaLinha(linhaTabica.$linha, novoCod, qtdFinal, qtdBruta);
+        await trocarProdutoNaLinha(linhaTabica.linhaId, novoCod, qtdFinal, qtdBruta);
         linhaTabica.codigo = novoCod;
       }
 
@@ -1237,9 +1191,33 @@ function _bindPainelEventos(lista) {
 }
 
 // ── REGISTRO NO CENTRALIZADOR DE UI (hiper-ui.js) ─────────────────────
-// ordem 20 — painel de kits fica logo abaixo do botão de orçamento
+// Tela nova (microfrontend): o menu lateral não tem espaço pro painel, então
+// ele ocupa o #footer global do Hiper (que vem com .hidden de fábrica). Só
+// monta enquanto o cadastro do pedido estiver na tela; ao sair, o footer volta
+// ao estado original.
 (function _registrarKits() {
+  const SEL_CADASTRO_PEDIDO = '#hiper-microfrontend-pedidodevenda .cadastro-pedido-de-venda__menu-lateral';
+
+  function _alvoPainel() {
+    if (!document.querySelector(SEL_CADASTRO_PEDIDO)) return null;
+    const footer = document.getElementById('footer');
+    return footer ? { parent: footer, ref: footer.firstChild } : null;
+  }
+
+  function _restaurarFooter() {
+    _descartarKits();
+    const footer = document.getElementById('footer');
+    if (!footer) return;
+    footer.classList.add('hidden');
+    footer.querySelector(':scope > .clearfix')?.style.removeProperty('display');
+  }
+
   function _criarPainel() {
+    const footer = document.getElementById('footer');
+    if (footer) {
+      footer.classList.remove('hidden');
+      footer.querySelector(':scope > .clearfix')?.style.setProperty('display', 'none');
+    }
     _injetarCssPainel();
     const container = document.createElement('div');
     container.id = 'hiper-painel-kits';
@@ -1256,7 +1234,10 @@ function _bindPainelEventos(lista) {
 
   function _registrar() {
     if (window.__hiperUI) {
-      window.__hiperUI.registrar({ id: 'hiper-painel-kits', ordem: 20, render: _criarPainel });
+      window.__hiperUI.registrar({
+        id: 'hiper-painel-kits', ordem: 20, render: _criarPainel,
+        alvo: _alvoPainel, aoDesmontar: _restaurarFooter,
+      });
     } else {
       setTimeout(_registrar, 50);
     }
@@ -1276,3 +1257,8 @@ window.paredeGerarFormulas  = paredeGerarFormulas;
 window.paredeCodigosAtivos  = paredeCodigosAtivos;
 window.paredeLabelCfg      = paredeLabelCfg;
 window.paredeMoBase        = paredeMoBase;
+window.KITS_GESSO          = KITS_GESSO;
+window.CODIGO_PARA_GRUPO   = CODIGO_PARA_GRUPO;
+window.COD_MONTANTE        = COD_MONTANTE;
+window.COD_GUIA            = COD_GUIA;
+window.codigosEquivalentes = codigosEquivalentes;

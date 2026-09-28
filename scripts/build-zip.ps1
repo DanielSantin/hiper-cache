@@ -13,7 +13,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $manifestJson = Get-Content (Join-Path $root "manifest.json") -Raw | ConvertFrom-Json
 $version = $manifestJson.version
 
-$excluir = @('scripts', 'RELEASE.md', '.gitignore', '.git')
+# referencias/ tem fetches capturados com token Bearer — nunca vai no pacote.
+$excluir = @('scripts', 'RELEASE.md', 'CLAUDE.md', 'referencias', '.gitignore', '.git')
 $saida   = Join-Path (Split-Path -Parent $root) "hiper-cache-v$version.zip"
 
 if (Test-Path $saida) { Remove-Item $saida -Force }

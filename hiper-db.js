@@ -5,18 +5,23 @@
 (function() {
   'use strict';
 
-  // Captura o parâmetro ?recuperar= IMEDIATAMENTE — antes do Hiper reescrever o hash
+  // Captura o parâmetro recuperar= IMEDIATAMENTE — antes do SPA reescrever a URL.
+  // Aceita a URL nova (/vendas/pedido-de-venda/cadastro?recuperar=X) e a
+  // antiga, com o parâmetro dentro do hash (/v1/#/pedido-venda/novo?recuperar=X),
+  // que ainda é o formato dos links já enviados.
   ;(function() {
+    const search = new URLSearchParams(location.search);
     const [hashBase, hashQuery = ''] = location.hash.split('?');
-    const params = new URLSearchParams(hashQuery);
-    const cod = params.get('recuperar');
+    const hashParams = new URLSearchParams(hashQuery);
+    const cod = search.get('recuperar') || hashParams.get('recuperar');
     if (cod) {
       window.__hiperRecuperarCodigo = cod.trim().toUpperCase();
-      // Remove o parâmetro da URL: se o Hiper não reescrever o hash, um F5
-      // re-dispararia a auto-recuperação por cima do pedido em edição.
-      params.delete('recuperar');
-      const resto = params.toString();
-      history.replaceState(null, '', location.pathname + location.search + hashBase + (resto ? '?' + resto : ''));
+      // Remove o parâmetro da URL: senão um F5 re-dispararia a auto-recuperação
+      // por cima do pedido em edição.
+      search.delete('recuperar');
+      hashParams.delete('recuperar');
+      const q = search.toString(), h = hashParams.toString();
+      history.replaceState(history.state, '', location.pathname + (q ? '?' + q : '') + hashBase + (h ? '?' + h : ''));
     }
   })();
 
@@ -238,9 +243,7 @@
   // (caso de vendas diretas que nunca viraram orçamento salvo).
   async function _tentarMarcarFaturado(codigo) {
     if (!codigo) return;
-    const totalEl = document.querySelector('.totais-valor-total strong.valor-total, .valor-total');
-    const totalStr = totalEl ? totalEl.textContent.replace(/[^\d,]/g, '').replace(',', '.') : '0';
-    const totalAtual = parseFloat(totalStr) || 0;
+    const totalAtual = window.__hiperPedido?.descontos()?.totalDoPedido ?? 0;
 
     try {
       const res = await fetchComTimeout(`${API_BASE}/pedido/${encodeURIComponent(codigo)}/faturar`, {
@@ -277,163 +280,41 @@
   }
 
   // ── Restaurar itens no pedido (sem recalcular via fórmulas) ──────────────────
-  // Insere cada item pelo idProduto / código do nome usando o mesmo mecanismo
-  // do kit.js (inserirViaCache + setarQuantidade), mas alimentando os valores
-  // já finalizados que vieram do banco — nunca chama recalcularTudo().
+  // Insere cada item pela store Pinia do microfrontend (__hiperPedido.novaLinha,
+  // ver hiper-pedido-store.js) com a quantidade final gravada no banco — nunca
+  // chama recalcularTudo(). O preço é o ATUAL do produto; a diferença pro total
+  // salvo vira desconto em aplicarTotalSalvo().
 
   const delay = ms => new Promise(r => setTimeout(r, ms));
 
+  function _storeProdutos() {
+    return window.__hiperPedido?.produtos() ?? null;
+  }
+
+  // Devolve os linhaIds criados (na ordem dos itens; null pro que falhou).
   async function restaurarItens(itens) {
-    if (!itens?.length) return;
-
-    // Aguarda o master estar pronto (máx 10s)
-    let t = 0;
-    while (!window.__hiperMaster?.length && t++ < 100) await delay(100);
-    if (!window.__hiperMaster?.length) {
-      console.warn('[HiperDB] Master não disponível — itens não restaurados.');
-      return;
+    if (!itens?.length) return [];
+    const store = _storeProdutos();
+    if (!store || !window.__hiperPedido?.obterProduto) {
+      console.warn('[HiperDB] Store do pedido não encontrada — itens não restaurados.');
+      return [];
     }
 
-    // Limpa linhas vazias existentes
-    $('.linha-produto:not(.default)').each(function() {
-      const texto = $(this).find('.select2-chosen').text().trim();
-      if (texto === 'Nome, código de barras, código do produto ou referência interna') {
-        $(this).find('.btn-remover-linha, .btn-excluir-linha, [ng-click*="remover"], [ng-click*="excluir"]')
-               .first().click();
+    const produtos = await Promise.all(itens.map(it =>
+      it.idProduto ? window.__hiperPedido.obterProduto(it.idProduto) : Promise.resolve(null)));
+
+    const linhaIds = itens.map((it, i) => {
+      if (!produtos[i]) {
+        console.warn(`[HiperDB] Produto não encontrado para item "${it.nome}" (id ${it.idProduto}) — ignorado.`);
+        return null;
       }
+      return window.__hiperPedido.novaLinha(produtos[i], Number(it.quantidade ?? it.qtd) || 0);
     });
+    window.__hiperPedido.removerLinhasVazias();
 
-    await delay(200);
-
-    // Adiciona uma linha por item
-    const totalAntes = $('.linha-produto:not(.default)').length;
-    for (let i = 0; i < itens.length; i++) {
-      $('.btn-adicionar-mais-produtos').click();
-    }
-
-    // Aguarda as linhas aparecerem
-    const inicio = Date.now();
-    while (Date.now() - inicio < 5000) {
-      if ($('.linha-produto:not(.default)').length >= totalAntes + itens.length) break;
-      await delay(50);
-    }
-
-    const todasLinhas = $('.linha-produto:not(.default)').toArray();
-    const linhasNovas = todasLinhas.slice(totalAntes);
-
-    for (let i = 0; i < itens.length; i++) {
-      const it    = itens[i];
-      const $linha = $(linhasNovas[i]);
-      if (!$linha.length) continue;
-
-      // Resolve o produto apenas pelo idProduto real.
-      const idRaw   = it.idProduto ? String(it.idProduto) : '';
-      const produto = idRaw
-        ? (window.__hiperMaster.find(p => String(p.idProduto) === idRaw) ||
-           window.__hiperMaster.find(p => String(p.id) === idRaw))
-        : null;
-
-      if (produto) {
-        const $input = $linha.find('input.produto');
-        if ($input.length) {
-          // inserirViaCache está exposto por kit.js; se não estiver, fazemos inline
-          if (typeof inserirViaCache === 'function') {
-            inserirViaCache($input, produto);
-          } else {
-            const data = { id: String(produto.id ?? produto.idProduto), text: produto.Nome ?? produto.text, ...produto };
-            const s2 = $input.data('select2');
-            if (s2) {
-              const ant = s2.data();
-              $input.val(data.id);
-              s2.updateSelection(data);
-              $input.trigger({ type: 'select2-selected', val: data.id, choice: data });
-              s2.triggerChange({ added: data, removed: ant });
-            }
-          }
-          await delay(150);
-        }
-      } else {
-        console.warn(`[HiperDB] Produto não encontrado para item "${it.nome}" — linha ficará em branco.`);
-      }
-
-      // Seta quantidade com o valor salvo no banco (sem usar fórmulas).
-      // Usa MutationObserver para re-aplicar caso o Hiper sobrescreva com 1
-      // enquanto ainda está carregando o produto (internet lenta).
-      const $qtd = $linha.find(
-        '.quantidade-produto input, input.quantidade-unitaria, input[ng-model*="quantidade"]'
-      ).first();
-
-      if ($qtd.length) {
-        const pronto = await _aguardarHabilitado($qtd);
-        if (pronto) {
-          const qtdAlvo     = it.quantidade ?? it.qtd;  // aceita formato novo e legado
-          const nativeInput = $qtd[0];
-
-          function _aplicarQtd() {
-            const campoDecimal = (nativeInput.value || '').includes(',') || (nativeInput.value || '').includes('.');
-            const valorStr = campoDecimal
-              ? qtdAlvo.toFixed(2).replace('.', ',')
-              : String(Math.ceil(qtdAlvo));
-            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-            setter ? setter.call(nativeInput, valorStr) : (nativeInput.value = valorStr);
-            nativeInput.dispatchEvent(new Event('input',  { bubbles: true }));
-            nativeInput.dispatchEvent(new Event('change', { bubbles: true }));
-            nativeInput.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-            nativeInput.dispatchEvent(new Event('blur',  { bubbles: true }));
-          }
-
-          // Aguarda o preço aparecer — sinal de que o Hiper terminou de inicializar
-          // a linha (incluindo o reset da quantidade para 1). Só então aplicamos.
-          await _aguardarPrecoCarregado($linha);
-          _aplicarQtd();
-          console.info(`[HiperDB] ✅ Quantidade aplicada: ${qtdAlvo}`);
-
-          // Polling substitui MutationObserver: Angular altera a propriedade .value
-          // diretamente (não via setAttribute), então o observer nunca dispararia.
-          // Verifica por 2s e re-aplica até 3× se a qtd for sobrescrita.
-          let _reaplicas = 0;
-          const _poll = setInterval(() => {
-            const atual = parseFloat((nativeInput.value || '').replace(',', '.')) || 0;
-            if (Math.abs(atual - qtdAlvo) > 0.01 && _reaplicas < 3) {
-              _reaplicas++;
-              console.info(`[HiperDB] ⚠️ Qty sobrescrita (${_reaplicas}) — re-aplicando ${qtdAlvo}`);
-              _aplicarQtd();
-            }
-          }, 200);
-          setTimeout(() => clearInterval(_poll), 10000);
-        }
-      }
-    }
-
-    console.info(`[HiperDB] ✅ ${itens.length} item(ns) restaurado(s) no pedido.`);
-  }
-
-  async function _aguardarHabilitado($input, timeout = 3000) {
-    const inicio = Date.now();
-    while (Date.now() - inicio < timeout) {
-      const el = $input[0];
-      if (el && !el.disabled && !el.readOnly && $.contains(document, el)) return true;
-      await delay(50);
-    }
-    return false;
-  }
-
-  // Aguarda o campo de preço unitário da linha ser preenchido com valor > 0.
-  // O preço carrega de forma assíncrona no Hiper — quando ele aparece significa
-  // que o Hiper terminou de inicializar a linha (inclusive o reset da qtd para 1).
-  // Usar o preço como gatilho é mais robusto que observar a quantidade, pois
-  // em conexões lentas o reset para 1 acontece junto com o carregamento do preço.
-  async function _aguardarPrecoCarregado($linha, timeout = 10000) {
-    const inicio = Date.now();
-    while (Date.now() - inicio < timeout) {
-      const val   = $linha.find('.input-valor-unitario-produto').first().val() || '';
-      const preco = typeof parseMoedaOrc === 'function'
-        ? parseMoedaOrc(val)
-        : parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
-      if (preco > 0) return true;
-      await delay(100);
-    }
-    return false; // timeout — prossegue mesmo assim
+    const ok = linhaIds.filter(Boolean).length;
+    console.info(`[HiperDB] ✅ ${ok}/${itens.length} item(ns) restaurado(s) no pedido.`);
+    return linhaIds;
   }
 
   // ── Restaurar kits (sem recalcular — usa quantidades do banco) ────────────────
@@ -441,7 +322,7 @@
   // recalcularTudo(). As quantidades dos itens já foram preenchidas por
   // restaurarItens() com os valores finais gravados no banco.
 
-  async function restaurarKits(kits) {
+  function restaurarKits(kits, linhaIds) {
     if (!kits?.length) return;
 
     const kitsAtivos = window.kitsAtivos;
@@ -450,46 +331,33 @@
       return;
     }
 
-    // Aguarda master
-    let t = 0;
-    while (!window.__hiperMaster?.length && t++ < 100) await delay(100);
-    if (!window.__hiperMaster?.length) {
-      console.warn('[HiperDB] Master não disponível — kits não restaurados.');
-      return;
-    }
+    const linhasResolver = _resolvedorDeLinhas(linhaIds);
 
     for (const kit of kits) {
       if (kit.tipo === 'parede') {
-        const codigos = window.paredeCodigosAtivos?.(kit.cfg) ?? [];
-        const linhasDoKit = _resolverLinhasPorCodigos(codigos);
-
+        const linhasDoKit = linhasResolver(window.paredeCodigosAtivos?.(kit.cfg) ?? []);
         kitsAtivos.set(kit.id, {
           tipo:        'parede',
           cfg:         { ...kit.cfg },
           A:           kit.A      || 0,
           margem:      kit.margem || 0,
+          montante:    _tamanhoMontante(linhasDoKit),
           _restaurado: true,
           linhas:      linhasDoKit,
         });
 
       } else if (kit.tipo === 'portas') {
-        const codigos = Object.keys(window.FORMULAS_GESSO?.portas ?? {});
-        const linhasDoKit = _resolverLinhasPorCodigos(codigos);
-
         kitsAtivos.set(kit.id, {
           tipo:        'portas',
           nomeKit:     'portas',
           A:           0,
           grupos:      (kit.grupos || []).map(g => ({ ...g })),
           _restaurado: true,
-          linhas:      linhasDoKit,
+          linhas:      linhasResolver(window.KITS_GESSO?.portas ?? []),
         });
 
       } else {
         // kit normal
-        const codigos = window.KITS_GESSO?.[kit.nomeKit] ?? [];
-        const linhasDoKit = _resolverLinhasPorCodigos(codigos);
-
         const estadoKit = {
           tipo:        'kit',
           nomeKit:     kit.nomeKit,
@@ -498,7 +366,7 @@
           altPend:     kit.altPend ?? 0.6,
           margem:      kit.margem  || 0,
           _restaurado: true,
-          linhas:      linhasDoKit,
+          linhas:      linhasResolver(window.KITS_GESSO?.[kit.nomeKit] ?? []),
         };
         // cant é exclusivo do cortineiro (sanca)
         if (kit.nomeKit === 'cortineiro') estadoKit.cant = kit.cant ?? 3.15;
@@ -514,60 +382,72 @@
     console.info(`[HiperDB] ✅ ${kits.length} kit(s) restaurado(s) no painel.`);
   }
 
-  // Dado um array de códigos de produto, encontra as $linhas no DOM que
-  // já foram preenchidas com esses produtos por restaurarItens().
-  function _resolverLinhasPorCodigos(codigos) {
-    const linhas = [];
-    codigos.forEach(codigo => {
-      let $linhaEncontrada = null;
-      $('.linha-produto:not(.default)').each(function() {
-        const s2 = $(this).find('input.produto').data('select2');
-        const nomeProduto = s2?.data()?.Nome ?? s2?.data()?.text ?? '';
-        if (nomeProduto.startsWith(codigo + ' ') || nomeProduto.startsWith(codigo)) {
-          $linhaEncontrada = $(this);
-          return false; // break
-        }
-      });
-      linhas.push({ codigo, $linha: $linhaEncontrada || $() });
-    });
-    return linhas;
+  // Liga cada código de um kit à linha restaurada que tem esse produto — ou
+  // um equivalente (tier de embalagem, montante 48/90, tabica natural…), já que
+  // o banco guarda o produto final da linha, não o código base do kit.
+  // Montante/guia (BLACKLIST no kit.js) são uma linha por parede: uma linha
+  // desses já ligada a um kit não é reaproveitada pelo próximo.
+  function _resolvedorDeLinhas(linhaIds) {
+    const store = _storeProdutos();
+    const itens = (linhaIds || [])
+      .filter(Boolean)
+      .map(id => store?.itens.find(i => i.id === id))
+      .filter(Boolean);
+    const equivalentes = window.codigosEquivalentes ?? (c => new Set([String(c)]));
+    const exclusivos   = new Set([
+      ...Object.values(window.COD_MONTANTE ?? {}),
+      ...Object.values(window.COD_GUIA ?? {}),
+    ]);
+    const usadas = new Set();
+
+    return (codigos) => codigos.map(codigo => {
+      const familia = equivalentes(codigo);
+      const item = itens.find(i =>
+        familia.has(String(i.idProdutoHiperOnline)) &&
+        !(exclusivos.has(String(i.idProdutoHiperOnline)) && usadas.has(i.id)));
+      if (!item) return null;
+      const atual = String(item.idProdutoHiperOnline);
+      if (exclusivos.has(atual)) usadas.add(item.id);
+      // Tiers de embalagem ficam com o código base (as fórmulas e o
+      // resolverNivel partem dele); montante/guia/tabica ficam com o código
+      // real da linha (os toggles do painel e as fórmulas conhecem todos).
+      const ehTier = window.CODIGO_PARA_GRUPO?.[atual] != null;
+      return { codigo: ehTier ? String(codigo) : atual, linhaId: item.id };
+    }).filter(Boolean);
   }
 
-  // ── Aguarda o .valor-total estabilizar após restaurar itens ───────────────────
-  async function aguardarTotalEstabilizar(timeout = 8000, tolerancia = 100) {
+  function _tamanhoMontante(linhasDoKit) {
+    const porCodigo = Object.fromEntries(Object.entries(window.COD_MONTANTE ?? {}).map(([t, c]) => [c, t]));
+    return linhasDoKit.map(l => porCodigo[l.codigo]).find(Boolean) ?? '70';
+  }
+
+  // ── Fecha no total salvo via desconto ─────────────────────────────────────────
+  // Os preços do Hiper podem ter mudado desde que o orçamento foi salvo. Se
+  // alguma linha estiver com atualização de preço em andamento
+  // (isLoadingPrecoDeVenda), espera terminar; depois aplica a diferença como
+  // desconto pelo próprio rateio do Hiper (store de descontos).
+  async function aplicarTotalSalvo(totalSalvo, linhaIds, timeout = 10000) {
+    const store     = _storeProdutos();
+    const descontos = window.__hiperPedido?.descontos();
+    if (!store || !descontos || !(totalSalvo > 0)) return;
+
+    const ids = new Set((linhaIds || []).filter(Boolean));
     const inicio = Date.now();
-    let valorAnterior = NaN;
-    let igualPor = 0;
-
     while (Date.now() - inicio < timeout) {
-      const el = document.querySelector('.valor-total');
-      const atual = el ? parseMoeda(el.textContent.trim()) : NaN;
-
-      if (!isNaN(atual) && atual > 0) {
-        if (Math.abs(atual - valorAnterior) < 0.01) {
-          igualPor += 100;
-          if (igualPor >= tolerancia) return atual; // estável por 100ms seguidos
-        } else {
-          igualPor = 0;
-        }
-        valorAnterior = atual;
-      }
+      if (!store.itens.some(i => ids.has(i.id) && i.isLoadingPrecoDeVenda)) break;
       await delay(100);
     }
-    return valorAnterior; // retorna o que tiver, mesmo que não estabilizou
-  }
 
-  // ── Aplica desconto via widget Valor Final ────────────────────────────────────
-  async function aplicarDescontoWidget(valorFinal) {
-    const aplicar = window.HiperWidgets?.aplicarValorFinal;
-
-    if (!aplicar) {
-      console.warn('[HiperDB] Widget Valor Final não encontrado — desconto não aplicado.');
-      return false;
+    const totalAtual = descontos.totalProdutos;
+    const diff = Math.round((totalAtual - totalSalvo) * 100) / 100;
+    if (Math.abs(diff) <= 0.01) {
+      console.info('[HiperDB] Totais idênticos — nenhum desconto necessário.');
+    } else if (diff > 0) {
+      descontos.setValorDeDesconto(diff);
+      console.info(`[HiperDB] Desconto aplicado: total atual R$ ${totalAtual.toFixed(2)} → final R$ ${totalSalvo.toFixed(2)} (diff R$ ${diff.toFixed(2)})`);
+    } else {
+      console.warn(`[HiperDB] Total atual R$ ${totalAtual.toFixed(2)} é MENOR que o salvo R$ ${totalSalvo.toFixed(2)} — preços caíram; nenhum desconto aplicado.`);
     }
-
-    await aplicar(valorFinal);
-    return true;
   }
 
   // ── Toast de confirmação (sem confirm() bloqueante) ───────────────────────────
@@ -741,26 +621,13 @@
   // ── Repovoar pedido (sem confirm/alert bloqueante) ────────────────────────────
 
   async function repovoarPedido(pedido) {
-    await restaurarItens(pedido.itens);
+    const linhaIds = await restaurarItens(pedido.itens);
 
     if (pedido.kits?.length) {
-      await restaurarKits(pedido.kits);
+      restaurarKits(pedido.kits, linhaIds);
     }
 
-    const totalSalvo = pedido.total;
-    const totalAtual = await aguardarTotalEstabilizar();
-
-    if (!isNaN(totalAtual) && totalAtual > 0 && Math.abs(totalAtual - totalSalvo) > 0.01) {
-      const aplicado = await aplicarDescontoWidget(totalSalvo);
-      if (aplicado) {
-        const diff = totalAtual - totalSalvo;
-        console.info(
-          `[HiperDB] Desconto aplicado: total atual R$ ${totalAtual.toFixed(2)} → final R$ ${totalSalvo.toFixed(2)} (diff R$ ${diff.toFixed(2)})`
-        );
-      }
-    } else if (!isNaN(totalAtual) && Math.abs(totalAtual - totalSalvo) <= 0.01) {
-      console.info('[HiperDB] Totais idênticos — nenhum desconto necessário.');
-    }
+    await aplicarTotalSalvo(pedido.total, linhaIds);
 
     mostrarToastRecuperacao(pedido);
     window.__hiperPedidoAberto = pedido.codigo;
@@ -769,54 +636,64 @@
 
   // ── Cria o painel de recuperação ──────────────────────────────────────────────
 
+  // Uma linha só, logo abaixo do "Gerar orçamento": [ T1234 ][Carregar][📋].
+  // O placeholder usa a letra configurada no popup. Códigos têm até 6 dígitos
+  // hoje; o input comporta letra + 8 com folga. Se a coluna ficar estreita,
+  // o flex-wrap joga o botão pra linha de baixo. A mensagem de status ocupa
+  // uma linha própria e só aparece quando tem texto.
   function criarPainelRecuperacao() {
+    const letra = window.__hiperOrcLetra || 'T';
     const painel = document.createElement('div');
     painel.id = 'hiper-painel-recuperar';
-    painel.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:6px;padding:6px 8px;background:#fff8e1;border:1px solid #ffe082;border-radius:4px;font-size:12px;flex-wrap:wrap;';
+    painel.style.cssText = 'display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;width:100%;box-sizing:border-box;';
     painel.innerHTML = `
-      <span style="white-space:nowrap;color:#6d4c00;font-weight:600;">🔎 Recuperar:</span>
-      <input id="hiper-rec-codigo" type="text" placeholder="Ex: A1042"
-        style="width:86px;padding:3px 6px;border:1px solid #cca;border-radius:3px;font-size:12px;text-transform:uppercase;letter-spacing:1px;"/>
-      <button id="hiper-rec-btn"
-        style="padding:3px 10px;background:#f57f17;color:#fff;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;">
+      <input id="hiper-rec-codigo" type="text" placeholder="${letra}1234" maxlength="11"
+        autocomplete="off" spellcheck="false" title="Código do orçamento a recuperar"
+        style="flex:1 1 11ch;min-width:11ch;height:35px;box-sizing:border-box;padding:0 10px;border:1px solid #cfd4da;border-radius:4px;font-size:14px;font-weight:600;text-transform:uppercase;letter-spacing:1px;"/>
+      <button id="hiper-rec-btn" type="button"
+        style="flex:0 0 auto;height:35px;padding:0 14px;background:#f57f17;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;">
         Carregar
       </button>
-      <a id="hiper-rec-lista" href="https://sistema.santin.tec.br/" target="_blank"
-        style="padding:3px 10px;background:#1e4a7a;color:#93c5fd;border:none;border-radius:3px;font-size:12px;cursor:pointer;font-weight:600;text-decoration:none;white-space:nowrap;">
-        📋 Lista de orçamentos
+      <a id="hiper-rec-lista" href="https://sistema.santin.tec.br/" target="_blank" title="Lista de orçamentos"
+        style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:35px;height:35px;background:#1e4a7a;border-radius:4px;font-size:15px;text-decoration:none;">
+        📋
       </a>
-      <span id="hiper-rec-msg" style="color:#888;font-size:11px;"></span>
+      <span id="hiper-rec-msg" style="flex:1 0 100%;display:none;font-size:12px;color:#888;"></span>
     `;
 
     const inp = painel.querySelector('#hiper-rec-codigo');
     const btn = painel.querySelector('#hiper-rec-btn');
     const msg = painel.querySelector('#hiper-rec-msg');
 
+    function status(texto, cor) {
+      msg.textContent   = texto;
+      msg.style.color   = cor;
+      msg.style.display = texto ? '' : 'none';
+    }
+
     async function carregar(codigoForcado) {
       const codigo = (codigoForcado || inp.value).trim().toUpperCase();
       if (!codigo) return;
-      inp.value       = codigo;
-      btn.disabled    = true;
-      msg.style.color = '#888';
-      msg.textContent = 'Buscando...';
+      inp.value    = codigo;
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      status('Buscando...', '#888');
       try {
         const pedido = await recuperarPedido(codigo);
         const confirmou = await mostrarConfirmacaoImportacao(pedido);
         if (!confirmou) {
-          msg.style.color = '#999';
-          msg.textContent = 'Importação cancelada';
+          status('Importação cancelada', '#999');
           return;
         }
-        
-        msg.style.color = '#1a7a1a';
+
         const nKits = pedido.kits?.length ? ` + ${pedido.kits.length} kit(s)` : '';
-        msg.textContent = `✅ ${pedido.itens.length} itens${nKits}`;
+        status(`✅ ${pedido.itens.length} itens${nKits}`, '#1a7a1a');
         await repovoarPedido(pedido);
       } catch(e) {
-        msg.style.color = '#c00';
-        msg.textContent = e.message || 'Erro ao buscar.';
+        status(e.message || 'Erro ao buscar.', '#c00');
       } finally {
         btn.disabled = false;
+        btn.style.opacity = '';
       }
     }
 
@@ -824,12 +701,16 @@
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') carregar(); });
 
     // ── Auto-recuperar: usa código capturado no topo do módulo ─────────────────
+    // Espera o microfrontend terminar de subir (token da API disponível) e dá
+    // uma folga pra inicialização do cadastro não sobrescrever os itens.
     if (window.__hiperRecuperarCodigo) {
       const _tentarAutoRecuperar = async () => {
-        let t = 0;
-        while (!window.__hiperMaster?.length && t++ < 60) await delay(200);
-        carregar(window.__hiperRecuperarCodigo);
+        const codigo = window.__hiperRecuperarCodigo;
         window.__hiperRecuperarCodigo = null;
+        let t = 0;
+        while (!window.__hiperPedido?.store('general')?.token && t++ < 50) await delay(200);
+        await delay(500);
+        carregar(codigo);
       };
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _tentarAutoRecuperar);
       else _tentarAutoRecuperar();
@@ -842,7 +723,15 @@
   (function _registrarDB() {
     function _registrar() {
       if (window.__hiperUI) {
-        window.__hiperUI.registrar({ id: 'hiper-painel-recuperar', ordem: 10, render: criarPainelRecuperacao });
+        // Logo abaixo do botão "Gerar orçamento" (hiper-orcamento.js); espera
+        // ele estar montado pra não cair antes dele no menu lateral.
+        window.__hiperUI.registrar({
+          id: 'hiper-painel-recuperar', ordem: 10, render: criarPainelRecuperacao,
+          alvo: () => {
+            const btnOrc = document.getElementById('hiper-btn-orcamento');
+            return btnOrc ? { parent: btnOrc.parentElement, ref: btnOrc.nextSibling } : null;
+          },
+        });
       } else {
         setTimeout(_registrar, 50);
       }

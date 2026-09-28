@@ -11,6 +11,7 @@ async function safeStorage(fn) {
 // ── Carrega os módulos da página em sequência ─────────────────────────────────
 const MODULES = [
   { src: 'hiper-num-utils.js' },
+  { src: 'hiper-pedido-store.js' },
   { src: 'hiper-icones.js' },
   { src: 'hiper-cache.js' },
   { src: 'hiper-sync.js' },

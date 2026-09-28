@@ -1,265 +1,138 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// hiper-lucro-widget.js — Indicador de margem inline (compacto, uma linha)
-// Registrado com ordem 99 (final da barra do pedido-venda).
-// Só exibe se TODOS os itens com código tiverem custo preenchido.
+// hiper-lucro-widget.js — Margem do pedido (PIX e Crédito) no resumo do menu lateral
+//
+// Aparece logo abaixo do card "Valor total" do resumo, como dois cards com as
+// mesmas classes do Hiper (fica com cara nativa), dentro de um wrapper
+// display:contents pra cada um se comportar como card do resumo. Dados vêm das
+// stores Pinia (hiper-pedido-store.js) e o recálculo é disparado pelo
+// $subscribe delas — nada de raspar DOM do pedido.
+//
+//   base     = total dos produtos já com desconto (sem frete)
+//   imposto  = base × % da nota (config.nfm_pct, via window.__hiperImpPct)
+//   PIX      = (base − imposto − custo) / base
+//   Crédito  = (base × PIX_FATOR − imposto − custo) / base   (taxa do cartão)
+//
+// Só mostra o valor se TODOS os itens tiverem custo cadastrado; senão avisa
+// quantos faltam (o botão ↻ força a sync de custos).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 (function _registrarLucroWidget() {
   'use strict';
 
-  const PIX     = 0.9523;
   // % da nota fiscal: fonte única = config.nfm_pct (chega pela sync de custos e
   // fica em window.__hiperImpPct). 10.70 é só fallback se ainda não sincronizou.
   const IMP_DEF = () => (window.__hiperImpPct ?? 10.70);
+  // Recebido líquido no cartão (mesmo fator do PIX no orçamento).
+  const PIX_FATOR = 0.9523;
 
-  function _injetarEstilos() {
-    if (document.getElementById('hiper-lucro-style')) return;
-    const s = document.createElement('style');
-    s.id = 'hiper-lucro-style';
-    s.textContent = `
-      #hiper-lucro-widget {
-        display: none; 
-        margin-top: 6px;
-        padding: 4px 8px;
-        background: #f0fff4;
-        border: 1px solid #6dbf8a;
-        border-radius: 5px;
-        font-size: 10px;
-        font-family: Arial, sans-serif;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: nowrap;
-      }
-      #hiper-lucro-widget.hlw-visivel { display: flex; }
-      #hiper-lucro-widget .hlw-label {
-        font-size: 10px;
-        color: #555;
-        flex-shrink: 0;
-      }
-      #hiper-lucro-widget .hlw-imp-inp {
-        width: 46px;
-        padding: 1px 3px;
-        border: 1px solid #aaa;
-        border-radius: 3px;
-        font-size: 11px;
-        text-align: right;
-        background: #fff;
-      }
-      #hiper-lucro-widget .hlw-sep {
-        color: #aaa;
-        flex-shrink: 0;
-      }
-      #hiper-lucro-widget .hlw-badge {
-        font-size: 11px;
-        font-weight: bold;
-        padding: 1px 7px;
-        border-radius: 3px;
-        flex-shrink: 0;
-      }
-      #hiper-lucro-widget .hlw-ok   { background: #d4f0dc; color: #1a7a1a; }
-      #hiper-lucro-widget .hlw-warn { background: #fff0cc; color: #c07000; }
-      #hiper-lucro-widget .hlw-neg  { background: #fdd;    color: #c00;    }
+  const CLS_CARD    = 'cadastro-pedido-de-venda-menu-lateral__summary-card';
+  const CLS_TITULO  = 'cadastro-pedido-de-venda-menu-lateral__summary-title';
+  const CLS_VALOR   = 'cadastro-pedido-de-venda-menu-lateral__summary-value';
 
-      /* ── Botão de sync de custos ── */
-      #hiper-lucro-widget .hlw-sync-btn {
-        margin-left: auto;
-        padding: 1px 6px;
-        border: 1px solid #aaa;
-        border-radius: 3px;
-        background: #fff;
-        font-size: 10px;
-        color: #555;
-        cursor: pointer;
-        flex-shrink: 0;
-        transition: background 0.15s;
-        white-space: nowrap;
-      }
-      #hiper-lucro-widget .hlw-sync-btn:hover:not(:disabled) { background: #e8f5e9; border-color: #6dbf8a; }
-      #hiper-lucro-widget .hlw-sync-btn:disabled { opacity: 0.5; cursor: default; }
-      #hiper-lucro-widget .hlw-sync-btn.hlw-sync-ok   { border-color: #6dbf8a; color: #1a7a1a; }
-      #hiper-lucro-widget .hlw-sync-btn.hlw-sync-err  { border-color: #e57373; color: #c00; }
-      #hiper-lucro-widget .hlw-sync-btn.hlw-sync-spin { border-color: #90caf9; color: #1565c0; }
-    `;
-    document.head.appendChild(s);
+  // ── Âncora: card "Valor total" do resumo ─────────────────────────────────────
+  // Achado pelo texto do título (não pela posição); fallback = último card do
+  // resumo. Cards dentro de um widget da extensão nunca contam como âncora.
+  function _alvo() {
+    const raiz = document.querySelector('#hiper-microfrontend-pedidodevenda');
+    if (!raiz) return null;
+    const cards = [...raiz.querySelectorAll(`.${CLS_CARD}`)].filter(c => !c.closest('[data-hiper-widget]'));
+    if (!cards.length) return null;
+    const card = cards.find(c => /valor\s+total/i.test(c.querySelector(`.${CLS_TITULO}`)?.textContent || ''))
+              || cards[cards.length - 1];
+    return { parent: card.parentElement, ref: card.nextSibling };
+  }
+
+  const fmtPct = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  const corMargem = (m) => (m < 0 ? '#c00' : m < 15 ? '#c07000' : '#0f5a0f');
+
+  function _calcular() {
+    const produtos = window.__hiperPedido?.produtos();
+    if (!produtos) return null;
+    const itens = produtos.itens.filter(i => !i.cancelado && i.idProdutoHiperOnline != null);
+    if (!itens.length) return { vazio: true };
+
+    const custos = window.__hiperCustos || {};
+    let custoTotal = 0, semCusto = 0;
+    itens.forEach(it => {
+      const c = parseFloat(custos[String(it.idProdutoHiperOnline)]);
+      if (isNaN(c) || c < 0) semCusto++;
+      else custoTotal += c * (Number(it.quantidade) || 0);
+    });
+    if (semCusto) return { semCusto };
+
+    const base    = Number(produtos.totalPedido) || 0;   // produtos − descontos dos itens
+    if (base <= 0) return { vazio: true };
+    const imposto = base * IMP_DEF() / 100;
+    return {
+      pix:     (base - imposto - custoTotal) / base * 100,
+      credito: (base * PIX_FATOR - imposto - custoTotal) / base * 100,
+    };
   }
 
   function _criarWidget() {
-    _injetarEstilos();
-
-    const wrap = document.createElement('div');
-    wrap.innerHTML = `
-      <span class="hlw-label">imposto</span>
-      <input class="hlw-imp-inp" id="hlw-imp" type="number" min="0" max="100"
-             step="0.01" value="${IMP_DEF()}" title="% imposto sobre nota">
-      <span class="hlw-label">%</span>
-      <span class="hlw-sep">|</span>
-      <span class="hlw-label">margem</span>
-      <span class="hlw-badge" id="hlw-badge">—</span>
-      <button class="hlw-sync-btn" id="hlw-sync-btn" title="Força atualizar custos e lista de produtos (puxa do Hiper na hora)">↻ Atualizar</button>
+    const card = document.createElement('div');
+    card.style.display = 'contents';
+    card.innerHTML = `
+      <div class="${CLS_CARD}">
+        <span class="${CLS_TITULO}" style="display:flex;align-items:center;gap:6px;">
+          Lucro (PIX)
+          <button type="button" class="hlw-sync"
+            title="Atualizar custos e o catálogo de produtos (preços) agora"
+          style="border:none;background:none;padding:0 2px;cursor:pointer;font-size:14px;line-height:1;color:#888;">↻</button>
+        </span>
+        <span class="${CLS_VALOR} hlw-pix">—</span>
+      </div>
+      <div class="${CLS_CARD}">
+        <span class="${CLS_TITULO}">Lucro (Crédito)</span>
+        <span class="${CLS_VALOR} hlw-credito">—</span>
+      </div>
     `;
+    const valPix     = card.querySelector('.hlw-pix');
+    const valCredito = card.querySelector('.hlw-credito');
+    const sync       = card.querySelector('.hlw-sync');
 
-    // ── Botão de atualização manual de custos ─────────────────────────────────
-    const syncBtn = wrap.querySelector('#hlw-sync-btn');
+    function _mostrar(el, margem, textoAlternativo, cor) {
+      el.textContent = margem != null ? fmtPct(margem) : textoAlternativo;
+      el.style.color = margem != null ? corMargem(margem) : (cor || '');
+    }
 
-    function _setSyncStatus(estado) {
-      // estado: 'idle' | 'loading' | 'ok' | 'err'
-      syncBtn.className = 'hlw-sync-btn';
-      syncBtn.disabled  = false;
-      if (estado === 'loading') {
-        syncBtn.classList.add('hlw-sync-spin');
-        syncBtn.disabled  = true;
-        syncBtn.textContent = '⟳ Atualizando…';
-      } else if (estado === 'ok') {
-        syncBtn.classList.add('hlw-sync-ok');
-        syncBtn.textContent = '✓ atualizado';
-        setTimeout(() => _setSyncStatus('idle'), 3000);
-      } else if (estado === 'err') {
-        syncBtn.classList.add('hlw-sync-err');
-        syncBtn.textContent = '✗ sem conexão';
-        setTimeout(() => _setSyncStatus('idle'), 4000);
+    function _render() {
+      const r = _calcular();
+      if (!r || r.vazio) {
+        _mostrar(valPix, null, '—');
+        _mostrar(valCredito, null, '—');
+      } else if (r.semCusto) {
+        const txt = `sem custo (${r.semCusto} ${r.semCusto === 1 ? 'item' : 'itens'})`;
+        _mostrar(valPix, null, txt, '#c07000');
+        _mostrar(valCredito, null, txt, '#c07000');
       } else {
-        syncBtn.textContent = '↻ Atualizar';
+        _mostrar(valPix, r.pix);
+        _mostrar(valCredito, r.credito);
       }
     }
 
-    syncBtn.addEventListener('click', async () => {
-      // Força o servidor a rodar /produtos/sync antes de responder → traz custos,
-      // % da nota e a lista de produtos novos/renomeados na hora.
-      const forcar = window.__hiperForcarAtualizacao || window.__hiperSyncCustos;
-      if (typeof forcar !== 'function') {
-        _setSyncStatus('err');
-        return;
-      }
-      _setSyncStatus('loading');
-      try {
-        await forcar();
-        _setSyncStatus('ok');
-        _deb(); // recalcula margens com custos novos
-      } catch (e) {
-        _setSyncStatus('err');
-      }
+    let _t = null;
+    function _deb() {
+      if (!card.isConnected) return _desligar();
+      clearTimeout(_t);
+      _t = setTimeout(_render, 150);
+    }
+
+    // ── Gatilhos de recálculo ────────────────────────────────────────────────
+    // Stores do pedido (itens, quantidade, preço, desconto) via $subscribe;
+    // custos novos (sync do popup/botão, edição na janela do orçamento).
+    const desinscrever = [];
+    ['produtos', 'descontos'].forEach(nome => {
+      const s = window.__hiperPedido?.[nome]();
+      if (s?.$subscribe) desinscrever.push(s.$subscribe(_deb));
     });
 
-    function _recalc() {
-      const dados = (typeof extrairDadosPedido === 'function')
-        ? extrairDadosPedido() : null;
+    const onMsg = (ev) => { if (ev.source === window && ev.data?.type === 'HIPER_CACHE_ALL') _deb(); };
+    window.addEventListener('message', onMsg);
 
-      if (!dados || dados.itens.length === 0) {
-        wrap.classList.remove('hlw-visivel');
-        return;
-      }
-
-      const { itens } = dados;
-      const custosMap = window.__hiperCustos || {};
-
-      // Se QUALQUER item com código não tiver custo → não exibe nada
-      const todosTêmCusto = itens.every(it => {
-        if (!it.idProduto) return true; // sem código, ignora
-        const c = parseFloat(custosMap[it.idProduto]);
-        return !isNaN(c) && c >= 0;
-      });
-
-      if (!todosTêmCusto) {
-        // Mostra widget mesmo sem custos — só para o botão de sync ficar acessível
-        wrap.classList.add('hlw-visivel');
-        const badge = document.getElementById('hlw-badge');
-        if (badge) {
-          badge.style.cssText = '';
-          badge.className = 'hlw-badge hlw-warn';
-          badge.textContent = 'sem custos';
-        }
-        return;
-      }
-
-      const totalEl = document.querySelector('.totais-valor-total p strong, .valor-total strong');
-      
-      // Limpa a string (remove "R$", pontos de milhar e troca vírgula por ponto)
-      const totalTexto = totalEl ? totalEl.innerText : "0";
-      const totalNota = parseFloat(totalTexto.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
-
-      if (totalNota === 0 || itens.length === 0) {
-        wrap.classList.remove('hlw-visivel');
-        return;
-      }
-      
-      const pctImp     = parseFloat(document.getElementById('hlw-imp')?.value) || IMP_DEF();
-      const imposto    = totalNota * pctImp / 100; // Imposto sobre o valor bruto da nota
-      
-      let custoTotal = 0;
-      itens.forEach(it => {
-        const c = parseFloat(custosMap[it.idProduto]);
-        if (!isNaN(c)) custoTotal += c * it.qtd;
-      });
-
-      // Cálculo Margem À Vista
-      const lucroVista  = totalNota - imposto - custoTotal;
-      const margemVista = totalNota > 0 ? (lucroVista / totalNota) * 100 : 0;
-
-      // Cálculo Margem Cartão (Usando a constante PIX 0.9523)
-      const receitaCartao = totalNota * PIX;
-      const lucroCartao   = receitaCartao - imposto - custoTotal;
-      const margemCartao  = totalNota > 0 ? (lucroCartao / totalNota) * 100 : 0;
-
-      const badge = document.getElementById('hlw-badge');
-      if (!badge) return;
-
-      // Função auxiliar para definir a cor da badge
-      const getClasse = (m) => (m < 0 ? 'hlw-neg' : m < 15 ? 'hlw-warn' : 'hlw-ok');
-
-      badge.style.display = 'flex';
-      badge.style.flexDirection = 'row';
-      badge.style.gap = '4px';
-      badge.style.background = 'transparent'; // Remove o fundo do container pai
-      badge.style.padding = '0';
-      badge.style.alignItems = 'center';
-
-      badge.innerHTML = `
-        <div class="hlw-badge ${getClasse(margemVista)}" style="font-size: 10px; padding: 2px 6px;">
-          <small style="opacity: 0.8; font-weight: normal;">PIX</small> ${margemVista.toFixed(1)}%
-        </div>
-        <span style="color: #ccc; font-weight: 100;">|</span>
-        <div class="hlw-badge ${getClasse(margemCartao)}" style="font-size: 10px; padding: 2px 6px;">
-          <small style="opacity: 0.8; font-weight: normal;">CARTÃO</small> ${margemCartao.toFixed(1)}%
-        </div>
-      `;
-      wrap.classList.add('hlw-visivel');
-    }
-
-    // Imposto editável
-    wrap.querySelector('#hlw-imp').addEventListener('input', _recalc);
-
-    // Observer na tabela de itens
-let _t = null;
-    function _deb() { clearTimeout(_t); _t = setTimeout(_recalc, 400); }
-
-    const tabela = document.getElementById('ItensPedidoDeVendaTabela');
-    if (tabela) {
-      new MutationObserver(_deb).observe(tabela, {
-        childList: true, subtree: true, characterData: true, attributes: true,
-      });
-    }
-
-    // 2. NOVO: Observer no container do Valor Total
-    // Monitora mudanças no texto do total (descontos, fretes, etc)
-    const containerTotal = document.querySelector('.totais-valor-total');
-    if (containerTotal) {
-      new MutationObserver(_deb).observe(containerTotal, {
-        childList: true, subtree: true, characterData: true
-      });
-    }
-
-    // 3. Evento de input geral para capturar mudanças manuais em campos de desconto
-    document.addEventListener('input', ev => {
-      const target = ev.target;
-      // Se mudar qualquer input dentro da área de totais ou da tabela, recalcula
-      if (target?.closest('.totais') || target?.closest('#ItensPedidoDeVendaTabela')) {
-        _deb();
-      }
-    }, true);
-
-    // Atualiza quando custo é salvo na página do orçamento
+    let bc = null;
     try {
-      const bc = new BroadcastChannel('hiper_custo_channel');
+      bc = new BroadcastChannel('hiper_custo_channel');
       bc.addEventListener('message', ev => {
         const { id, val } = ev.data || {};
         if (id != null && val != null) {
@@ -270,18 +143,46 @@ let _t = null;
       });
     } catch (e) { /* BroadcastChannel indisponível */ }
 
-    setTimeout(_recalc, 600);
-    return wrap;
+    // O hiper-ui recria o card quando o Hiper re-renderiza o resumo; o antigo
+    // se desliga na próxima mudança (card.isConnected === false).
+    function _desligar() {
+      desinscrever.splice(0).forEach(fn => { try { fn(); } catch (_) {} });
+      window.removeEventListener('message', onMsg);
+      try { bc?.close(); } catch (_) {}
+      clearTimeout(_t);
+    }
+
+    // ── Botão ↻: força /produtos/sync no servidor (custos, % da nota, produtos)
+    // e recarrega o catálogo em cache do seletor de produto (preços do Hiper).
+    sync.addEventListener('click', async () => {
+      const forcar = window.__hiperForcarAtualizacao || window.__hiperSyncCustos;
+      if (typeof forcar !== 'function') { sync.textContent = '✗'; setTimeout(() => { sync.textContent = '↻'; }, 3000); return; }
+      sync.disabled = true;
+      sync.textContent = '⟳';
+      try {
+        await Promise.all([forcar(), window.__hiperPedido?.atualizarCatalogo({ forcar: true })]);
+        sync.textContent = '✓';
+        _render();
+      } catch (e) {
+        sync.textContent = '✗';
+      } finally {
+        sync.disabled = false;
+        setTimeout(() => { sync.textContent = '↻'; }, 3000);
+      }
+    });
+
+    _render();
+    return card;
   }
 
   function _registrar() {
     if (window.__hiperUI) {
-      window.__hiperUI.registrar({ id: 'hiper-lucro-widget', ordem: 5, render: _criarWidget });
+      window.__hiperUI.registrar({ id: 'hiper-lucro-widget', ordem: 5, render: _criarWidget, alvo: _alvo });
     } else {
       setTimeout(_registrar, 50);
     }
   }
 
   _registrar();
-  console.info('[HiperLucro] ✅ Widget de margem registrado.');
+  console.info('[HiperLucro] ✅ Widget de lucro registrado.');
 })();

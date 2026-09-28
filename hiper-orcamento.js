@@ -70,84 +70,49 @@ async function gerarNumeroOrcamentoAsync() {
   return data.numero;
 }
 
+// Itens vêm direto da store Pinia do microfrontend (ver hiper-pedido-store.js) —
+// linhas sem produto escolhido ou canceladas ficam de fora, igual ao Hiper.
 function obterItensPedido() {
-  return $('.linha-produto').map((i, linhaEl) => {
-    const linha = $(linhaEl);
-    const produto =
-      linha.data('produtoAtualizado') ||
-      linha.data('produtoAtualizadoEdit');
-    // ignora linhas inválidas
-    if (!produto?.idProduto) return null;
-
-    const quantidadeInput = linha.find('input.form-control.text-right')
-      .filter((i, el) => el.placeholder === '0' || el.placeholder === '0,00')
-      .first();
-    const valorUnitarioInput = linha.find('.input-valor-unitario-produto').first();
-    const nome = linha.find('.select2-chosen').first().text().trim();
-
-    return {
-      quantidade:      quantidadeInput.val(),
-      valorUnitario:   valorUnitarioInput.val(),
-      nome,
-      produtoCompleto: structuredClone(produto),
-    };
-  }).get().filter(Boolean);
-}
-
-function obterTotalPedido() {
-  const el = document.querySelector('.valor-total');
-  if (!el) return 0;
-  return Number(
-    el.innerText
-      .replace(/[^\d,]/g, '')
-      .replace(/\./g, '')
-      .replace(',', '.')
-  );
+  const store = window.__hiperPedido?.produtos();
+  if (!store) {
+    console.warn('[HiperOrc] Store de produtos do pedido não encontrada.');
+    return [];
+  }
+  return store.itens.filter(it => !it.cancelado && it.idProdutoHiperOnline != null);
 }
 
 function extrairDadosPedido() {
-  return _extrairDadosPedidoV2(obterItensPedido());
-}
+  const descontos = window.__hiperPedido?.descontos();
 
-function _extrairDadosPedidoV2(linhas) {
-  const itens = linhas.map(linha => {
-    const p           = linha.produtoCompleto;
-    const qtd         = parseMoedaOrc(linha.quantidade);
-    const vlUnitBruto = parseMoedaOrc(linha.valorUnitario);
+  const itens = obterItensPedido().map(it => {
+    const p           = it.produto || {};
+    const qtd         = Number(it.quantidade) || 0;
+    const vlUnitBruto = Number(it.valorUnitario) || 0;
     const vlUnit      = Math.round(vlUnitBruto * 0.9523 * 100) / 100;
 
     return {
-      idProduto:       String(p.idProduto),
-      idProdutoGrade:  p.idProdutoGrade ?? null,
-      nome:            linha.nome || p.Nome || p.text || '',
-      codigo:          (() => {
-        // Tenta extrair do idProduto (IDs legados de 4 dígitos)
-        const fromId = String(p.idProduto).match(/^\d{4}$/)?.[0];
-        if (fromId) return fromId;
-        // Extrai o código numérico do início do nome do produto: "3006 - Tabica branca" → "3006"
-        const nome = linha.nome || p.Nome || p.text || '';
-        return nome.match(/^(\d{3,6})\s*[-–]/)?.[1] ?? null;
-      })(),
+      idProduto:       String(it.idProdutoHiperOnline),
+      idProdutoGrade:  it.idProdutoGradeHiperOnline ?? null,
+      nome:            it.produtoNome || p.nome || '',
+      codigo:          p.codigo != null ? String(p.codigo) : null,
       qtd,             // mantido para o template gerarHtmlOrcamento
       quantidade:      qtd,    // campo canônico para a API e estoque
-      unidade:         p.siglaDaUnidadeDeMedida ?? 'UN',
+      unidade:         p.unidadeDeMedida?.sigla ?? p.siglaUnidadeDeMedida ?? p.siglaDaUnidadeDeMedida ?? 'UN',
       vlUnit,
       vlUnitBruto,
       subtotal:        qtd * vlUnitBruto,
-      precoVendaFinal: p.precoVendaFinal ?? null,
+      precoVendaFinal: it.valorUnitarioBase ?? null,
       ehKit:           p.ehKit ?? false,
     };
   });
 
-  const descontoEl  = document.querySelector('.totais-desconto .col-xs-9.col-sm-6.col-md-2');
-  const freteEl     = document.querySelector('.totais-frete .col-xs-9.col-sm-6.col-md-2 p');
   const parcelasStr = document.getElementById('hiper-select-parcelas')?.value ?? 'Cartão 3X';
 
   return {
     itens,
-    desconto: parseMoedaOrc(descontoEl?.textContent),
-    frete:    parseMoedaOrc(freteEl?.textContent),
-    total:    obterTotalPedido(),
+    desconto: descontos?.valorDeDescontoAplicado ?? 0,
+    frete:    descontos?.valorDoFrete ?? 0,
+    total:    descontos?.totalDoPedido ?? 0,
     parcelas: parseInt((parcelasStr || '').replace(/\D/g, ''), 10) || 1,
   };
 }
@@ -1556,7 +1521,7 @@ async function baixarPdf() {
   const pdfHeader = document.createElement('div');
   pdfHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0 2px 8px;border-bottom:1px solid #ddd;margin-bottom:12px;font-family:Arial,sans-serif;font-size:9pt;color:#888';
   pdfHeader.innerHTML =
-    '<a href="https://tagdrywall.hiper.com.br/v1/#/pedido-venda/novo?recuperar=' + NUM_ORC + '" ' +
+    '<a href="https://tagdrywall.hiper.com.br/vendas/pedido-de-venda/cadastro?recuperar=' + NUM_ORC + '" ' +
     'style="font-weight:bold;color:#888;font-size:10pt;text-decoration:none">Or\u00e7amento ' + NUM_ORC + '</a>' +
     '<span>' + (clienteNome ? 'Cliente: <strong style="color:#666">' + clienteNome + '</strong> &nbsp;|&nbsp; ' : '') +
     'Emitido em ' + new Date().toLocaleDateString('pt-BR') + '</span>';
@@ -1597,7 +1562,7 @@ async function baixarPdf() {
 
     const wrapperPxH = canvas.height / SCALE;
     const headerMmH  = (headerPxReal / wrapperPxH) * finalMmH;
-    const linkUrl    = 'https://tagdrywall.hiper.com.br/v1/#/pedido-venda/novo?recuperar=' + NUM_ORC;
+    const linkUrl    = 'https://tagdrywall.hiper.com.br/vendas/pedido-de-venda/cadastro?recuperar=' + NUM_ORC;
     pdf.link(MARGIN_MM, MARGIN_MM + 8, 55, headerMmH, { url: linkUrl });
 
     pdf.save(nomePdf());
@@ -1770,16 +1735,27 @@ async function abrirOrcamento() {
 
 
 // ── Registro no centralizador de UI (hiper-ui.js) ────────────────────────────
+// Tela nova (microfrontend): o botão fica logo abaixo do "Salvar orçamento"
+// nativo, dentro do menu lateral do cadastro do pedido.
 (function _registrarOrcamento() {
+  const SEL_BOTOES_MENU = '#hiper-microfrontend-pedidodevenda .cadastro-pedido-de-venda-menu-lateral__buttons';
+
+  function _alvoBotao() {
+    const container = document.querySelector(SEL_BOTOES_MENU);
+    if (!container) return null;
+    const salvar =
+      [...container.querySelectorAll('button')].find(b => /salvar\s+or[çc]amento/i.test(b.textContent)) ||
+      container.querySelector('button.hc-button.success');
+    return { parent: container, ref: salvar ? salvar.nextSibling : null };
+  }
+
   function _criarBotao() {
     const btn = document.createElement('button');
     btn.id        = 'hiper-btn-orcamento';
     btn.type      = 'button';
-    btn.className = 'btn btn-lg no-margin-bottom btn-block-xs';
-    btn.style.cssText = 'background: rgba(46, 204, 113, 0.25); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); margin-top: 4px; font-size: 12px; font-weight: bold; border-radius: 4px; backdrop-filter: blur(4px); transition: all 0.2s;';
-    btn.innerHTML = '📄 Orçamento';
-    btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; btn.style.borderColor = '#1a7a1a'; btn.style.color = '#1a7a1a'; });
-    btn.addEventListener('mouseleave', () => { btn.style.opacity = '0.75'; btn.style.borderColor = '#ccc'; btn.style.color = '#555'; });
+    btn.className = 'hc-button';
+    btn.style.cssText = 'background: rgba(46, 204, 113, 0.15); color: #1a7a1a; border: 1px solid rgba(46, 204, 113, 0.6); font-weight: bold;';
+    btn.textContent = '📄 Gerar orçamento';
     btn.addEventListener('click', abrirOrcamento);
     console.info('[HiperCache] Botão de orçamento criado.');
     return btn;
@@ -1787,7 +1763,7 @@ async function abrirOrcamento() {
 
   function _registrar() {
     if (window.__hiperUI) {
-      window.__hiperUI.registrar({ id: 'hiper-btn-orcamento', ordem: 0, render: _criarBotao });
+      window.__hiperUI.registrar({ id: 'hiper-btn-orcamento', ordem: 0, render: _criarBotao, alvo: _alvoBotao });
     } else {
       setTimeout(_registrar, 50);
     }
