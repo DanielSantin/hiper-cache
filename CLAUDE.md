@@ -80,7 +80,9 @@ Since 2026-10 the quote and the resumido are pages at `sistema.santin.tec.br/v2/
 old Blob windows (`gerarHtmlOrcamento`, `resumido-*.js`, `hiper-icones.js`, `vendor/`) were removed.
 `hiper-orcamento.js` only does what needs the Hiper page. `abrirOrcamento()` opens a tab on
 click (after the awaits Chrome may block the popup), gets the number, saves through
-`window.__hiperSalvarPedido` (hiper-db.js, 3 tries), then points the tab at the site. If the save
+`window.__hiperSalvarPedido` (hiper-db.js, 3 tries), then points the tab at the site. The quote is saved as a draft (`rascunho: true`): it only shows up in
+the site's list once someone copies, downloads or prints it there, and drafts that are never
+confirmed are deleted after 2 days (see hiper-database CLAUDE.md). If the save
 keeps failing, the tab shows a link; hiper-db.js keeps retrying every 15 s while the Hiper tab is
 open. Layout, totals, PDF, stock removal and the salesperson name (localStorage per PC) are site
 code now. Fix them there, with no Web Store review.

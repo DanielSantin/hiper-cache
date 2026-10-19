@@ -186,6 +186,7 @@
       parcelas:  dados.parcelas  || 1,
       cliente:   dados.cliente   || '',
       descricao: dados.descricao || '',
+      rascunho:  dados.rascunho === true,
       itens: dados.itens.map(it => ({
         idProduto:       it.idProduto      || null,
         idProdutoGrade:  it.idProdutoGrade ?? null,
