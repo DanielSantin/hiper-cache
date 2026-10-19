@@ -125,7 +125,9 @@ async function abrirOrcamento() {
   window.__hiperPedidoAberto = numero;   // faturamento estatístico (hiper-sync.js)
 
   const url = URL_ORCAMENTO_SITE + '?id=' + encodeURIComponent(numero);
-  const payload = { itens: dados.itens, total: dados.total, desconto: dados.desconto, parcelas: 0, cliente: '', descricao: '' };
+  // `desconto` no banco é o desconto à vista digitado no orçamento (página v2),
+  // não o do Hiper — o orçamento nasce sem desconto, como a janela antiga fazia.
+  const payload = { itens: dados.itens, total: dados.total, desconto: 0, parcelas: 0, cliente: '', descricao: '' };
 
   // Até 3 tentativas; salvarPedido já cancela o reenvio automático anterior
   for (let tentativa = 1; tentativa <= 3; tentativa++) {
