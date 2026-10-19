@@ -13,7 +13,7 @@ if (typeof chrome === 'undefined' || !chrome.storage?.local) {
 
 async function updateCount() {
   const all = await chrome.storage.local.get(null);
-  const ignorar = new Set(['hiper_ativo', 'otim_select', 'otim_preco', 'hiper_orc_letra']);
+  const ignorar = new Set(['hiper_ativo', 'otim_select', 'otim_preco', 'orc_site', 'hiper_orc_letra']);
   const cacheKeys = Object.keys(all).filter(k => !k.startsWith('custo:') && !ignorar.has(k));
   const custoKeys = Object.keys(all).filter(k => k.startsWith('custo:'));
   document.getElementById('count').textContent = cacheKeys.length;
@@ -47,7 +47,8 @@ toggleAtivo.addEventListener('change', () => {
 
 // ── Toggles de otimização (select e preço) ────────────────────────────────────
 // Desligar volta ao comportamento nativo do Hiper na busca / na seleção de item.
-function ligarToggleOtim(inputId, sliderId, thumbId, chave) {
+function ligarToggleOtim(inputId, sliderId, thumbId, chave, padrao = true,
+                         msgs = ['✅ Otimização ligada — recarregue a página', '⏸ Otimização desligada — recarregue a página']) {
   const input  = document.getElementById(inputId);
   const slider = document.getElementById(sliderId);
   const thumb  = document.getElementById(thumbId);
@@ -58,19 +59,22 @@ function ligarToggleOtim(inputId, sliderId, thumbId, chave) {
     thumb.style.transform   = ativo ? 'translateX(18px)' : 'translateX(0)';
   }
 
-  chrome.storage.local.get(chave, (r) => aplicar(r[chave] !== false)); // padrão: ligado
+  chrome.storage.local.get(chave, (r) => aplicar(padrao ? r[chave] !== false : r[chave] === true));
 
   input.addEventListener('change', () => {
     const ativo = input.checked;
     chrome.storage.local.set({ [chave]: ativo });
     aplicar(ativo);
-    feedback(ativo ? '✅ Otimização ligada — recarregue a página'
-                   : '⏸ Otimização desligada — recarregue a página');
+    feedback(ativo ? msgs[0] : msgs[1]);
   });
 }
 
 ligarToggleOtim('toggleSelect', 'selectSlider', 'selectThumb', 'otim_select');
 ligarToggleOtim('togglePreco',  'precoSlider',  'precoThumb',  'otim_preco');
+// Padrão desligado: só esta máquina passa a abrir o orçamento no site.
+// Para ligar em todas, use PUT /v2/config no backend.
+ligarToggleOtim('toggleOrcSite', 'orcSiteSlider', 'orcSiteThumb', 'orc_site', false,
+  ['✅ Orçamento no site — recarregue a página', '⏸ Orçamento local — recarregue a página']);
 
 // ── Letra do orçamento (por perfil — o contador é do servidor, não guardamos aqui) ──
 const LETRA_PADRAO = 'T';
@@ -92,7 +96,7 @@ orcLetraInput.addEventListener('change', () => {
 document.getElementById('clearBtn').addEventListener('click', async () => {
   // Preserva as configs (toggles + letra) ao limpar o cache
   const preserve = await chrome.storage.local.get(
-    ['hiper_ativo', 'otim_select', 'otim_preco', 'hiper_orc_letra']);
+    ['hiper_ativo', 'otim_select', 'otim_preco', 'orc_site', 'hiper_orc_letra']);
   await chrome.storage.local.clear();
   await chrome.storage.local.set(preserve);
   feedback('✓ Cache limpo!');

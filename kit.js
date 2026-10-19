@@ -616,8 +616,15 @@ function calcularPortas(estado) {
   return { areaTotal, qtdTotal, grupos };
 }
 
-// ── RECALCULAR TUDO ────────────────────────────────────────────────────
-function recalcularTudo() {
+// ── DEMANDA DOS KITS ───────────────────────────────────────────────────
+// Quantidade bruta que cada kit pede em cada linha do pedido:
+//   Map<linhaId, { codigo, qtdBruta, porKit: Map<kitId, qtdBruta> }>
+// Função pura (só lê kitsAtivos e a store). É a mesma conta que preenche as
+// quantidades (recalcularTudo) e que divide o valor de cada linha entre os
+// kits no orçamento (calcularRateioKits) — as duas não têm como divergir.
+// A fórmula é sempre a do código BASE da linha do kit (estado.linhas), então
+// o rateio não depende de qual embalagem (balde 25kg, rolo 90m...) está lá.
+function calcularDemanda() {
   const totais = new Map();
 
   kitsAtivos.forEach((estado, id) => {
@@ -655,13 +662,39 @@ function recalcularTudo() {
       // (mesmo código base resolvido para o mesmo produto) acumulam na
       // mesma entrada em vez de criar duplicatas por string de código.
       if (!totais.has(linhaId)) {
-        totais.set(linhaId, { codigo, qtdBruta: 0 });
+        totais.set(linhaId, { codigo, qtdBruta: 0, porKit: new Map() });
       }
-      totais.get(linhaId).qtdBruta += qtdBruta;
+      const t = totais.get(linhaId);
+      t.qtdBruta += qtdBruta;
+      t.porKit.set(id, (t.porKit.get(id) ?? 0) + qtdBruta);
     });
   });
 
-  totais.forEach(({ codigo, qtdBruta }, linhaId) => {
+  return totais;
+}
+
+// Fração do valor de cada linha que pertence a cada kit:
+//   { [linhaId]: { [kitId]: fração } }   (frações somam 1)
+// Linha de kit cuja demanda deu 0 (medida ainda não preenchida) é dividida
+// por igual entre os kits que a usam. Linhas fora de qualquer kit não
+// aparecem — quem consome decide o que fazer com elas.
+function calcularRateioKits() {
+  const rateio = {};
+  calcularDemanda().forEach(({ porKit }, linhaId) => {
+    const kits = [...porKit.keys()];
+    if (!kits.length) return;
+    const qtds = kits.map(k => { const q = porKit.get(k); return Number.isFinite(q) ? Math.max(q, 0) : 0; });
+    const soma = qtds.reduce((s, q) => s + q, 0);
+    const r = {};
+    kits.forEach((k, i) => { r[k] = soma > 0 ? qtds[i] / soma : 1 / kits.length; });
+    rateio[linhaId] = r;
+  });
+  return rateio;
+}
+
+// ── RECALCULAR TUDO ────────────────────────────────────────────────────
+function recalcularTudo() {
+  calcularDemanda().forEach(({ codigo, qtdBruta }, linhaId) => {
     if (!_linhaExiste(linhaId)) return;
 
     const nivel = resolverNivel(codigo, qtdBruta);
@@ -1248,6 +1281,7 @@ function _bindPainelEventos(lista) {
 window.aplicarKitGesso     = aplicarKitGesso;
 window.aplicarParedeCfg    = aplicarParedeCfg;
 window.recalcularTudo      = recalcularTudo;
+window.calcularRateioKits  = calcularRateioKits;
 window.renderizarPainel    = renderizarPainel;
 window.kitsAtivos          = kitsAtivos;
 window.FORMULAS_GESSO      = FORMULAS_GESSO;

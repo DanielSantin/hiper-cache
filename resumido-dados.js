@@ -165,19 +165,30 @@ function resumido_resolverMoBase(id, cfg) {
 }
 
 // Detecta qual variante de tabica está no orçamento: branca | natural | misto
+// Aceita o código de 4 dígitos e o idProduto (o mesmo de COD_TABICA em kit.js).
 function resumido_detectarTabica(itens) {
-  const temB = itens.some(it => (it.codigo || it.idProduto) === COD_TABICA_BRANCA);
-  const temN = itens.some(it => (it.codigo || it.idProduto) === COD_TABICA_NATURAL);
+  const ehTabica = (it, cod4, idProduto) => it.codigo === cod4 || String(it.idProduto) === idProduto;
+  const temB = itens.some(it => ehTabica(it, COD_TABICA_BRANCA, '79830939'));
+  const temN = itens.some(it => ehTabica(it, COD_TABICA_NATURAL, '79832337'));
   if (temB && temN) return 'misto';
   if (temN) return 'natural';
   return 'branca';
 }
 
-// Distribui o custo total proporcionalmente entre os kits, usando as fórmulas de quantidade.
+// Distribui o custo total entre os kits.
+// Fonte principal: o rateio por linha calculado pelo kit.js (calcularRateioKits),
+// a mesma conta que preencheu as quantidades — cada item é ligado à sua linha
+// pelo linhaId. As fórmulas abaixo só entram para itens sem rateio (orçamento
+// sem linhaId, ou kit.js indisponível).
 function resumido_custoPorKit(kitsArr, itens) {
   const FORMULAS = window.FORMULAS_GESSO || (typeof FORMULAS_GESSO !== 'undefined' ? FORMULAS_GESSO : {});
   const resultado = {};
   kitsArr.forEach(k => { resultado[k.nome] = 0; });
+
+  let rateioLinhas = {};
+  try {
+    if (typeof window.calcularRateioKits === 'function') rateioLinhas = window.calcularRateioKits();
+  } catch (e) { console.warn('[Resumido] calcularRateioKits falhou — usando fórmulas:', e); }
 
   // Monta mapa de fórmulas por kit (inclui paredes parametrizadas)
   const formulasPorKit = {};
@@ -197,11 +208,24 @@ function resumido_custoPorKit(kitsArr, itens) {
   const semFormula = []; // itens sem fórmula em nenhum kit — distribuídos depois
 
   itens.forEach(item => {
-    // Usa o código de 4 dígitos do nome (ex: "3006") para lookup nas fórmulas;
-    // idProduto é o ID interno longo do Hiper e não bate nas chaves de FORMULAS_GESSO.
-    const cod     = item.codigo || item.idProduto;
     const vlTotal = item.qtd * item.vlUnit;
-    if (!cod || vlTotal <= 0) return;
+    if (!(vlTotal > 0)) return;
+
+    const rateio = item.rateio || (item.linhaId && rateioLinhas[item.linhaId]);
+    if (rateio) {
+      const kits = Object.keys(rateio).filter(k => k in resultado);
+      const soma = kits.reduce((s, k) => s + rateio[k], 0);
+      if (soma > 0) {
+        kits.forEach(k => { resultado[k] += (rateio[k] / soma) * vlTotal; });
+        return;
+      }
+    }
+
+    // As tabelas do kit.js são indexadas pelo idProduto desde 2026-07-31.
+    // (Antes este lookup priorizava o código de 4 dígitos, que nunca batia
+    // nelas — todo item caía no rateio por igual: o bug do 50/50.)
+    const cod = item.idProduto || item.codigo;
+    if (!cod) return;
 
     const kitsComProduto = kitsArr.filter(k =>
       typeof (formulasPorKit[k.nome] || {})[cod] === 'function'

@@ -94,6 +94,27 @@ twice in this file, check whether the second occurrence is past the `<script>` t
 template-literal HTML string — line-number proximity or identical source text does not mean same
 scope.
 
+### Orçamento no site (`hiper-sites/v2`) — migration in progress (2026-10)
+
+The quote and the resumido are moving out of the Blob windows into
+`sistema.santin.tec.br/v2/orcamento?id=X` and `/v2/resumido?id=X`, backed by the DB. The switch:
+popup toggle "Orçamento no site" (`orc_site` in `chrome.storage.local`, default **off**, this
+machine only) **or** `GET /v2/config` → `orcamento_v2: true` (all machines, read every 5 min by
+`hiper-orcamento.js`). When on, `abrirOrcamento()` opens a tab on click, gets the number, saves via
+`window.__hiperSalvarPedido` (hiper-db.js), and points the tab at the site. Any failure (no number,
+save failed) falls back to the Blob window in that same tab. When off, nothing changed.
+
+Kit rateio: `calcularDemanda()` in `kit.js` is the per-line, per-kit raw-quantity calculation that
+`recalcularTudo()` applies, and `calcularRateioKits()` turns it into `{linhaId: {kitId: fraction}}`.
+`extrairDadosPedido()` tags each item with `linhaId` (store line id), and `salvarPedido` sends
+`rateio` per item, so the site splits values by kit without knowing any formula. The old
+resumido (`resumido-dados.js`) uses the same rateio. Its formula fallback used to look formulas
+up by the 4-digit code, which never matches the idProduto-keyed tables, so it split everything
+50/50.
+
+Once the site is the default, the Blob templates (`gerarHtmlOrcamento`'s popup, `resumido-*.js`)
+are dead code to remove in a later release.
+
 ### `hiper-ui.js` — single mount point for injected widgets
 
 Other modules never insert their widgets into the pedido-venda DOM directly; they call

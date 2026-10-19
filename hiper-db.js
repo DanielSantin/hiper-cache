@@ -198,6 +198,13 @@
 
     const kits = serializarKits();
 
+    // Rateio dos kits por linha do pedido (kit.js). Só vale para itens que
+    // vieram com linhaId; sem kit, fica null e o resumido divide proporcionalmente.
+    let rateioLinhas = {};
+    try {
+      if (kits.length && typeof window.calcularRateioKits === 'function') rateioLinhas = window.calcularRateioKits();
+    } catch (e) { console.warn('[HiperDB] calcularRateioKits falhou:', e); }
+
     const payload = {
       codigo,
       vendedor:  getVendedor(),
@@ -218,12 +225,15 @@
         subtotal:        it.subtotal != null ? it.subtotal : (it.qtd ?? it.quantidade ?? 0) * (it.vlUnit || 0),
         precoVendaFinal: it.precoVendaFinal ?? null,
         ehKit:           it.ehKit          ?? false,
+        linhaId:         it.linhaId        ?? null,
+        rateio:          it.rateio ?? (it.linhaId && rateioLinhas[it.linhaId]) ?? null,
       })),
       kits,
     };
 
-    await _enviarPayload(codigo, payload);
+    return _enviarPayload(codigo, payload);
   }
+  window.__hiperSalvarPedido = salvarPedido;   // orçamento no site: salva antes de abrir a página
 
   // ── Save público — chamado pelos botões da janela do orçamento ───────────────
   // hiper-orcamento.js chama window.__hiperDBSave(codigo, dados) em cada um

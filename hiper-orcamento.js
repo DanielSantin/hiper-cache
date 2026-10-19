@@ -31,6 +31,9 @@ function parseMoedaOrc(str) {
 
       const letra = (entries['hiper_orc_letra'] || '').toString().trim().toUpperCase();
       if (/^[A-Z]{1,3}$/.test(letra)) window.__hiperOrcLetra = letra;
+
+      // Toggle "Orçamento no site" do popup (padrão: desligado) — ver _orcamentoNoSite()
+      window.__hiperOrcSiteLocal = entries['orc_site'] === true;
     }
   });
 
@@ -91,6 +94,7 @@ function extrairDadosPedido() {
     const vlUnit      = Math.round(vlUnitBruto * 0.9523 * 100) / 100;
 
     return {
+      linhaId:         it.id ?? null,   // id da linha na store — liga o item ao rateio dos kits
       idProduto:       String(it.idProdutoHiperOnline),
       idProdutoGrade:  it.idProdutoGradeHiperOnline ?? null,
       nome:            it.produtoNome || p.nome || '',
@@ -627,11 +631,15 @@ function _dbSalvar() {
     const itensIdx = {};
     (ITENS || []).forEach(function(it) { itensIdx[it.nome] = it; });
 
-    rows.forEach(function(tr) {
+    rows.forEach(function(tr, idx) {
       const tds = tr.querySelectorAll('td');
       if (tds.length < 6) return;
       const nome = tds[3].textContent.trim();
       if (!nome) return;
+      // As linhas da tabela saem de ITENS na mesma ordem (não dá pra
+      // adicionar/remover aqui) — o índice acha a linha certa mesmo com
+      // dois itens de mesmo nome (ex.: montante 70 em duas paredes).
+      const pelaOrdem = (ITENS[idx] && ITENS[idx].nome === nome) ? ITENS[idx] : null;
 
       const inpPreco = tds[4].querySelector('.inp-preco');
       let vlUnit   = inpPreco ? (parseFloat(inpPreco.value) || 0) : _parseTdMoeda(tds[4].textContent);
@@ -651,7 +659,8 @@ function _dbSalvar() {
         unidade:  tds[2].textContent.trim() || 'UN',
         vlUnit,
         subtotal,
-        idProduto: ref?.idProduto || null,
+        idProduto: (pelaOrdem || ref)?.idProduto || null,
+        linhaId:   (pelaOrdem || ref)?.linhaId   || null,
       });
     });
     if (!itens.length) return;
@@ -1701,6 +1710,76 @@ function calcularParcelasPadrao(total) {
   return 1;
 }
 
+// ── Orçamento no site (hiper-sites/v2) ────────────────────────────────────────
+// Ligado pelo toggle do popup (só nesta máquina) ou para todas as máquinas pelo
+// GET /v2/config do backend. Desligado = janela Blob de sempre, sem mudança.
+// O botão salva o pedido no banco e abre a página do site, que lê de lá.
+// Qualquer falha (sem número, banco fora) cai na janela Blob, na mesma aba.
+const URL_ORCAMENTO_SITE = 'https://sistema.santin.tec.br/v2/orcamento';
+let _orcSiteRemoto = false;
+
+(function _lerConfigRemota() {
+  async function ler() {
+    try {
+      const f   = window.__nativeFetch || window.fetch.bind(window);
+      const ctl = new AbortController();
+      const t   = setTimeout(() => ctl.abort(), 3000);
+      const r   = await f('https://api.sistema.santin.tec.br/v2/config', { signal: ctl.signal }).finally(() => clearTimeout(t));
+      if (r.ok) _orcSiteRemoto = (await r.json())?.orcamento_v2 === true;
+    } catch { /* mantém o último valor lido */ }
+  }
+  ler();
+  setInterval(ler, 5 * 60 * 1000);
+})();
+
+function _orcamentoNoSite() {
+  return window.__hiperOrcSiteLocal === true || _orcSiteRemoto;
+}
+
+async function _abrirOrcamentoNoSite(dados) {
+  // Abre a aba já no clique: depois dos awaits o Chrome pode bloquear o popup.
+  const janela = window.open('', '_blank');
+  if (janela) {
+    janela.document.write('<title>Gerando orçamento…</title><p style="font:18px Arial;padding:32px;color:#1a5c1a">Gerando orçamento…</p>');
+  }
+
+  let numeroOrcamento;
+  try {
+    numeroOrcamento = await gerarNumeroOrcamentoAsync();
+  } catch (e) {
+    console.error('[HiperOrc] ❌', e.message);
+    if (janela) janela.close();
+    alert(e.message);
+    return;
+  }
+  window.__hiperNumeroOrcamentoAtual = numeroOrcamento;
+  window.__hiperPedidoAberto = numeroOrcamento;
+
+  const salvo = typeof window.__hiperSalvarPedido === 'function'
+    ? await window.__hiperSalvarPedido(numeroOrcamento, {
+        itens:     dados.itens,
+        total:     dados.total,
+        desconto:  dados.desconto,
+        parcelas:  0,          // "No Cartão" — mesmo padrão da janela Blob
+        cliente:   '',
+        descricao: '',
+      })
+    : false;
+
+  if (salvo && janela) {
+    janela.location.href = URL_ORCAMENTO_SITE + '?id=' + encodeURIComponent(numeroOrcamento);
+    return;
+  }
+
+  // Fallback: janela Blob de sempre, com o número já gerado
+  console.warn('[HiperOrc] Orçamento no site indisponível (salvo=' + salvo + ') — abrindo a janela local.');
+  const html = gerarHtmlOrcamento(dados, { parcelas: 0, incluirEntrega: false, taxaEntrega: 50, numeroOrcamento });
+  const url  = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  if (janela) janela.location.href = url;
+  window.__hiperBlobWindow = janela || window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
+}
+
 async function abrirOrcamento() {
   const dados = extrairDadosPedido();
 
@@ -1708,6 +1787,8 @@ async function abrirOrcamento() {
     alert('Nenhum item encontrado. Adicione pelo menos um produto.');
     return;
   }
+
+  if (_orcamentoNoSite()) return _abrirOrcamentoNoSite(dados);
 
   let numeroOrcamento;
   try {
