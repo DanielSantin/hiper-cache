@@ -37,12 +37,11 @@ browser boundary, not a bug. Anything needing both (e.g. reading `chrome.storage
 `parseNumeroBR` without a load-order dependency.
 
 Because module scripts share one global `window`, **two files must never declare a same-named global
-with different contracts** — this bit us once already (`num()` in `kit.js` vs `parseMoedaOrc()` in
-`hiper-orcamento.js` were duplicate copies of the same BR-number parser; now both delegate to
-`parseNumeroBR` in `hiper-num-utils.js`). `parseNumeroBR` itself always returns `NaN` on unparseable
+with different contracts** — this bit us once already (`num()` in `kit.js` and a `parseMoedaOrc()` in the old quote code were
+duplicate copies of the same BR-number parser; now `kit.js` delegates to `parseNumeroBR` in
+`hiper-num-utils.js`). `parseNumeroBR` itself always returns `NaN` on unparseable
 input rather than coercing to `0` — `hiper-widgets.js` relies on that `NaN` to tell "typed
-something unreadable" (ignore the edit) apart from a real value; `kit.js`/
-`hiper-orcamento.js` want a plain `0` and add `isNaN(v) ? 0 : v` themselves at the call site. Don't
+something unreadable" (ignore the edit) apart from a real value; `kit.js` wants a plain `0` and add `isNaN(v) ? 0 : v` themselves at the call site. Don't
 "simplify" that split — the two contracts aren't interchangeable.
 
 ### `background.js` (service worker) only exists for two `chrome.*`-only jobs
@@ -74,46 +73,24 @@ counter over `chrome.storage`), but that was replaced with a direct `fetch` from
 straight to the backend once we confirmed CORS already allows `tagdrywall.hiper.com.br` and the
 counter's atomicity is guaranteed server-side, not by this extension.
 
-### `hiper-orcamento.js` and `resumido-gerador.js` are each two files in one
+### Orçamento and resumido live on the site (`hiper-sites/v2`)
 
-Both build a full standalone HTML string (quote / "resumido" report), wrap it in a `Blob`, and
-`window.open()` it in a new tab. Everything inside that generated HTML — including its own
-`<script>` block (functions like `num(id)`, `el(id)`, margin/PIX calculators) — runs in a **completely
-separate document with its own global scope**. It never sees `kit.js`, `hiper-num-utils.js`, or
-anything else injected into the main Hiper page, and vice versa. The popup talks back to the main
-page only via `window.opener.__hiperDBSave(...)` (exposed by `hiper-db.js`) — don't assume a function
-defined in the main-page part of either file is reachable from its own embedded `<script>`, or vice
-versa.
-
-**Trap this already caused once:** `hiper-orcamento.js` has its own inline `parseMoedaOrc` inside the
-embedded `<script>` (near `fmt`/`fmtNum`), textually identical to the one near the top of the file
-used by the main-page part. These look like a copy-paste duplicate — they are **not**: the popup
-can't call `parseNumeroBR` (from `hiper-num-utils.js`) or anything else outside its own inline
-`<script>`, so it needs a fully self-contained copy. Before "deduplicating" any function that appears
-twice in this file, check whether the second occurrence is past the `<script>` tag inside the
-template-literal HTML string — line-number proximity or identical source text does not mean same
-scope.
-
-### Orçamento no site (`hiper-sites/v2`) — migration in progress (2026-10)
-
-The quote and the resumido are moving out of the Blob windows into
-`sistema.santin.tec.br/v2/orcamento?id=X` and `/v2/resumido?id=X`, backed by the DB. The switch:
-popup toggle "Orçamento no site" (`orc_site` in `chrome.storage.local`, default **off**, this
-machine only) **or** `GET /v2/config` → `orcamento_v2: true` (all machines, read every 5 min by
-`hiper-orcamento.js`). When on, `abrirOrcamento()` opens a tab on click, gets the number, saves via
-`window.__hiperSalvarPedido` (hiper-db.js), and points the tab at the site. Any failure (no number,
-save failed) falls back to the Blob window in that same tab. When off, nothing changed.
+Since 2026-10 the quote and the resumido are pages at `sistema.santin.tec.br/v2/orcamento?id=X` and
+`/v2/resumido?id=X`. They read from and autosave to the DB (`/v2/orcamento` in hiper-database). The
+old Blob windows (`gerarHtmlOrcamento`, `resumido-*.js`, `hiper-icones.js`, `vendor/`) were removed.
+`hiper-orcamento.js` only does what needs the Hiper page. `abrirOrcamento()` opens a tab on
+click (after the awaits Chrome may block the popup), gets the number, saves through
+`window.__hiperSalvarPedido` (hiper-db.js, 3 tries), then points the tab at the site. If the save
+keeps failing, the tab shows a link; hiper-db.js keeps retrying every 15 s while the Hiper tab is
+open. Layout, totals, PDF, stock removal and the salesperson name (localStorage per PC) are site
+code now. Fix them there, with no Web Store review.
 
 Kit rateio: `calcularDemanda()` in `kit.js` is the per-line, per-kit raw-quantity calculation that
 `recalcularTudo()` applies, and `calcularRateioKits()` turns it into `{linhaId: {kitId: fraction}}`.
 `extrairDadosPedido()` tags each item with `linhaId` (store line id), and `salvarPedido` sends
-`rateio` per item, so the site splits values by kit without knowing any formula. The old
-resumido (`resumido-dados.js`) uses the same rateio. Its formula fallback used to look formulas
-up by the 4-digit code, which never matches the idProduto-keyed tables, so it split everything
-50/50.
-
-Once the site is the default, the Blob templates (`gerarHtmlOrcamento`'s popup, `resumido-*.js`)
-are dead code to remove in a later release.
+`rateio` per item, so the site splits values by kit without knowing any formula. (The old resumido
+looked formulas up by the 4-digit code, which never matches the idProduto-keyed tables, so it
+split everything 50/50.)
 
 ### `hiper-ui.js` — single mount point for injected widgets
 
@@ -137,7 +114,7 @@ The microfrontend is Vue 3 + Pinia (minified bundle kept in `referencias/hiper_j
 there is `defineStore`). Don't scrape its DOM: `window.__hiperPedido.produtos()` /
 `.descontos()` / `.store(id)` return the live stores the Hiper itself serializes on save.
 `produtos().itens[*].idProdutoHiperOnline` is the same id the rest of the extension calls
-`idProduto`. `extrairDadosPedido()` in `hiper-orcamento.js` (used by orçamento, lucro, resumido)
+`idProduto`. `extrairDadosPedido()` in `hiper-orcamento.js`
 reads from here. `hiper-db.js` (recuperar orçamento) writes through it: items restored with the
 saved quantities, kits re-linked to those lines via `codigosEquivalentes()` from `kit.js` (the DB
 stores the line's final product, e.g. massa 25kg / montante 48, not the kit's base code), then the

@@ -130,25 +130,11 @@
     const onMsg = (ev) => { if (ev.source === window && ev.data?.type === 'HIPER_CACHE_ALL') _deb(); };
     window.addEventListener('message', onMsg);
 
-    let bc = null;
-    try {
-      bc = new BroadcastChannel('hiper_custo_channel');
-      bc.addEventListener('message', ev => {
-        const { id, val } = ev.data || {};
-        if (id != null && val != null) {
-          if (!window.__hiperCustos) window.__hiperCustos = {};
-          window.__hiperCustos[id] = parseFloat(val);
-          _deb();
-        }
-      });
-    } catch (e) { /* BroadcastChannel indisponível */ }
-
     // O hiper-ui recria o card quando o Hiper re-renderiza o resumo; o antigo
     // se desliga na próxima mudança (card.isConnected === false).
     function _desligar() {
       desinscrever.splice(0).forEach(fn => { try { fn(); } catch (_) {} });
       window.removeEventListener('message', onMsg);
-      try { bc?.close(); } catch (_) {}
       clearTimeout(_t);
     }
 

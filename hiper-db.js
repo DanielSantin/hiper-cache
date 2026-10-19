@@ -46,19 +46,6 @@
     } catch(e) { return ''; }
   }
 
-  // Delega à função global definida em hiper-orcamento.js (única fonte da verdade).
-  function getNumeroOrcamento() {
-    try {
-      if (window.__hiperNumeroOrcamentoAtual) {
-        return window.__hiperNumeroOrcamentoAtual;
-      }
-      console.warn('[HiperDB] Número de orçamento ainda não foi gerado no fluxo atual');
-      return '';
-    } catch (e) {
-      return '';
-    }
-  }
-
   // ── Serialização dos kits ativos ──────────────────────────────────────────────
   // Converte o Map kitsAtivos (kit.js) num array serializável.
   // NÃO salva referências ao DOM ($linha) — apenas os parâmetros de entrada.
@@ -138,20 +125,9 @@
     console.info(`[HiperDB] ⏳ Retry agendado para ${codigo} em ${RETRY_DELAY_MS / 1000}s.`);
   }
 
-  // ── Toast de status do envio ──────────────────────────────────────────────────
-  // Manda postMessage pra janela blob (guardada em window.__hiperBlobWindow por
-  // hiper-orcamento.js). O listener dentro do blob renderiza o toast lá.
-
-  function _mostrarToastEnvio(codigo, estado) {
-    const blobWin = window.__hiperBlobWindow;
-    if (!blobWin || blobWin.closed) return;
-    blobWin.postMessage({ type: 'HIPER_DB_TOAST', codigo, estado }, '*');
-  }
-
     // ── Envio atômico (usado tanto no envio inicial quanto no retry) ──────────────
 
   async function _enviarPayload(codigo, payload, isRetry = false) {
-    _mostrarToastEnvio(codigo, 'enviando');
     try {
       const res = await fetchComTimeout(`${API_BASE}/pedido`, {
         method:  'POST',
@@ -161,20 +137,17 @@
 
       if (res.ok) {
         console.info(`[HiperDB] ✅ Pedido ${codigo} salvo${isRetry ? ' (retry)' : ''} (${payload.kits?.length ?? 0} kit(s)).`);
-        _mostrarToastEnvio(codigo, 'ok');
         return true;
       }
 
       // Erro HTTP — agenda retry (o servidor pode estar sobrecarregado)
       console.warn(`[HiperDB] ⚠️ Servidor retornou ${res.status} para ${codigo}${isRetry ? ' (retry)' : ''} — agendando nova tentativa.`);
-      _mostrarToastEnvio(codigo, 'retry');
       _agendarRetry(codigo, payload);
       return false;
 
     } catch (e) {
       // Falha de rede / timeout
       console.info(`[HiperDB] 📡 API indisponível para ${codigo}${isRetry ? ' (retry)' : ''} — agendando nova tentativa.`);
-      _mostrarToastEnvio(codigo, 'retry');
       _agendarRetry(codigo, payload);
       return false;
     }
@@ -233,20 +206,7 @@
 
     return _enviarPayload(codigo, payload);
   }
-  window.__hiperSalvarPedido = salvarPedido;   // orçamento no site: salva antes de abrir a página
-
-  // ── Save público — chamado pelos botões da janela do orçamento ───────────────
-  // hiper-orcamento.js chama window.__hiperDBSave(codigo, dados) em cada um
-  // dos 4 botões (Imprimir, Copiar WhatsApp, Baixar PDF, Resumido).
-
-  window.__hiperDBSave = function(codigo, dados) {
-    if (codigo && dados) {
-      // Mantém __hiperPedidoAberto sincronizado para que faturarOrcamentoAtual()
-      // funcione tanto em orçamentos novos quanto em recuperados do banco.
-      window.__hiperPedidoAberto = codigo;
-      salvarPedido(codigo, dados);
-    }
-  };
+  window.__hiperSalvarPedido = salvarPedido;   // hiper-orcamento.js: salva antes de abrir a página do site
 
   // ── Marcar orçamento como faturado (estatística) ─────────────────────────────
   // Fire-and-forget: falha silenciosa se o pedido não existir no banco
@@ -748,60 +708,6 @@
     }
     _registrar();
   })();
-
-  // ── Saída de estoque por orçamento customizado ────────────────────────────────
-  // Chamado pela janela blob via window.opener.__hiperRemoverEstoque(codigo, itens).
-  // Faz POST /api/saida-estoque diretamente (CORS liberado para tagdrywall.hiper.com.br).
-  // Envia toast de feedback para a janela blob via HIPER_DB_TOAST.
-
-  window.__hiperRemoverEstoque = async function(codigo, itens) {
-    if (!codigo || !itens?.length) return { ok: false, erro: 'Dados inválidos.' };
-
-    const blobWin = window.__hiperBlobWindow;
-    const _toast  = (estado) => {
-      if (blobWin && !blobWin.closed)
-        blobWin.postMessage({ type: 'HIPER_DB_TOAST', codigo, estado }, '*');
-    };
-
-    _toast('enviando');
-
-    const payload = {
-      codigo_orcamento: codigo,
-      itens: itens.map(it => ({
-        idProduto: String(it.idProduto || it.codigo || ''),
-        nome:      it.nome     || '',
-        unidade:   it.unidade  || 'UN',
-        qtd:       Number(it.qtd ?? it.quantidade ?? 0),
-      })).filter(it => it.idProduto && it.qtd > 0),
-    };
-
-    try {
-      const res  = await fetchComTimeout(`${API_BASE}/saida-estoque`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-
-      if (res.ok) {
-        console.info(`[HiperDB] ✅ Saída ${codigo} registrada — ${data.movimentos} produto(s).`);
-        _toast('ok');
-        return { ok: true, data };
-      }
-
-      const msg = data?.detail || `Erro ${res.status}`;
-      console.warn(`[HiperDB] ⚠️ Saída ${codigo} recusada: ${msg}`);
-      if (blobWin && !blobWin.closed)
-        blobWin.postMessage({ type: 'HIPER_SAIDA_ERRO', codigo, msg }, '*');
-      return { ok: false, erro: msg };
-
-    } catch (e) {
-      console.warn('[HiperDB] ❌ Falha ao registrar saída:', e);
-      if (blobWin && !blobWin.closed)
-        blobWin.postMessage({ type: 'HIPER_SAIDA_ERRO', codigo, msg: 'Sem conexão com o servidor.' }, '*');
-      return { ok: false, erro: e.message };
-    }
-  };
 
   window._tentarMarcarFaturado = _tentarMarcarFaturado;
   console.info('[HiperDB] ✅ Módulo DB carregado. API:', API_BASE);

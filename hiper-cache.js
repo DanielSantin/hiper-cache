@@ -522,22 +522,6 @@
             window.postMessage({ type: 'HIPER_CUSTO_EXPORT_DATA', custos: window.__hiperCustos }, '*');
         }
 
-        // D) Sincronização de custo em memória
-        if (msg?.type === 'HIPER_CUSTO_SYNC') {
-            const { id, val } = msg;
-            if (id != null) {
-                window.__hiperCustos[id] = val;
-                DEBUG && console.log('[HiperCache] 🔄 Custo sincronizado em memória — id:', id, '| val:', val);
-            }
-        }
-
-        // E) Sincronização de vendedor em memória (vindo do blob via interceptor)
-        if (msg?.type === 'HIPER_VENDEDOR_SYNC') {
-            if (!window.__hiperVendedor) window.__hiperVendedor = { checked: false, text: '' };
-            if (msg.text    != null) window.__hiperVendedor.text    = String(msg.text);
-            if (msg.checked != null) window.__hiperVendedor.checked = Boolean(msg.checked);
-            console.log('[HiperCache] 🔄 Vendedor sincronizado em memória:', msg.text);
-        }
     });
 
     // ── 6. Inicialização ──────────────────────────────────────────────────────

@@ -41,7 +41,6 @@
         "hiper-num-utils.js",
         "hiper-pedido-store.js",
         "hiper-sync.js",
-        "hiper-icones.js",
         "hiper-cache.js",
         "hiper-widgets.js",
         "hiper-orcamento.js",
@@ -50,13 +49,8 @@
         "kit.js",
         "hiper-mov-widget.js",
         "hiper-mov-lista.js",
-        "resumido-dados.js",
-        "resumido-runtime.js",
-        "resumido-gerador.js",
         "hiper-ui.js",
-        "hiper-cpf-autofill.js",
-        "vendor/html2canvas.min.js",
-        "vendor/jspdf.umd.min.js"
+        "hiper-cpf-autofill.js"
       ],
       "matches": [
         "https://tagdrywall.hiper.com.br/*"

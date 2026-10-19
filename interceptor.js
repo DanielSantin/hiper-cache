@@ -12,7 +12,6 @@ async function safeStorage(fn) {
 const MODULES = [
   { src: 'hiper-num-utils.js' },
   { src: 'hiper-pedido-store.js' },
-  { src: 'hiper-icones.js' },
   { src: 'hiper-cache.js' },
   { src: 'hiper-sync.js' },
   { src: 'hiper-widgets.js' },
@@ -22,10 +21,7 @@ const MODULES = [
   { src: 'kit.js' },
   { src: 'hiper-mov-widget.js' },
   { src: 'hiper-mov-lista.js' },
-  { src: 'resumido-dados.js' },
   { src: 'hiper-db.js' },
-  { src: 'resumido-runtime.js' },
-  { src: 'resumido-gerador.js' },
   { src: 'hiper-cpf-autofill.js' },
 ];
 
@@ -41,13 +37,6 @@ function loadNextModule(modules, index) {
   (document.head || document.documentElement).appendChild(s);
 }
 
-// Expõe a URL base da extensão pro contexto da página via atributo (não é
-// afetado por CSP nem depende de <script> continuar no DOM — os módulos abaixo
-// removem a própria tag logo após carregar). Usado por hiper-orcamento.js e
-// resumido-gerador.js pra referenciar vendor/html2canvas e vendor/jspdf com
-// URL absoluta no HTML do orçamento (que vira um documento blob: separado).
-document.documentElement.setAttribute('data-hiper-ext-base', chrome.runtime.getURL(''));
-
 chrome.storage.local.get('hiper_ativo', (r) => {
   if (r.hiper_ativo === false) {
     console.info('[HiperCache] ⏸ Extensão desativada pelo usuário.');
@@ -55,79 +44,6 @@ chrome.storage.local.get('hiper_ativo', (r) => {
   }
   loadNextModule(MODULES, 0);
 });
-
-// ── BroadcastChannel: escuta mensagens vindas da página de orçamento (blob:) ──
-// O interceptor escuta o canal diretamente — sem depender de window.postMessage.
-try {
-  const bc = new BroadcastChannel('hiper_custo_channel');
-
-  bc.onmessage = async (ev) => {
-    const msg = ev.data;
-    if (!msg?.type) return;
-
-    // ── Salva custo de produto ────────────────────────────────────────────────
-    if (msg.type === 'HIPER_CUSTO_SAVE') {
-      console.log('[Interceptor] 📡 BC recebeu custo — id:', msg.id, '| val:', msg.val);
-      await safeStorage(async () => {
-      const key = 'custo:' + msg.id;
-      await chrome.storage.local.set({ 
-        [key]: { data: msg.val, ts: Date.now() } 
-      });
-      console.log('[Interceptor] ✅ Custo salvo — chave:', key);
-      });
-      // Notifica a página principal (para atualizar __hiperCustos em memória)
-      window.postMessage({ type: 'HIPER_CUSTO_SYNC', id: msg.id, val: msg.val }, '*');
-    }
-
-    // ── Salva cliente via PATCH na API ────────────────────────────────────────
-    if (msg.type === 'HIPER_CLIENTE_SAVE') {
-      const { numOrc, cliente } = msg;
-      console.log('[Interceptor] 📡 BC recebeu cliente — orçamento:', numOrc, '| nome:', cliente);
-      try {
-        const res = await fetch(`https://api.sistema.santin.tec.br/pedido/${encodeURIComponent(numOrc)}`, {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ cliente }),
-        });
-        if (res.ok) {
-          console.log('[Interceptor] ✅ Cliente salvo no banco — orçamento:', numOrc, '| nome:', cliente);
-        } else {
-          console.warn('[Interceptor] ⚠️ API retornou', res.status, 'ao salvar cliente');
-        }
-      } catch(e) {
-        console.warn('[Interceptor] ❌ Falha ao salvar cliente na API:', e);
-      }
-    }
-
-    // ── Salva vendedor ────────────────────────────────────────────────────────
-    if (msg.type === 'HIPER_VENDEDOR_SAVE') {
-      await safeStorage(async () => {
-        await chrome.storage.local.set({ 'vendedor': { checked: msg.checked, text: msg.text } });
-        console.log('[Interceptor] ✅ Vendedor salvo:', msg.text);
-      });
-      // Notifica a página original para atualizar __hiperVendedor em memória
-      // (mesmo padrão do HIPER_CUSTO_SYNC)
-      window.postMessage({ type: 'HIPER_VENDEDOR_SYNC', text: msg.text, checked: msg.checked }, '*');
-      console.log('[Interceptor] 📡 Vendedor sync disparado para página original:', msg.text);
-    }
-
-    // ── Carrega vendedor e responde via BC (funciona para blob: também) ───────
-    if (msg.type === 'HIPER_VENDEDOR_LOAD') {
-      await safeStorage(async () => {
-        const result = await chrome.storage.local.get('vendedor');
-        const v = result?.vendedor || { checked: false, text: '' };
-        const bcReply = new BroadcastChannel('hiper_custo_channel');
-        bcReply.postMessage({ type: 'HIPER_VENDEDOR_LOADED', checked: v.checked, text: v.text });
-        bcReply.close();
-        console.log('[Interceptor] ✅ Vendedor carregado e enviado via BC:', v.text);
-      });
-    }
-  };
-
-  console.info('[Interceptor] 📡 BroadcastChannel ativo.');
-} catch(e) {
-  console.warn('[Interceptor] BroadcastChannel não disponível:', e);
-}
 
 // ── Bridge: messages da página principal → chrome.storage ────────────────────
 window.addEventListener('message', async (event) => {
