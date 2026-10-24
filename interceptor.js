@@ -276,21 +276,3 @@ window.addEventListener('message', async (event) => {
   }
   
 });
-// ── Recebe atualizar-situacao do background (webRequest) ─────────────────────
-// O background detecta o PUT via chrome.webRequest e notifica o content script.
-// Aqui repassamos para a página como se fosse um evento normal do hiper-sync.js.
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg?.type !== 'HIPER_ATUALIZAR_SITUACAO') return;
-
-  const { pedidoId, situacaoCod } = msg;
-  console.log('[Interceptor] 📡 atualizar-situacao recebido do background:', pedidoId, situacaoCod);
-
-  // Injeta um evento sintético na página para o hiper-sync.js processar
-  window.postMessage({
-    type:        'HIPER_ATUALIZAR_SITUACAO_PAGE',
-    pedidoId,
-    situacaoCod,
-  }, '*');
-
-  sendResponse({ ok: true });
-});

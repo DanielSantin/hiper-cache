@@ -12,8 +12,7 @@
   "permissions": [
     "storage",
     "scripting",
-    "tabs",
-    "webRequest"
+    "tabs"
   ],
   "host_permissions": [
     "https://tagdrywall.hiper.com.br/*",
