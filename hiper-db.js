@@ -212,7 +212,7 @@
   // ── Marcar orçamento como faturado (estatística) ─────────────────────────────
   // Fire-and-forget: falha silenciosa se o pedido não existir no banco
   // (caso de vendas diretas que nunca viraram orçamento salvo).
-  async function _tentarMarcarFaturado(codigo) {
+  async function _tentarMarcarFaturado(codigo, hiperGuid = null) {
     if (!codigo) return;
     const totalAtual = window.__hiperPedido?.descontos()?.totalDoPedido ?? 0;
 
@@ -220,7 +220,7 @@
       const res = await fetchComTimeout(`${API_BASE}/pedido/${encodeURIComponent(codigo)}/faturar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ total_atual: totalAtual }),
+        body: JSON.stringify({ total_atual: totalAtual, hiper_guid: hiperGuid }),
       });
       if (res.ok) {
         console.info(`[HiperDB] ✅ Orçamento ${codigo} marcado como faturado.`);

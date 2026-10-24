@@ -132,7 +132,10 @@
     // salvo/carregado pela extensão), não o código do pedido no Hiper.
     if (req.situacao === SITUACAO_PEDIDO && window.__hiperPedidoAberto
         && typeof window._tentarMarcarFaturado === 'function') {
-      window._tentarMarcarFaturado(window.__hiperPedidoAberto);
+      // GUID do pedido no Hiper: o do request (edição) ou o da resposta (novo).
+      // O site do orçamento usa pra montar o link "Acessar venda".
+      const guid = req.id || (typeof respBody?.data === 'string' ? respBody.data : null);
+      window._tentarMarcarFaturado(window.__hiperPedidoAberto, guid);
     }
   }
 
