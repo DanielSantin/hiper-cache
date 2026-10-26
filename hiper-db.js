@@ -182,10 +182,7 @@
       codigo,
       vendedor:  getVendedor(),
       total:     dados.total     || 0,
-      desconto:  dados.desconto  || 0,
-      parcelas:  dados.parcelas  || 1,
-      cliente:   dados.cliente   || '',
-      descricao: dados.descricao || '',
+      // cliente/descrição/desconto/parcelas são do site: a API mantém o que já tem
       rascunho:  dados.rascunho === true,
       itens: dados.itens.map(it => ({
         idProduto:       it.idProduto      || null,
