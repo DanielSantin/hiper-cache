@@ -64,9 +64,15 @@ backend waits ~10 s before reading. The ids come from the request (`id` on salva
 the others). A new order (`id: null`) and a batch selection by filter become `recentes: true`, and
 the new order's GUID is sent again once `salvar` responds (`data` = GUID). The backend
 reads the order and reconciles stock itself (`hiper-database/routers/pedidos_sync.py`). Don't
-rebuild items or state client-side again: doing that is what broke with every Hiper UI change. NF-e
-stock entry (`confirmar-importacao`) and the catalog cache (`_simularResposta`) live in the same
-file.
+rebuild items or state client-side again: doing that is what broke with every Hiper UI change. The
+catalog cache (`_simularResposta`) lives in the same file.
+
+NF-e stock entry (`confirmar-importacao`) works the same way since 1.20: it only posts
+`POST /hiper-nfe-mudou { id_nfe }`, and the backend reads the note in Hiper and credits stock
+(`hiper-database/routers/nfe_sync.py`, with a periodic check that catches lost notices). If the
+backend answers `ativo: false` (sync off) or 404, it falls back to the old item payload
+(`HIPER_ENTRADA_ESTOQUE` → `POST /entrada-estoque` in `interceptor.js`). Old extensions (≤ 1.19)
+still send that payload; with the sync on, the backend discards its items and treats it as a notice.
 
 Nothing product/order-number related lives in `background.js` anymore — it used to (idempotency-key
 counter over `chrome.storage`), but that was replaced with a direct `fetch` from `hiper-orcamento.js`

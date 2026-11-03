@@ -245,10 +245,9 @@ window.addEventListener('message', async (event) => {
   }
 
   if (msg.type === 'HIPER_ENTRADA_ESTOQUE') {
-    // TODO: falha aqui (rede caiu, backend fora do ar, 5xx) só vira console.warn —
-    // diferente do fluxo de hiper-evento, não fica nada pendente no servidor pra
-    // reprocessar depois. Dar a essa entrada a mesma rede de segurança que
-    // /hiper-evento tem (persistir com processado=0 + endpoint de reprocessar).
+    // Só o envio antigo dos itens — usado quando o backend responde que o sync
+    // de NF-e (lê a nota no Hiper, com check periódico) está desligado. Com o
+    // sync ligado, hiper-sync.js só manda o aviso /hiper-nfe-mudou.
     try {
       const res = await fetch(`https://api.sistema.santin.tec.br/entrada-estoque`, {
         method: 'POST',

@@ -21,7 +21,13 @@
 //    itens/estado — isso quebrava a cada mudança de tela do Hiper. Aviso
 //    perdido não é fatal: o check geral do backend pega divergências.
 //
-// 2. ENTRADA DE ESTOQUE por NF-e (confirmar-importacao) — inalterado.
+// 2. ENTRADA DE ESTOQUE por NF-e (confirmar-importacao) — também só AVISA
+//    (POST /hiper-nfe-mudou { id_nfe }) quando o Hiper confirma a importação;
+//    o backend lê a nota no Hiper e credita o estoque
+//    (hiper-database/routers/nfe_sync.py), e um check periódico pega aviso
+//    perdido. Até a 1.19 a extensão mandava os itens (POST /entrada-estoque) e
+//    uma falha perdia a nota pra sempre. Se o backend responder que o sync está
+//    desligado (ou não conhecer a rota), cai no envio antigo dos itens.
 //
 // 3. CATÁLOGO EM CACHE — o XHRProxy responde busca/produto/preço/estoque do
 //    seletor de produto pelo cache (responderDoCache, hiper-pedido-store.js).
@@ -141,9 +147,41 @@
 
   // ── 2. Entrada de estoque por NF-e ───────────────────────────────────────────
 
-  function _processarNfe(bodyStr) {
+  async function _processarNfe(bodyStr) {
     const body = _json(bodyStr);
     if (!body) { _warn('confirmar-importacao: body ausente ou inválido'); return; }
+    if (await _avisarNfe(String(body.IdNfe))) return;
+    _enviarItensNfe(body);
+  }
+
+  /** true = backend assumiu a nota (sync de NF-e ligado). */
+  async function _avisarNfe(idNfe, tentativa = 1) {
+    try {
+      const r = await _nativeFetch(`${API_BASE}/hiper-nfe-mudou`, {
+        method:    'POST',
+        headers:   { 'Content-Type': 'text/plain' },
+        body:      JSON.stringify({ id_nfe: idNfe }),
+        keepalive: true,
+      });
+      if (r.status === 404 || r.status === 405) return false;   // backend sem a rota nova
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json().catch(() => ({}));
+      if (j.ativo === false) return false;
+      _log(`NF-e ${idNfe} — aviso enviado, o backend lê a nota no Hiper.`);
+      return true;
+    } catch (e) {
+      if (tentativa < 2) {
+        await new Promise(ok => setTimeout(ok, RETRY_MS));
+        return _avisarNfe(idNfe, tentativa + 1);
+      }
+      // Backend fora do ar: o check periódico dele pega a nota depois.
+      _warn('Aviso de NF-e não entregue ao backend:', e?.message || e);
+      return true;
+    }
+  }
+
+  /** Envio antigo (até a 1.19): os itens da importação vão pro /entrada-estoque. */
+  function _enviarItensNfe(body) {
     const itens = (body.SugestoesDeProduto || [])
       .filter(p => p.IdProduto && p.Quantidade > 0)
       .map(p => ({
