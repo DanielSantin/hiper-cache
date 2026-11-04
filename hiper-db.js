@@ -233,6 +233,32 @@
     }
   }
 
+  // ── Vincular orçamento ao pedido do Hiper (salvo como orçamento) ─────────────
+  // Só grava o GUID no banco. O backend marca faturado sozinho quando esse
+  // pedido virar pedido no Hiper, mesmo sem a extensão ver (routers/pedidos_sync.py).
+  // Fire-and-forget: 404 = venda direta ou backend antigo sem a rota.
+  async function _tentarVincular(codigo, hiperGuid) {
+    if (!codigo || !hiperGuid) return;
+    const totalAtual = window.__hiperPedido?.descontos()?.totalDoPedido ?? 0;
+
+    try {
+      const res = await fetchComTimeout(`${API_BASE}/pedido/${encodeURIComponent(codigo)}/vincular`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ total_atual: totalAtual, hiper_guid: hiperGuid }),
+      });
+      if (res.ok) {
+        console.info(`[HiperDB] 🔗 Orçamento ${codigo} vinculado ao pedido ${hiperGuid} do Hiper.`);
+      } else if (res.status === 404) {
+        console.info(`[HiperDB] ℹ️ ${codigo} não vinculado (não existe no banco ou backend sem a rota).`);
+      } else {
+        console.warn(`[HiperDB] ⚠️ Vincular ${codigo} retornou ${res.status}.`);
+      }
+    } catch (e) {
+      console.warn('[HiperDB] ⚠️ Erro ao vincular orçamento (não bloqueia nada):', e);
+    }
+  }
+
 
 
   // ── Recuperação de pedido ─────────────────────────────────────────────────────
@@ -708,5 +734,6 @@
   })();
 
   window._tentarMarcarFaturado = _tentarMarcarFaturado;
+  window._tentarVincular       = _tentarVincular;
   console.info('[HiperDB] ✅ Módulo DB carregado. API:', API_BASE);
 })();

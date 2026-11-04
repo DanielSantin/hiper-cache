@@ -50,7 +50,8 @@
   const RE_CONFIRMAR_IMPORTACAO = /fiscal\/importacao-de-xml-de-documento-fiscal\/api\/confirmar-importacao/i;
 
   const MODO_SELECAO_IDS = 0;   // enum Vl do bundle: 0 = Ids, 1 = Filtro
-  const SITUACAO_PEDIDO  = 2;   // enum At do bundle
+  const SITUACAO_ORCAMENTO = 1; // enum At do bundle
+  const SITUACAO_PEDIDO    = 2;
 
   // ── Utilitários ───────────────────────────────────────────────────────────────
 
@@ -142,6 +143,14 @@
       // O site do orçamento usa pra montar o link "Acessar venda".
       const guid = req.id || (typeof respBody?.data === 'string' ? respBody.data : null);
       window._tentarMarcarFaturado(window.__hiperPedidoAberto, guid);
+    }
+
+    // Salvo como ORÇAMENTO no Hiper → só vincula o GUID. Se depois virar
+    // pedido sem ninguém reabrir esta tela, o backend marca faturado.
+    if (req.situacao === SITUACAO_ORCAMENTO && window.__hiperPedidoAberto
+        && typeof window._tentarVincular === 'function') {
+      const guid = req.id || (typeof respBody?.data === 'string' ? respBody.data : null);
+      window._tentarVincular(window.__hiperPedidoAberto, guid);
     }
   }
 
