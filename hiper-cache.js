@@ -517,11 +517,6 @@
             }
         }
 
-        // C) Botão "Gerar Orçamento" pede os dados
-        if (msg?.type === 'HIPER_CUSTO_EXPORT_REQ') {
-            window.postMessage({ type: 'HIPER_CUSTO_EXPORT_DATA', custos: window.__hiperCustos }, '*');
-        }
-
     });
 
     // ── 6. Inicialização ──────────────────────────────────────────────────────

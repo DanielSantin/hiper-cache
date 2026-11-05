@@ -44,15 +44,12 @@ input rather than coercing to `0` — `hiper-widgets.js` relies on that `NaN` to
 something unreadable" (ignore the edit) apart from a real value; `kit.js` wants a plain `0` and add `isNaN(v) ? 0 : v` themselves at the call site. Don't
 "simplify" that split — the two contracts aren't interchangeable.
 
-### `background.js` (service worker) only exists for two `chrome.*`-only jobs
+### `background.js` is an empty service worker; permissions are `storage` only
 
-1. `chrome.scripting.executeScript({ world: 'MAIN' })` to blank out `window.print` on the
-   `/Imprimir?tag_view=1` page — bypasses page CSP, which only a background/service-worker context
-   can do.
-2. `chrome.webRequest.onCompleted` on the **old** API's `atualizar-situacao` PUT requests, relayed
-   `background.js → interceptor.js → postMessage`. **Obsolete since 2026-09**: the new pedido
-   screen doesn't use that API, and `hiper-sync.js` no longer listens for the message. It's left in
-   place only because removing a permission means a new Web Store review.
+Since 1.19 `background.js` only logs `onInstalled` (the `window.print` blanking and the
+`webRequest` relay were removed). 1.22 dropped `tabs` (the Web Store rejected 1.21 for requesting
+it unused) and `scripting` (its only user was the popup's "Exportar custos (JSON)" button, removed).
+Every permission in `manifest.json` must have live code using it, or the review rejects the build.
 
 ### `hiper-sync.js`: pedidos only *notify* the backend
 

@@ -187,24 +187,3 @@ async function abrirOrcamento() {
   }
   _registrar();
 })();
-
-// ── Exportar custos ───────────────────────────────────────────────────────────
-window.__hiperExportarCustos = async function() {
-  window.postMessage({ type: 'HIPER_CUSTO_EXPORT_REQ' }, '*');
-};
-
-window.addEventListener('message', (ev) => {
-  if (ev.source !== window) return;
-  if (ev.data?.type === 'HIPER_CUSTO_EXPORT_DATA') {
-    const json = JSON.stringify(ev.data.custos, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'custos_tag_' + new Date().toISOString().slice(0,10) + '.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  }
-});

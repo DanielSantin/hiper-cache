@@ -44,8 +44,8 @@ descartar, não afeta nada no fluxo atual).
    - `host_permissions` (`tagdrywall.hiper.com.br`, `api.hiper.com.br`,
      `api.sistema.santin.tec.br`): necessário pra interceptar e complementar as
      requisições do Hiper e falar com o backend interno da loja.
-   - `tabs`, `scripting`: necessário pra injetar os módulos da extensão nas páginas
-     do Hiper e reagir a mudanças de aba.
+   - `storage`: guarda as opções do popup e o cache local. Não peça permissão que
+     o código não usa: a 1.21 foi rejeitada por causa de `tabs` sobrando no manifest.
    - Precisa de uma URL de política de privacidade — pode ser uma página simples
      dizendo que os dados ficam só entre o navegador do usuário e o backend interno
      da loja, sem terceiros. **Seja explícito sobre o CPF**: `hiper-cpf-autofill.js`

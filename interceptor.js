@@ -71,17 +71,6 @@ window.addEventListener('message', async (event) => {
     });
   }
 
-  if (msg.type === 'HIPER_CUSTO_EXPORT_REQ') {
-    await safeStorage(async () => {
-      const all    = await chrome.storage.local.get(null);
-      const custos = {};
-      for (const [k, v] of Object.entries(all)) {
-        if (k.startsWith('custo:')) custos[k.slice(6)] = v;
-      }
-      window.postMessage({ type: 'HIPER_CUSTO_EXPORT_DATA', custos }, '*');
-    });
-  }
-
   if (msg.type === 'HIPER_CUSTO_LOAD_ALL') {
     await safeStorage(async () => {
       const all    = await chrome.storage.local.get(null);
