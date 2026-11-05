@@ -962,6 +962,7 @@ async function aplicarKitGesso(nomeKit) {
 
   kitsAtivos.set(id, estadoInicial);
   console.log(`[HiperCache] ✅ Kit "${id}" ativo`);
+  return id;
 }
 
 // ── APLICAR PAREDE PARAMETRIZADA ──────────────────────────────────────
@@ -1514,6 +1515,85 @@ function _bindPainelEventos(lista) {
   });
 }
 
+// ── MEDIDAS VINDAS DO PLANÍMETRO ──────────────────────────────────────
+// O planímetro (tagTools, hiper_link.py) abre
+//   /vendas/pedido-de-venda/cadastro?planimetro=<JSON>
+// com {"v":1,"origem":"x.pdf","kits":[{"tipo":"estruturado","A":10,"P":5},
+//   {"tipo":"parede","montante":"70","A":28},{"tipo":"cortineiro","A":3.2}]}.
+// Os kits são criados como se o funcionário tivesse clicado no painel
+// (vivos e editáveis; o "recuperar" é outra coisa: quantidades congeladas).
+// O parâmetro é guardado no localStorage logo ao carregar e só é consumido
+// quando o painel do cadastro monta: sobrevive ao SPA reescrever a URL e a
+// um login no meio do caminho (vale 10 min). Sai da URL na hora, então um
+// F5 não aplica de novo.
+const PLANIMETRO_CHAVE    = 'hiperCache:planimetro:v1';
+const PLANIMETRO_VALIDADE = 10 * 60 * 1000;
+
+(function _capturarPlanimetro() {
+  const search = new URLSearchParams(location.search);
+  const bruto  = search.get('planimetro');
+  if (!bruto) return;
+  try {
+    JSON.parse(bruto);
+    localStorage.setItem(PLANIMETRO_CHAVE, JSON.stringify({ t: Date.now(), dados: bruto }));
+  } catch (e) {
+    console.warn('[HiperKit] Parâmetro planimetro inválido — ignorado.', e);
+  }
+  search.delete('planimetro');
+  const q = search.toString();
+  history.replaceState(history.state, '', location.pathname + (q ? '?' + q : '') + location.hash);
+})();
+
+async function aplicarMedidasPlanimetro(kits) {
+  let n = 0;
+  for (const k of kits) {
+    const A = Number(k?.A) || 0;
+    if (!(A > 0)) continue;
+    if (k.tipo === 'parede') {
+      // Sempre ST/ST simples por enquanto; o funcionário troca no card.
+      const id = await aplicarParedeCfg({ faceA: 'ST', faceB: 'ST', faces: 2, estrutura: 'simples' });
+      if (!id) continue;
+      kitsAtivos.get(id).A = A;
+      const tam = String(k.montante || '70');
+      if (tam !== '70' && COD_MONTANTE[tam]) await _trocarTamanhoEstrutura(id, tam);
+    } else if (KIT_INPUTS[k.tipo]) {
+      const id = await aplicarKitGesso(k.tipo);
+      if (!id) continue;
+      const estado = kitsAtivos.get(id);
+      estado.A = A;
+      if (k.P != null) estado.P = Number(k.P) || 0;
+    } else {
+      console.warn(`[HiperKit] Kit "${k?.tipo}" do planímetro desconhecido — ignorado.`);
+      continue;
+    }
+    n++;
+  }
+  renderizarPainel();
+  recalcularTudo();
+  return n;
+}
+
+async function _aplicarPlanimetroPendente() {
+  let reg = null;
+  try { reg = JSON.parse(localStorage.getItem(PLANIMETRO_CHAVE) || 'null'); } catch (e) { /* corrompido */ }
+  if (!reg) return;
+  localStorage.removeItem(PLANIMETRO_CHAVE);   // antes de tudo: nunca aplica duas vezes
+  if (!(Date.now() - reg.t < PLANIMETRO_VALIDADE)) return;
+  let dados = null;
+  try { dados = JSON.parse(reg.dados); } catch (e) { /* inválido */ }
+  if (dados?.v !== 1 || !Array.isArray(dados.kits)) {
+    console.warn('[HiperKit] Medidas do planímetro em formato desconhecido — ignoradas.');
+    return;
+  }
+  // Mesma espera do auto-recuperar: token da API e folga pra inicialização
+  // do cadastro não sobrescrever as linhas.
+  let t = 0;
+  while (!window.__hiperPedido?.store('general')?.token && t++ < 50) await delay(200);
+  await delay(500);
+  const n = await aplicarMedidasPlanimetro(dados.kits);
+  console.info(`[HiperKit] 📐 ${n} kit(s) do planímetro aplicados${dados.origem ? ' (' + dados.origem + ')' : ''}.`);
+}
+
 // ── REGISTRO NO CENTRALIZADOR DE UI (hiper-ui.js) ─────────────────────
 // Tela nova (microfrontend): o menu lateral não tem espaço pro painel, então
 // ele ocupa o #footer global do Hiper (que vem com .hidden de fábrica). Só
@@ -1553,6 +1633,7 @@ function _bindPainelEventos(lista) {
     // então getElementById('hiper-painel-kits') retornaria null.
     renderizarPainel(container);
     console.info('[HiperCache] ✅ Painel de estruturas criado.');
+    _aplicarPlanimetroPendente();
     return container;
   }
 
@@ -1571,6 +1652,7 @@ function _bindPainelEventos(lista) {
 
 window.aplicarKitGesso     = aplicarKitGesso;
 window.aplicarParedeCfg    = aplicarParedeCfg;
+window.aplicarMedidasPlanimetro = aplicarMedidasPlanimetro;
 window.recalcularTudo      = recalcularTudo;
 window.calcularRateioKits  = calcularRateioKits;
 window.renderizarPainel    = renderizarPainel;

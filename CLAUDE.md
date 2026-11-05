@@ -195,6 +195,14 @@ rendered into the row's qty field, found via its validation class `Itens[<index 
 Indices shift when a line is removed, so `_renderizarHints()` always re-syncs from scratch (driven by a
 MutationObserver; it only writes when something differs, so it can't loop).
 
+Kits from the planímetro (since 1.22): the tagTools planímetro opens
+`/vendas/pedido-de-venda/cadastro?planimetro=<JSON>` with
+`{"v":1,"origem":"x.pdf","kits":[{"tipo":"estruturado","A":10,"P":5},{"tipo":"parede","montante":"70","A":28},{"tipo":"cortineiro","A":3.2}]}`.
+`_capturarPlanimetro()` in `kit.js` moves it from the URL to `localStorage` on load (valid for 10 min, so
+it survives the SPA rewriting the URL and a login in between), and `_aplicarPlanimetroPendente()` applies
+it when the kits panel mounts, through `aplicarKitGesso` / `aplicarParedeCfg` like a click on the panel.
+The kits stay live and editable, unlike `recuperar`. Walls always come in as ST/ST simples, with the montante size from the link.
+
 ### Popup (`popup.html`/`popup.js`)
 
 Per-profile toggles stored in `chrome.storage.local`: extensão ativa, otimização de busca and
