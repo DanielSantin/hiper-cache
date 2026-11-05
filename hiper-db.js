@@ -55,6 +55,16 @@
 
     const resultado = [];
 
+    // Quantidade de montante/guia digitada no card. "—" (null) e vazio não
+    // vão: ao recuperar, quem ficou sem número divide o resto da linha.
+    const qtdEstrutura = (estado) => {
+      const q = estado.qtdEstrutura ?? {};
+      const r = {};
+      if (typeof q.montante === 'number') r.qtdMontante = q.montante;
+      if (typeof q.guia === 'number')     r.qtdGuia     = q.guia;
+      return r;
+    };
+
     kitsAtivos.forEach((estado, id) => {
       if (estado.tipo === 'portas') {
         resultado.push({
@@ -66,15 +76,19 @@
             larg: g.larg,
             alt:  g.alt,
           })),
+          ...qtdEstrutura(estado),
         });
 
       } else if (estado.tipo === 'parede') {
         resultado.push({
           id,
-          tipo:   'parede',
-          cfg:    { ...estado.cfg },
-          A:      estado.A    || 0,
-          margem: estado.margem != null ? estado.margem : 0,
+          tipo:     'parede',
+          cfg:      { ...estado.cfg },
+          A:        estado.A    || 0,
+          areaVaos: estado.areaVaos || 0,
+          margem:   estado.margem != null ? estado.margem : 0,
+          montante: estado.montante || '70',
+          ...qtdEstrutura(estado),
         });
 
       } else {
@@ -327,27 +341,44 @@
 
     const linhasResolver = _resolvedorDeLinhas(linhaIds);
 
+    const qtdEstrutura = (kit) => {
+      const q = {};
+      if (kit.qtdMontante != null) q.montante = Number(kit.qtdMontante);
+      if (kit.qtdGuia     != null) q.guia     = Number(kit.qtdGuia);
+      return q;
+    };
+
     for (const kit of kits) {
       if (kit.tipo === 'parede') {
-        const linhasDoKit = linhasResolver(window.paredeCodigosAtivos?.(kit.cfg) ?? []);
+        // Com o tamanho salvo, procura primeiro a linha do montante/guia
+        // daquele tamanho (orçamentos antigos não têm: cai na família toda).
+        const tam = kit.montante;
+        const codigos = (window.paredeCodigosAtivos?.(kit.cfg) ?? []).map(c =>
+          tam && Object.values(window.COD_MONTANTE ?? {}).includes(c) ? window.COD_MONTANTE[tam] ?? c
+          : tam && Object.values(window.COD_GUIA ?? {}).includes(c)   ? window.COD_GUIA[tam] ?? c
+          : c);
+        const linhasDoKit = linhasResolver(codigos);
         kitsAtivos.set(kit.id, {
-          tipo:        'parede',
-          cfg:         { ...kit.cfg },
-          A:           kit.A      || 0,
-          margem:      kit.margem || 0,
-          montante:    _tamanhoMontante(linhasDoKit),
-          _restaurado: true,
-          linhas:      linhasDoKit,
+          tipo:         'parede',
+          cfg:          { ...kit.cfg },
+          A:            kit.A        || 0,
+          areaVaos:     kit.areaVaos || 0,
+          margem:       kit.margem   || 0,
+          montante:     _tamanhoMontante(linhasDoKit),
+          qtdEstrutura: qtdEstrutura(kit),
+          _restaurado:  true,
+          linhas:       linhasDoKit,
         });
 
       } else if (kit.tipo === 'portas') {
         kitsAtivos.set(kit.id, {
-          tipo:        'portas',
-          nomeKit:     'portas',
-          A:           0,
-          grupos:      (kit.grupos || []).map(g => ({ ...g })),
-          _restaurado: true,
-          linhas:      linhasResolver(window.KITS_GESSO?.portas ?? []),
+          tipo:         'portas',
+          nomeKit:      'portas',
+          A:            0,
+          grupos:       (kit.grupos || []).map(g => ({ ...g })),
+          qtdEstrutura: qtdEstrutura(kit),
+          _restaurado:  true,
+          linhas:       linhasResolver(window.KITS_GESSO?.portas ?? []),
         });
 
       } else {
@@ -379,8 +410,9 @@
   // Liga cada código de um kit à linha restaurada que tem esse produto — ou
   // um equivalente (tier de embalagem, montante 48/90, tabica natural…), já que
   // o banco guarda o produto final da linha, não o código base do kit.
-  // Montante/guia (BLACKLIST no kit.js) são uma linha por parede: uma linha
-  // desses já ligada a um kit não é reaproveitada pelo próximo.
+  // Montante/guia: orçamentos antigos têm uma linha por parede, os novos uma
+  // linha por tamanho dividida entre as paredes. Por isso prefere uma linha
+  // ainda não ligada a nenhum kit e, se não houver, reaproveita uma já ligada.
   function _resolvedorDeLinhas(linhaIds) {
     const store = _storeProdutos();
     const itens = (linhaIds || [])
@@ -396,9 +428,13 @@
 
     return (codigos) => codigos.map(codigo => {
       const familia = equivalentes(codigo);
-      const item = itens.find(i =>
-        familia.has(String(i.idProdutoHiperOnline)) &&
-        !(exclusivos.has(String(i.idProdutoHiperOnline)) && usadas.has(i.id)));
+      // Mesmo produto exato antes do resto da família (montante 90 salvo
+      // não pega a linha do 70 de outra parede).
+      const candidatos = itens
+        .filter(i => familia.has(String(i.idProdutoHiperOnline)))
+        .sort((a, b) => (String(b.idProdutoHiperOnline) === String(codigo)) - (String(a.idProdutoHiperOnline) === String(codigo)));
+      const item = candidatos.find(i =>
+        !(exclusivos.has(String(i.idProdutoHiperOnline)) && usadas.has(i.id))) ?? candidatos[0];
       if (!item) return null;
       const atual = String(item.idProdutoHiperOnline);
       if (exclusivos.has(atual)) usadas.add(item.id);

@@ -45,6 +45,15 @@ for (const [nomeGrupo, niveis] of Object.entries(GRUPOS_VARIACAO)) {
 const COD_MONTANTE = { '48': '80704698', '70': '79831932', '90': '80814793' };
 const COD_GUIA     = { '48': '88849464', '70': '79831929', '90': '80815323' };
 const COD_TABICA   = { branca: '79830939', natural: '79832337' };
+const TODOS_MONTANTES = new Set(Object.values(COD_MONTANTE));
+const TODOS_GUIAS     = new Set(Object.values(COD_GUIA));
+
+// 'montante' | 'guia' | null — papel do código na estrutura da parede/porta.
+function _papelEstrutura(codigo) {
+  if (TODOS_MONTANTES.has(String(codigo))) return 'montante';
+  if (TODOS_GUIAS.has(String(codigo)))     return 'guia';
+  return null;
+}
 
 // Códigos que podem ocupar a MESMA linha de um kit (tier de embalagem,
 // tamanho de montante/guia, cor da tabica). Usado pra achar a linha de um
@@ -404,6 +413,7 @@ const kitsAtivos = new Map();
 // sair da tela não desmonta, então as medidas em edição ficam.
 function _descartarKits() {
   _hintsQuantidade.clear();
+  _qtdEscrita.clear();
   if (!kitsAtivos.size) return;
   kitsAtivos.clear();
   console.info('[HiperKit] 🧹 Saiu do cadastro do pedido — kits descartados.');
@@ -501,16 +511,182 @@ function _renderizarHints() {
 let _hintsAgendado = null;
 function _agendarHints() {
   if (_hintsAgendado) return;
-  _hintsAgendado = setTimeout(() => { _hintsAgendado = null; _renderizarHints(); }, 100);
+  _hintsAgendado = setTimeout(() => {
+    _hintsAgendado = null;
+    _sincronizarEstrutura();
+    _renderizarHints();
+  }, 100);
 }
 
 // Re-sincroniza quando o Hiper re-renderiza a lista de produtos (linha
-// removida, nova linha, troca de produto recriando o campo...). As próprias
-// mutações do render re-agendam uma vez, mas a 2ª passada não muda nada e
-// o ciclo para.
+// removida, nova linha, troca de produto recriando o campo, quantidade
+// digitada na linha...). As próprias mutações do render re-agendam uma vez,
+// mas a 2ª passada não muda nada e o ciclo para.
 new MutationObserver(() => {
-  if (_hintsQuantidade.size || document.querySelector('.hiper-kit-hint')) _agendarHints();
+  if (kitsAtivos.size || _hintsQuantidade.size || document.querySelector('.hiper-kit-hint')) _agendarHints();
 }).observe(document.documentElement, { childList: true, subtree: true });
+
+// ── QUANTIDADE DE MONTANTE/GUIA POR PAREDE ─────────────────────────────
+// Montante e guia de mesmo tamanho ficam numa linha só do pedido, mesmo com
+// várias paredes/portas. Cada kit tem um campo com a SUA quantidade
+// (estado.qtdEstrutura.montante / .guia) e a linha é a soma deles:
+//   número    → o que foi digitado no card
+//   undefined → vazio (conta 0)
+//   null      → "—": o total foi editado direto na linha do pedido e a linha
+//               tem 2+ kits, então não dá pra saber de quem é cada parte.
+// O "resto" de uma linha (quantidade − soma dos números) pertence aos "—".
+// Quando sobra só um "—", ele vira o resto.
+const _qtdEscrita = new Map();   // linhaId → última quantidade que a extensão gravou
+
+function _usuariosDaLinha(linhaId) {
+  const r = [];
+  kitsAtivos.forEach((estado, id) => {
+    const l = estado.linhas.find(l => l.linhaId === linhaId);
+    if (l) r.push({ id, estado, papel: _papelEstrutura(l.codigo) });
+  });
+  return r;
+}
+
+function _qtdKit(estado, papel) {
+  return estado.qtdEstrutura?.[papel];
+}
+
+function _setQtdKit(estado, papel, v) {
+  (estado.qtdEstrutura ??= {})[papel] = v;
+}
+
+function _somaConhecida(usuarios, papel) {
+  return usuarios.reduce((s, u) => {
+    const v = _qtdKit(u.estado, papel);
+    return s + (typeof v === 'number' ? v : 0);
+  }, 0);
+}
+
+function _escreverQtd(linhaId, qtd) {
+  const item  = _itemDaLinha(linhaId);
+  const store = _storeProdutos();
+  if (!item || !store) return;
+  const fator = 10 ** (item.quantidadeCasasDecimais || 0);
+  const q = Math.max(0, Math.round(qtd * fator) / fator);
+  if (item.quantidade !== q) store.setQuantidade(linhaId, q);
+  _qtdEscrita.set(linhaId, item.quantidade);
+}
+
+// Grava na linha a soma dos kits + o resto dos "—" (se houver).
+function _recomporLinha(linhaId, papel, resto) {
+  const usuarios = _usuariosDaLinha(linhaId);
+  if (!usuarios.length || !_linhaExiste(linhaId)) return;
+  const nulos = usuarios.filter(u => _qtdKit(u.estado, papel) === null);
+  const r = Math.max(0, resto || 0);
+  if (nulos.length === 1) _setQtdKit(nulos[0].estado, papel, r);
+  _escreverQtd(linhaId, _somaConhecida(usuarios, papel) + (nulos.length > 1 ? r : 0));
+}
+
+function _restoDaLinha(linhaId, papel) {
+  const item = _itemDaLinha(linhaId);
+  return item ? item.quantidade - _somaConhecida(_usuariosDaLinha(linhaId), papel) : 0;
+}
+
+// Usuário digitou no card do kit.
+function _definirQtdEstrutura(id, papel, texto) {
+  const estado = kitsAtivos.get(id);
+  const linha  = estado?.linhas.find(l => _papelEstrutura(l.codigo) === papel);
+  if (!linha || !_linhaExiste(linha.linhaId)) return;
+
+  const v = String(texto).trim() === '' ? undefined : Math.max(0, num(texto));
+  const eraDesconhecido = _qtdKit(estado, papel) === null;
+  let resto = _restoDaLinha(linha.linhaId, papel);
+  if (eraDesconhecido) resto -= (v ?? 0);   // a parte dele sai do resto dos "—"
+
+  _setQtdKit(estado, papel, v);
+  _recomporLinha(linha.linhaId, papel, resto);
+  _atualizarCamposEstrutura();
+}
+
+// Um kit saiu da linha (removido ou trocou de tamanho). Chamar DEPOIS de
+// tirar a linha do estado dele. `valor` = a quantidade que ele tinha.
+function _sairDaLinhaEstrutura(linhaId, papel, valor) {
+  if (valor === undefined || !_linhaExiste(linhaId)) return;
+  const resto = _restoDaLinha(linhaId, papel) - (typeof valor === 'number' ? valor : 0);
+  _recomporLinha(linhaId, papel, resto);
+}
+
+// Detecta quantidade digitada direto na linha do pedido.
+function _sincronizarEstrutura() {
+  let mudou = false;
+  const vistas = new Set();
+  kitsAtivos.forEach((estado) => {
+    estado.linhas.forEach(({ codigo, linhaId }) => {
+      const papel = _papelEstrutura(codigo);
+      if (!papel || vistas.has(linhaId)) return;
+      vistas.add(linhaId);
+      const item = _itemDaLinha(linhaId);
+      if (!item || item.cancelado) return;
+
+      const L = item.quantidade;
+      const usuarios = _usuariosDaLinha(linhaId);
+      if (!_qtdEscrita.has(linhaId)) {
+        _qtdEscrita.set(linhaId, L);
+        // Kit recuperado do banco: os que vieram sem número (orçamento
+        // antigo, ou estavam "—") ficam com o que sobra da linha.
+        if (usuarios.every(u => u.estado._restaurado)) {
+          const semNumero = usuarios.filter(u => _qtdKit(u.estado, papel) === undefined);
+          const resto = L - _somaConhecida(usuarios, papel);
+          if (semNumero.length && Math.abs(resto) > 1e-9) {
+            semNumero.forEach(u => _setQtdKit(u.estado, papel, semNumero.length === 1 ? Math.max(0, resto) : null));
+            mudou = true;
+          }
+        }
+        return;
+      }
+      if (L === _qtdEscrita.get(linhaId)) return;
+
+      _qtdEscrita.set(linhaId, L);
+      usuarios.forEach(u => _setQtdKit(u.estado, papel, usuarios.length === 1 ? L : null));
+      mudou = true;
+    });
+  });
+  if (mudou) _atualizarCamposEstrutura();
+}
+
+function _fmtQtd(v) {
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+}
+
+// Atualiza os campos dos cards sem re-renderizar o painel (não rouba o foco).
+function _atualizarCamposEstrutura(raiz = document.getElementById('hiper-painel-kits')) {
+  if (!raiz) return;
+  const demanda = calcularDemanda();
+  raiz.querySelectorAll('input[data-estrutura]').forEach(el => {
+    const estado = kitsAtivos.get(el.dataset.id);
+    const papel  = el.dataset.estrutura;
+    if (!estado) return;
+    const v = _qtdKit(estado, papel);
+    const linha = estado.linhas.find(l => _papelEstrutura(l.codigo) === papel);
+    const calc  = linha ? demanda.get(linha.linhaId)?.porKit.get(el.dataset.id) : null;
+
+    el.placeholder = v === null ? '—' : (calc > 0 ? `≈ ${_fmtQtd(calc)}` : '0');
+    el.title = v === null
+      ? 'O total foi editado direto na linha do pedido, que é dividida com outro kit. Digite aqui a quantidade desta parede.'
+      : 'Quantidade desta parede (a linha do pedido é a soma de todas as paredes).';
+    if (el === document.activeElement) return;
+    const texto = typeof v === 'number' ? String(v) : '';
+    if (el.value !== texto) el.value = texto;
+  });
+}
+
+// Fração da linha por kit pelas quantidades digitadas (todas conhecidas).
+function _rateioManual(linhaId) {
+  const usuarios = _usuariosDaLinha(linhaId).filter(u => u.papel);
+  if (!usuarios.length) return null;
+  const vals = usuarios.map(u => _qtdKit(u.estado, u.papel));
+  if (vals.some(v => v === null)) return null;
+  const soma = vals.reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
+  if (!(soma > 0)) return null;
+  const r = {};
+  usuarios.forEach((u, i) => { r[u.id] = (typeof vals[i] === 'number' ? vals[i] : 0) / soma; });
+  return r;
+}
 
 // ── SETAR QUANTIDADE ───────────────────────────────────────────────────
 function setarQuantidade(linhaId, valor, valorBruto = null, apenasHint = false) {
@@ -589,16 +765,22 @@ async function _abrirLinhas(codigos, linhasExistentes) {
 }
 
 // Linhas já abertas por kits ativos (codigo → linhaId).
-function _linhasAbertas({ excluirBlacklist = false } = {}) {
+// Montante/guia entram aqui pelo código REAL da linha (48/70/90), então duas
+// paredes com o mesmo tamanho dividem a mesma linha.
+function _linhasAbertas() {
   const mapa = new Map();
   kitsAtivos.forEach((estado) => {
     estado.linhas.forEach(({ codigo, linhaId }) => {
       if (!_linhaExiste(linhaId)) return;
-      if (excluirBlacklist && BLACKLIST_SETAR.has(codigo)) return;
       mapa.set(codigo, linhaId);
     });
   });
   return mapa;
+}
+
+// Área da parede usada no cálculo do material: total − vãos.
+function _areaLiquida(estado) {
+  return Math.max(0, num(estado.A) - num(estado.areaVaos ?? 0));
 }
 
 // ── CALCULAR ÁREA TOTAL DE PORTAS ──────────────────────────────────────
@@ -637,7 +819,9 @@ function calcularDemanda() {
       formulas = FORMULAS_GESSO['portas'] ?? {};
 
     } else if (estado.tipo === 'parede') {
-      A = num(estado.A); P = 0; cant = 3.15;
+      // Vãos (portas/janelas) saem só do material; estado.A segue sendo a
+      // área total, que o resumido usa pra mão de obra.
+      A = _areaLiquida(estado); P = 0; cant = 3.15;
       formulas = paredeGerarFormulas(estado.cfg);
 
     } else {
@@ -683,6 +867,9 @@ function calcularRateioKits() {
   calcularDemanda().forEach(({ porKit }, linhaId) => {
     const kits = [...porKit.keys()];
     if (!kits.length) return;
+    // Montante/guia: vale o que foi digitado em cada card, quando se sabe tudo.
+    const manual = _rateioManual(linhaId);
+    if (manual) { rateio[linhaId] = manual; return; }
     const qtds = kits.map(k => { const q = porKit.get(k); return Number.isFinite(q) ? Math.max(q, 0) : 0; });
     const soma = qtds.reduce((s, q) => s + q, 0);
     const r = {};
@@ -718,6 +905,7 @@ function recalcularTudo() {
       setarQuantidade(linhaId, qtdFinal, qtdBruta, apenasHint);
     }
   });
+  _atualizarCamposEstrutura();   // placeholder "≈ x" de cada card
 }
 
 // ── REMOVER KIT ────────────────────────────────────────────────────────
@@ -727,15 +915,21 @@ function removerKit(id) {
 
   const store = _storeProdutos();
   if (estadoRemovido && store) {
-    estadoRemovido.linhas.forEach(({ linhaId }) => {
+    estadoRemovido.linhas.forEach(({ codigo, linhaId }) => {
       // Verifica pelo id da linha — não pelo código — porque dois kits podem
-      // ter linhas separadas para o mesmo produto (ex: montante 70 em duas paredes).
+      // ter linhas separadas para o mesmo produto (ex: montante 70 numa
+      // parede e montante de orçamento antigo recuperado).
       const usadaEmOutroKit = [...kitsAtivos.values()].some(est =>
         est.linhas.some(l => l.linhaId === linhaId)
       );
       if (!usadaEmOutroKit && _linhaExiste(linhaId)) {
         store.removerItem(linhaId);
         _hintsQuantidade.delete(linhaId);
+        _qtdEscrita.delete(linhaId);
+      } else if (usadaEmOutroKit) {
+        // Montante/guia dividido: tira da linha a parte desta parede.
+        const papel = _papelEstrutura(codigo);
+        if (papel) _sairDaLinhaEstrutura(linhaId, papel, _qtdKit(estadoRemovido, papel));
       }
     });
     _agendarHints();
@@ -774,18 +968,73 @@ async function aplicarKitGesso(nomeKit) {
 async function aplicarParedeCfg(cfg) {
   const id = 'parede_' + Date.now();
 
-  // Aproveita linhas já abertas por outros kits.
-  // Montante e guia (BLACKLIST_SETAR) nunca são compartilhados — cada parede
-  // precisa de uma linha própria para poder ter um tamanho independente.
-  const linhasDoKit = await _abrirLinhas(
-    paredeCodigosAtivos(cfg),
-    _linhasAbertas({ excluirBlacklist: true }),
-  );
+  // Aproveita linhas já abertas por outros kits — inclusive montante/guia do
+  // mesmo tamanho (70 ao entrar). Trocar o tamanho depois separa a linha
+  // (_trocarTamanhoEstrutura).
+  const linhasDoKit = await _abrirLinhas(paredeCodigosAtivos(cfg), _linhasAbertas());
   if (!linhasDoKit) return null;
 
   kitsAtivos.set(id, { tipo: 'parede', cfg: { ...cfg }, A: 0, montante: '70', linhas: linhasDoKit });
   console.log(`[HiperCache] ✅ Parede "${id}" ativa — ${paredeLabelCfg(cfg)}`);
   return id;
+}
+
+// ── TROCAR TAMANHO DO MONTANTE/GUIA DE UMA PAREDE ─────────────────────
+// Linha só desta parede e nenhuma outra com o tamanho novo → troca o produto
+// na própria linha (mantém a quantidade). Senão a parede sai da linha atual
+// (levando a quantidade dela) e entra na linha do tamanho novo — a de outro
+// kit, se já existir, ou uma nova.
+async function _trocarTamanhoEstrutura(id, novoTam) {
+  const estado = kitsAtivos.get(id);
+  if (!estado) return;
+
+  for (const [papel, mapa] of [['montante', COD_MONTANTE], ['guia', COD_GUIA]]) {
+    const linha = estado.linhas.find(l => _papelEstrutura(l.codigo) === papel);
+    if (!linha) continue;
+    const novoCod = mapa[novoTam];
+    if (linha.codigo === novoCod) continue;
+
+    const antigo  = linha.linhaId;
+    const outros  = _usuariosDaLinha(antigo).filter(u => u.id !== id);
+    const destino = _linhasAbertas().get(novoCod);
+
+    if (!outros.length && !destino) {
+      if (await _trocarProduto(antigo, novoCod)) linha.codigo = novoCod;
+      continue;
+    }
+
+    let novoLinhaId = destino;
+    if (!novoLinhaId) {
+      const dados = await window.__hiperPedido?.obterProduto(novoCod);
+      if (!dados) {
+        console.warn(`[HiperCache] ⚠ Produto ${novoCod} não encontrado no Hiper — tamanho não trocado.`);
+        continue;
+      }
+      novoLinhaId = window.__hiperPedido.novaLinha(dados, 1);
+      if (!novoLinhaId) continue;
+    }
+
+    const valor = _qtdKit(estado, papel);
+    const restoDestino = destino ? _restoDaLinha(destino, papel) : 0;
+    linha.linhaId = novoLinhaId;
+    linha.codigo  = novoCod;
+
+    // Sai da linha antiga
+    if (!outros.length) {
+      if (_linhaExiste(antigo)) _storeProdutos()?.removerItem(antigo);
+      _hintsQuantidade.delete(antigo);
+      _qtdEscrita.delete(antigo);
+    } else {
+      _sairDaLinhaEstrutura(antigo, papel, valor);
+    }
+
+    // Entra na nova. Parte "—" não dá pra levar: fica vazia.
+    if (valor === null) _setQtdKit(estado, papel, undefined);
+    else if (typeof valor === 'number') _recomporLinha(novoLinhaId, papel, restoDestino);
+  }
+
+  estado.montante = novoTam;
+  _agendarHints();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -800,24 +1049,30 @@ function _injetarCssPainel() {
     #hiper-painel-kits{margin:10px 0;padding:8px 10px;border:1px solid #ddd;background:#fdfdfd;border-radius:4px}
     #hiper-painel-kits .hp-titulo{font-size:10px;color:#666;margin-bottom:8px;font-weight:bold;text-transform:uppercase}
     #hiper-painel-kits .hp-lista{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
-    #hiper-painel-kits .hp-item{display:flex;flex-direction:column;width:200px;max-width:200px;box-sizing:border-box;border:1px solid #b8d4f5;border-radius:5px;background:#f0f6ff;overflow:hidden}
+    #hiper-painel-kits .hp-item{display:flex;flex-direction:column;width:250px;max-width:250px;box-sizing:border-box;border:1px solid #b8d4f5;border-radius:5px;background:#f0f6ff;overflow:hidden}
     #hiper-painel-kits .hp-item.parede{border-color:#c8b4f5;background:#f5f0ff}
     #hiper-painel-kits .hp-item.porta{border-color:#f5c880;background:#fff8ee}
-    #hiper-painel-kits .hp-head{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:#dce8ff;border-bottom:1px solid #b8d4f5}
+    #hiper-painel-kits .hp-head{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#dce8ff;border-bottom:1px solid #b8d4f5}
     #hiper-painel-kits .hp-item.parede .hp-head{background:#e4d4ff;border-bottom-color:#c8b4f5}
     #hiper-painel-kits .hp-item.porta .hp-head{background:#ffe8c0;border-bottom-color:#f5c880}
-    #hiper-painel-kits .hp-body{padding:7px 8px;display:flex;flex-direction:column;gap:4px}
-    #hiper-painel-kits .hp-field-row{display:flex;align-items:center;gap:6px;min-height:24px}
-    #hiper-painel-kits .hp-row-lbl{width:66px;font-size:11px;color:#777;flex-shrink:0;white-space:nowrap}
+    #hiper-painel-kits .hp-body{padding:9px 10px;display:flex;flex-direction:column;gap:6px}
+    #hiper-painel-kits .hp-field-row{display:flex;align-items:center;gap:6px;min-height:30px}
+    #hiper-painel-kits .hp-row-lbl{width:82px;font-size:13px;color:#555;flex-shrink:0;white-space:nowrap}
     #hiper-painel-kits .hp-row-val{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
-    #hiper-painel-kits .hp-row-unit{font-size:11px;color:#aaa;flex-shrink:0}
-    #hiper-painel-kits .hp-badge{font-size:12px;font-weight:bold;color:#1a5c1a;white-space:nowrap}
+    #hiper-painel-kits .hp-row-unit{font-size:12px;color:#888;flex-shrink:0}
+    #hiper-painel-kits .hp-badge{font-size:14px;font-weight:bold;color:#1a5c1a;white-space:nowrap}
     #hiper-painel-kits .hp-badge.porta{color:#7a3a00}
     #hiper-painel-kits .hp-badge.parede{color:#3a007a}
     #hiper-painel-kits .hp-lbl{font-size:11px;color:#777;white-space:nowrap;flex-shrink:0}
     #hiper-painel-kits .hp-lbl.m2{font-size:11px;color:#999}
-    #hiper-painel-kits .hp-inp{flex:1;min-width:0;padding:2px 5px;font-size:13px;text-align:left;border:1px solid #b0c8e8;border-radius:3px;height:24px;background:#fff;box-sizing:border-box}
-    #hiper-painel-kits .hp-btn-rm{font-size:11px;padding:1px 7px;border:none;border-radius:3px;background:#e55;color:#fff;cursor:pointer;line-height:18px;flex-shrink:0}
+    #hiper-painel-kits .hp-inp{flex:1;min-width:0;padding:3px 7px;font-size:15px;text-align:left;border:1px solid #b0c8e8;border-radius:3px;height:30px;background:#fff;box-sizing:border-box}
+    #hiper-painel-kits .hp-btn-rm{font-size:13px;padding:2px 9px;border:none;border-radius:3px;background:#e55;color:#fff;cursor:pointer;line-height:20px;flex-shrink:0}
+    #hiper-painel-kits .hp-vaos{margin-top:4px;padding:7px 8px;border:2px dashed #d9534f;border-radius:5px;background:#fff1f0;display:flex;flex-direction:column;gap:5px}
+    #hiper-painel-kits .hp-vaos-tit{font-size:13px;font-weight:bold;color:#b02a25}
+    #hiper-painel-kits .hp-vaos-sinal{font-size:20px;font-weight:bold;color:#b02a25;line-height:1;flex-shrink:0}
+    #hiper-painel-kits .hp-vaos .hp-inp{border-color:#e8a19e;color:#b02a25;font-weight:bold}
+    #hiper-painel-kits .hp-vaos-nota{font-size:12px;color:#7a4a48;line-height:1.35}
+    #hiper-painel-kits .hp-vaos-nota b{color:#000}
     #hiper-painel-kits .hp-btn-add-grupo{font-size:11px;padding:2px 9px;border:1px dashed #b87a00;border-radius:3px;background:transparent;color:#b87a00;cursor:pointer;white-space:nowrap;margin-top:2px}
     #hiper-painel-kits .hp-add-wrap{width:100%;margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
     #hiper-painel-kits .hp-add-lbl{font-size:10px;color:#aaa}
@@ -827,9 +1082,9 @@ function _injetarCssPainel() {
     #hiper-painel-kits .hp-parede-form select{padding:1px 3px;font-size:11px;border:1px solid #c0a8e8;border-radius:3px;height:22px;background:#fff;color:#333}
     #hiper-painel-kits .hp-btn-add-parede{font-size:11px;font-weight:bold;padding:2px 10px;border:1px solid #8a5cd0;border-radius:3px;background:#f0e8ff;color:#5a1fa0;cursor:pointer;white-space:nowrap}
     #hiper-painel-kits .hp-btn-add-parede:hover{background:#e0d0ff}
-    #hiper-painel-kits .hp-btn-tabica{font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer;color:#666;white-space:nowrap;flex-shrink:0}
+    #hiper-painel-kits .hp-btn-tabica{font-size:12px;padding:2px 8px;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer;color:#666;white-space:nowrap;flex-shrink:0}
     #hiper-painel-kits .hp-btn-tabica.ativo{background:#1a7a4a;border-color:#1a7a4a;color:#fff;font-weight:bold}
-    #hiper-painel-kits .hp-btn-montante{font-size:10px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer;color:#666;white-space:nowrap;flex-shrink:0}
+    #hiper-painel-kits .hp-btn-montante{font-size:13px;padding:3px 10px;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer;color:#666;white-space:nowrap;flex-shrink:0}
     #hiper-painel-kits .hp-btn-montante.ativo{background:#2c5fa0;border-color:#2c5fa0;color:#fff;font-weight:bold}
     #hiper-painel-kits .hp-porta-grupo{padding-bottom:5px;border-bottom:1px dashed #f5c880;margin-bottom:4px}
     #hiper-painel-kits .hp-porta-grupo:last-of-type{border-bottom:none;padding-bottom:0;margin-bottom:0}
@@ -842,6 +1097,21 @@ function _injetarCssPainel() {
     #hiper-painel-kits .hp-memoria-tag{font-size:10px;background:#c4ccd8;color:#3a4556;border-radius:3px;padding:1px 5px;font-weight:normal;margin-left:5px;vertical-align:middle}
   `;
   document.head.appendChild(s);
+}
+
+// Linhas "Montantes" / "Guias" do card (só pros papéis que o kit tem).
+// Valor e placeholder vêm de _atualizarCamposEstrutura().
+function _camposEstruturaHTML(id, estado) {
+  return ['montante', 'guia']
+    .filter(papel => estado.linhas.some(l => _papelEstrutura(l.codigo) === papel))
+    .map(papel => `
+      <div class="hp-field-row">
+        <span class="hp-row-lbl">${papel === 'montante' ? 'Montantes' : 'Guias'}</span>
+        <div class="hp-row-val">
+          <input class="hp-inp" type="number" min="0" step="1" data-id="${id}" data-estrutura="${papel}">
+          <span class="hp-row-unit">un</span>
+        </div>
+      </div>`).join('');
 }
 
 // Renderiza o formulário inline para adicionar nova parede
@@ -954,6 +1224,7 @@ function renderizarPainel(painelRef) {
         <div class="hp-body">
           ${gruposHTML}
           ${estado._restaurado ? '' : '<button class="hp-btn-add-grupo" id="hp-btn-add-porta">+ outro tamanho</button>'}
+          ${_camposEstruturaHTML('portas', estado)}
         </div>
       `;
       if (estado._restaurado) {
@@ -973,7 +1244,7 @@ function renderizarPainel(painelRef) {
         </div>
         <div class="hp-body">
           <div class="hp-field-row">
-            <span class="hp-row-lbl">M²</span>
+            <span class="hp-row-lbl">Área total</span>
             <div class="hp-row-val">
               <input class="hp-inp" type="number" min="0" step="0.01" value="${estado.A || ''}" data-id="${id}" data-key="A">
               <span class="hp-row-unit">m²</span>
@@ -987,12 +1258,22 @@ function renderizarPainel(painelRef) {
               <button class="hp-btn-montante${montanteAtual === '90' ? ' ativo' : ''}" data-id="${id}" data-montante="90">90</button>
             </div>
           </div>
+          ${_camposEstruturaHTML(id, estado)}
           <div class="hp-field-row">
             <span class="hp-row-lbl" title="Margem extra em %" style="cursor:help;text-decoration:underline dotted">Margem</span>
             <div class="hp-row-val">
               <input class="hp-inp" type="number" min="0" step="1" value="${margemParede}" data-id="${id}" data-key="margem" placeholder="0">
               <span class="hp-row-unit">%</span>
             </div>
+          </div>
+          <div class="hp-vaos" title="Portas, janelas e outras aberturas. Só diminui o material; o resumido continua cobrando a área total.">
+            <span class="hp-vaos-tit">Descontar vãos (portas/janelas)</span>
+            <div class="hp-row-val">
+              <span class="hp-vaos-sinal">−</span>
+              <input class="hp-inp" type="number" min="0" step="0.01" value="${estado.areaVaos || ''}" data-id="${id}" data-key="areaVaos" placeholder="0">
+              <span class="hp-row-unit">m²</span>
+            </div>
+            <div class="hp-vaos-nota" data-area-liquida="${id}"></div>
           </div>
         </div>
       `;
@@ -1081,6 +1362,21 @@ function renderizarPainel(painelRef) {
 
   // ── Bind de eventos ────────────────────────────────────────────────
   _bindPainelEventos(lista);
+  _atualizarCamposEstrutura(painel);
+  _atualizarAreaLiquida(painel);
+}
+
+// Texto embaixo do campo de vãos: sobre qual área o material é calculado.
+function _atualizarAreaLiquida(raiz = document.getElementById('hiper-painel-kits')) {
+  raiz?.querySelectorAll('[data-area-liquida]').forEach(el => {
+    const estado = kitsAtivos.get(el.dataset.areaLiquida);
+    if (!estado) return;
+    const fmt = v => v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    const html = num(estado.areaVaos) > 0
+      ? `Material calculado sobre <b>${fmt(_areaLiquida(estado))} m²</b>.<br>O resumido cobra os ${fmt(num(estado.A))} m² totais.`
+      : 'Só reduz o material. O resumido cobra a área total.';
+    if (el.innerHTML !== html) el.innerHTML = html;
+  });
 }
 
 // ── DEBOUNCE ───────────────────────────────────────────────────────────
@@ -1095,6 +1391,7 @@ function _debounceRecalcular() {
 function _bindPainelEventos(lista) {
   // Inputs numéricos
   lista.querySelectorAll('input.hp-inp').forEach(el => {
+    if (el.dataset.estrutura) return;   // montantes/guias: handler próprio abaixo
     el.addEventListener('input', function () {
       const id  = this.dataset.id;
       const key = this.dataset.key;
@@ -1117,6 +1414,7 @@ function _bindPainelEventos(lista) {
         if (!estado) return;
         estado[key] = num(this.value);
         _debounceRecalcular();
+        if (key === 'A' || key === 'areaVaos') _atualizarAreaLiquida();
       }
     });
   });
@@ -1152,29 +1450,22 @@ function _bindPainelEventos(lista) {
     });
   }
 
-  // Toggle de montante/guia (48 / 70 / 90)
-  const TODOS_MONTANTES = new Set(Object.values(COD_MONTANTE));
-  const TODOS_GUIAS     = new Set(Object.values(COD_GUIA));
+  // Quantidade de montante/guia da parede/porta
+  lista.querySelectorAll('input[data-estrutura]').forEach(el => {
+    el.addEventListener('input', function () {
+      _definirQtdEstrutura(this.dataset.id, this.dataset.estrutura, this.value);
+    });
+  });
 
+  // Toggle de montante/guia (48 / 70 / 90)
   lista.querySelectorAll('.hp-btn-montante').forEach(btn => {
     btn.addEventListener('click', async function() {
       const id      = this.dataset.id;
       const novoTam = this.dataset.montante;
       const estado  = kitsAtivos.get(id);
       if (!estado || estado.montante === novoTam) return;
-
-      const linhaM = estado.linhas.find(l => TODOS_MONTANTES.has(l.codigo));
-      const linhaG = estado.linhas.find(l => TODOS_GUIAS.has(l.codigo));
-
-      // Montante/guia só recebem hint (BLACKLIST_SETAR) — a quantidade é a que
-      // o usuário digitou, e _trocarProduto a mantém na troca de tamanho.
-      await Promise.all([{ linha: linhaM, mapa: COD_MONTANTE }, { linha: linhaG, mapa: COD_GUIA }].map(async ({ linha, mapa }) => {
-        if (!linha) return;
-        const novoCod = mapa[novoTam];
-        if (await _trocarProduto(linha.linhaId, novoCod)) linha.codigo = novoCod;
-      }));
-
-      estado.montante = novoTam;
+      await _trocarTamanhoEstrutura(id, novoTam);
+      recalcularTudo();
       renderizarPainel();
     });
   });
