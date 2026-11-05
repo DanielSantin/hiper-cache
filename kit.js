@@ -431,6 +431,27 @@ function num(s) {
   return isNaN(v) ? 0 : v;
 }
 
+// Campos do painel: aceitam conta ("2*2,5*5"), vírgula ou ponto.
+function numExpr(s) {
+  const v = avaliarExpressaoBR(s);
+  return isNaN(v) ? 0 : v;
+}
+
+// Número → texto do campo, com vírgula (0.6 → "0,6").
+function _fmtInp(v) {
+  if (typeof v !== 'number') return v ?? '';
+  return (Math.round(v * 10000) / 10000).toLocaleString('pt-BR', { maximumFractionDigits: 4, useGrouping: false });
+}
+
+// Se o campo tem uma conta, troca pelo resultado (o valor já foi usado no
+// 'input'; isto só limpa o que aparece).
+function _resolverContaNoCampo(el) {
+  if (!temOperadorBR(el.value)) return;
+  const v = avaliarExpressaoBR(el.value);
+  if (isNaN(v)) return;
+  el.value = _fmtInp(el.dataset.estrutura ? Math.max(0, v) : v);
+}
+
 function resolverNivel(codigoBase, qtdBruta) {
   const nomeGrupo = CODIGO_PARA_GRUPO[codigoBase];
   if (!nomeGrupo) return null;
@@ -593,7 +614,7 @@ function _definirQtdEstrutura(id, papel, texto) {
   const linha  = estado?.linhas.find(l => _papelEstrutura(l.codigo) === papel);
   if (!linha || !_linhaExiste(linha.linhaId)) return;
 
-  const v = String(texto).trim() === '' ? undefined : Math.max(0, num(texto));
+  const v = String(texto).trim() === '' ? undefined : Math.max(0, numExpr(texto));
   const eraDesconhecido = _qtdKit(estado, papel) === null;
   let resto = _restoDaLinha(linha.linhaId, papel);
   if (eraDesconhecido) resto -= (v ?? 0);   // a parte dele sai do resto dos "—"
@@ -1109,7 +1130,7 @@ function _camposEstruturaHTML(id, estado) {
       <div class="hp-field-row">
         <span class="hp-row-lbl">${papel === 'montante' ? 'Montantes' : 'Guias'}</span>
         <div class="hp-row-val">
-          <input class="hp-inp" type="number" min="0" step="1" data-id="${id}" data-estrutura="${papel}">
+          <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" data-id="${id}" data-estrutura="${papel}">
           <span class="hp-row-unit">un</span>
         </div>
       </div>`).join('');
@@ -1189,20 +1210,20 @@ function renderizarPainel(painelRef) {
           <div class="hp-field-row">
             <span class="hp-row-lbl">Qtd</span>
             <div class="hp-row-val">
-              <input class="hp-inp" type="number" min="1" step="1" value="${grupo.qtd}" data-id="portas" data-gid="${grupo.id}" data-key="qtd">
+              <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" value="${_fmtInp(grupo.qtd)}" data-id="portas" data-gid="${grupo.id}" data-key="qtd">
             </div>
           </div>
           <div class="hp-field-row">
             <span class="hp-row-lbl">Larg (m)</span>
             <div class="hp-row-val">
-              <input class="hp-inp" type="number" min="0.01" step="0.01" value="${grupo.larg}" data-id="portas" data-gid="${grupo.id}" data-key="larg">
+              <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" value="${_fmtInp(grupo.larg)}" data-id="portas" data-gid="${grupo.id}" data-key="larg">
               <span class="hp-row-unit">m</span>
             </div>
           </div>
           <div class="hp-field-row">
             <span class="hp-row-lbl">Alt (m)</span>
             <div class="hp-row-val">
-              <input class="hp-inp" type="number" min="0.01" step="0.01" value="${grupo.alt}" data-id="portas" data-gid="${grupo.id}" data-key="alt">
+              <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" value="${_fmtInp(grupo.alt)}" data-id="portas" data-gid="${grupo.id}" data-key="alt">
               <span class="hp-row-unit">m</span>
             </div>
           </div>
@@ -1247,7 +1268,7 @@ function renderizarPainel(painelRef) {
           <div class="hp-field-row">
             <span class="hp-row-lbl">Área total</span>
             <div class="hp-row-val">
-              <input class="hp-inp" type="number" min="0" step="0.01" value="${estado.A || ''}" data-id="${id}" data-key="A">
+              <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" value="${_fmtInp(estado.A || '')}" data-id="${id}" data-key="A" placeholder="ex: 2*3">
               <span class="hp-row-unit">m²</span>
             </div>
           </div>
@@ -1263,7 +1284,7 @@ function renderizarPainel(painelRef) {
           <div class="hp-field-row">
             <span class="hp-row-lbl" title="Margem extra em %" style="cursor:help;text-decoration:underline dotted">Margem</span>
             <div class="hp-row-val">
-              <input class="hp-inp" type="number" min="0" step="1" value="${margemParede}" data-id="${id}" data-key="margem" placeholder="0">
+              <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" value="${margemParede}" data-id="${id}" data-key="margem" placeholder="0">
               <span class="hp-row-unit">%</span>
             </div>
           </div>
@@ -1271,7 +1292,7 @@ function renderizarPainel(painelRef) {
             <span class="hp-vaos-tit">Descontar vãos (portas/janelas)</span>
             <div class="hp-row-val">
               <span class="hp-vaos-sinal">−</span>
-              <input class="hp-inp" type="number" min="0" step="0.01" value="${estado.areaVaos || ''}" data-id="${id}" data-key="areaVaos" placeholder="0">
+              <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" value="${_fmtInp(estado.areaVaos || '')}" data-id="${id}" data-key="areaVaos" placeholder="ex: 0,8*2,1">
               <span class="hp-row-unit">m²</span>
             </div>
             <div class="hp-vaos-nota" data-area-liquida="${id}"></div>
@@ -1308,7 +1329,7 @@ function renderizarPainel(painelRef) {
         return `<div class="hp-field-row">
           <span class="hp-row-lbl"${f.title ? ` title="${f.title}" style="cursor:help;text-decoration:underline dotted"` : ''}>${lbl}</span>
           <div class="hp-row-val">
-            <input class="hp-inp" type="number" min="0" step="0.01" value="${val}" data-id="${id}" data-key="${f.key}"${f.title ? ` title="${f.title}"` : ''}>
+            <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" value="${_fmtInp(val)}" data-id="${id}" data-key="${f.key}" placeholder="ex: 2*3"${f.title ? ` title="${f.title}"` : ''}>
             ${unit ? `<span class="hp-row-unit">${unit}</span>` : ''}
             ${tabicaInline}
           </div>
@@ -1325,7 +1346,7 @@ function renderizarPainel(painelRef) {
           <div class="hp-field-row">
             <span class="hp-row-lbl" title="Margem extra em % (ex: 5 = +5%)" style="cursor:help;text-decoration:underline dotted">Margem</span>
             <div class="hp-row-val">
-              <input class="hp-inp" type="number" min="0" step="1" value="${margemKit}" data-id="${id}" data-key="margem" placeholder="0">
+              <input class="hp-inp" type="text" autocomplete="off" spellcheck="false" value="${margemKit}" data-id="${id}" data-key="margem" placeholder="0">
               <span class="hp-row-unit">%</span>
             </div>
           </div>
@@ -1390,6 +1411,14 @@ function _debounceRecalcular() {
 }
 
 function _bindPainelEventos(lista) {
+  // Conta digitada ("2*2,5*5") vira o resultado ao sair do campo ou no Enter
+  lista.querySelectorAll('input.hp-inp').forEach(el => {
+    el.addEventListener('blur', function () { _resolverContaNoCampo(this); });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') _resolverContaNoCampo(this);
+    });
+  });
+
   // Inputs numéricos
   lista.querySelectorAll('input.hp-inp').forEach(el => {
     if (el.dataset.estrutura) return;   // montantes/guias: handler próprio abaixo
@@ -1403,7 +1432,7 @@ function _bindPainelEventos(lista) {
         if (!estado) return;
         const grupo = estado.grupos.find(g => String(g.id) === String(gid));
         if (!grupo) return;
-        grupo[key] = num(this.value) || (key === 'larg' ? 0.70 : key === 'alt' ? 2.10 : 1);
+        grupo[key] = numExpr(this.value) || (key === 'larg' ? 0.70 : key === 'alt' ? 2.10 : 1);
         _debounceRecalcular();
         const span = lista.querySelector(`[data-m2-gid="${gid}"]`);
         if (span) {
@@ -1413,7 +1442,7 @@ function _bindPainelEventos(lista) {
       } else if (id) {
         const estado = kitsAtivos.get(id);
         if (!estado) return;
-        estado[key] = num(this.value);
+        estado[key] = numExpr(this.value);
         _debounceRecalcular();
         if (key === 'A' || key === 'areaVaos') _atualizarAreaLiquida();
       }

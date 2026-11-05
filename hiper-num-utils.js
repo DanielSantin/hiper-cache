@@ -20,3 +20,45 @@ function parseNumeroBR(str) {
   if (dots === 1 && commas === 0) return parseFloat(s);
   return parseFloat(s.replace(/\./g, '').replace(',', '.'));
 }
+
+// Conta digitada num campo (ex.: "2*2,5*5" → 25). Aceita + − * / e "x"/"×"
+// como vezes, com precedência normal (vezes/dividir antes de mais/menos).
+// Cada número aceita vírgula ou ponto (via parseNumeroBR). Operador sobrando
+// no fim ("2*") é ignorado, pra conta parcial já dar valor enquanto digita.
+// Sem operador → igual a parseNumeroBR. Retorna NaN se não der pra entender.
+function avaliarExpressaoBR(str) {
+  const s = String(str ?? '')
+    .replace(/[x×X]/g, '*').replace(/÷/g, '/').replace(/−/g, '-')
+    .replace(/[^\d,.+\-*/]/g, '');
+  if (!/[+*/]|.-/.test(s)) return parseNumeroBR(s);
+
+  const toks = s.match(/[\d.,]+|[+\-*/]/g) || [];
+  while (toks.length && /^[+\-*/]$/.test(toks[toks.length - 1])) toks.pop();
+  if (!toks.length) return NaN;
+
+  let soma = 0, termo = null, sinal = 1, op = null;
+  for (const t of toks) {
+    if (/^[\d.,]+$/.test(t)) {
+      const n = parseNumeroBR(t);
+      if (isNaN(n)) return NaN;
+      if (termo === null) termo = n;
+      else if (op === '*') termo *= n;
+      else if (op === '/') termo = n === 0 ? NaN : termo / n;
+      else return NaN;
+      op = null;
+    } else if (t === '*' || t === '/') {
+      if (termo === null || op) return NaN;
+      op = t;
+    } else {
+      if (op) return NaN;
+      if (termo !== null) { soma += sinal * termo; termo = null; sinal = 1; }
+      if (t === '-') sinal = -sinal;
+    }
+  }
+  if (termo === null || isNaN(termo)) return NaN;
+  return soma + sinal * termo;
+}
+
+function temOperadorBR(str) {
+  return /\d\s*[x×X*/+\-−÷]\s*\d/.test(String(str ?? ''));
+}
