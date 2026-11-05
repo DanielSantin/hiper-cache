@@ -22,8 +22,8 @@ descartar, não afeta nada no fluxo atual).
    ```powershell
    ./scripts/build-zip.ps1
    ```
-   Gera `hiper-cache-vX.Y.zip` na raiz do projeto (sem `scripts/`, sem a chave privada
-   que já fica fora da pasta da extensão).
+   Gera `dist/hiper-cache-vX.Y.zip` (pasta no `.gitignore`), sem `scripts/` e sem a chave privada
+   (que já fica fora da pasta da extensão).
 3. Em https://chrome.google.com/webstore/devconsole, abra o item, "Package" →
    "Upload new package" → selecione o zip → "Submit for review".
 4. Tempo de revisão: itens com `host_permissions` amplo + dados pessoais (nosso caso)

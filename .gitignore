@@ -3,4 +3,5 @@ keys/
 *.crx
 *.pem
 /referencias
+/dist
 
