@@ -22,6 +22,7 @@ const vm     = require('node:vm');
 
 const RAIZ     = path.join(__dirname, '..');
 const SNAPSHOT = path.join(__dirname, 'kit.snapshot.json');
+const cenarios = require('./kit.cenarios.js');
 
 function carregarKit() {
   const noop = () => {};
@@ -106,65 +107,82 @@ function rodarCenario(kit, kits) {
   return saida;
 }
 
-// ── Cenários ───────────────────────────────────────────────────────────
-// Medidas pequenas e grandes para passar pelos tiers de embalagem
-// (parafuso avulso/caixa, massa 6/14/25 kg, fita 45/90 m, bucha, balde...).
-function cenarios() {
-  const c = {};
-  const forro = { A: 0, P: 0, altPend: 0.6 };
-  for (const [A, P] of [[12, 14], [85.5, 40], [400, 120]]) {
-    c[`aramado A${A} P${P}`]     = [{ nomeKit: 'aramado',     medidas: { ...forro, A, P } }];
-    c[`estruturado A${A} P${P}`] = [{ nomeKit: 'estruturado', medidas: { ...forro, A, P } }];
-  }
-  c['estruturado altPend 1,2 margem 10'] = [{ nomeKit: 'estruturado', medidas: { A: 50, P: 30, altPend: '1,2', margem: 10 } }];
-  c['estruturado texto BR "1.234,5"']    = [{ nomeKit: 'estruturado', medidas: { A: '1.234,5', P: '140', altPend: 0.6 } }];
-  for (const ML of [6, 35, 210]) {
-    c[`cortineiro ML${ML}`]    = [{ nomeKit: 'cortineiro',    medidas: { A: ML, cant: 3.15 } }];
-    c[`reforcoTrilho ML${ML}`] = [{ nomeKit: 'reforcoTrilho', medidas: { A: ML } }];
-  }
-  c['cortineiro cant 4'] = [{ nomeKit: 'cortineiro', medidas: { A: 20, cant: 4 } }];
+// Documento de kits gerado das tabelas embutidas (o mesmo que semeou o banco).
+function docPadrao() {
+  const { execFileSync } = require('node:child_process');
+  return JSON.parse(execFileSync(process.execPath, [path.join(RAIZ, 'scripts', 'exportar-kits.js')], { encoding: 'utf8' }));
+}
 
-  c['portas 1x padrão'] = [{ tipo: 'portas', grupos: [{ qtd: 1, larg: 0.7, alt: 2.1 }] }];
-  c['portas 3 grupos']  = [{ tipo: 'portas', grupos: [
-    { qtd: 4, larg: 0.8, alt: 2.1 }, { qtd: 2, larg: '0,6', alt: '2,1' }, { qtd: 1, larg: 0, alt: 0 }] }];
+function rodarTodos(kit) {
+  const atual = {};
+  for (const [nome, kits] of Object.entries(cenarios())) atual[nome] = rodarCenario(kit, kits);
+  return atual;
+}
 
-  const faces = ['ST', 'RU', 'CIM'];
-  for (const estrutura of ['simples', 'dupla']) {
-    for (const a of faces) {
-      c[`parede 1F ${a} ${estrutura}`] = [{ tipo: 'parede', A: 30, cfg: { faces: 1, faceA: a, faceB: a, estrutura } }];
-      for (const b of faces) {
-        c[`parede ${a}/${b} ${estrutura}`] = [{ tipo: 'parede', A: 42, cfg: { faces: 2, faceA: a, faceB: b, estrutura } }];
-      }
+test('kit.js com o documento do banco: mesmo snapshot das tabelas embutidas', () => {
+  const kit = carregarKit();
+  kit.__hiperKits.aplicarDoc(docPadrao(), { rev: 1, hash: 'x' });
+  assert.strictEqual(kit.__hiperKits.config.origem, 'banco');
+  const esperado = JSON.parse(fs.readFileSync(SNAPSHOT, 'utf8'));
+  const atual = rodarTodos(kit);
+  for (const nome of Object.keys(esperado)) {
+    assert.deepStrictEqual(atual[nome], esperado[nome], `cenário "${nome}" (documento)`);
+  }
+});
+
+test('documento: cada fórmula antiga (e equivalentes) dá o mesmo número, bit a bit', () => {
+  const velho = carregarKit();
+  const novo  = carregarKit();
+  novo.__hiperKits.aplicarDoc(docPadrao());
+  const amostras = [];
+  let s = 7;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 200; i++) amostras.push([rnd() * 500, rnd() * 200, rnd() * 6, rnd() * 2]);
+
+  for (const [kitNome, mapa] of Object.entries(velho.FORMULAS_GESSO)) {
+    for (const [cod, fn] of Object.entries(mapa)) {
+      const fnNovo = novo.FORMULAS_GESSO[kitNome][cod];
+      assert.ok(fnNovo, `${kitNome}/${cod} sumiu`);
+      for (const a of amostras) assert.strictEqual(fnNovo(...a), fn(...a), `${kitNome}/${cod} em ${a}`);
     }
   }
-  c['parede ST/ST grande (tiers)'] = [{ tipo: 'parede', A: 520, cfg: { faces: 2, faceA: 'ST', faceB: 'ST', estrutura: 'simples' } }];
-  c['parede CIM/CIM grande (tiers)'] = [{ tipo: 'parede', A: 260, cfg: { faces: 2, faceA: 'CIM', faceB: 'CIM', estrutura: 'simples' } }];
-  c['parede ST/RU com vãos e margem'] = [{ tipo: 'parede', A: 60, areaVaos: 7.5, margem: 5, cfg: { faces: 2, faceA: 'ST', faceB: 'RU', estrutura: 'simples' } }];
-  for (const m of ['48', '90']) {
-    c[`parede ST/ST montante ${m}`] = [{ tipo: 'parede', A: 42, montante: m, cfg: { faces: 2, faceA: 'ST', faceB: 'ST', estrutura: 'dupla' } }];
-  }
+  for (const estrutura of ['simples', 'dupla']) for (const faces of [1, 2])
+    for (const faceA of ['ST', 'RU', 'CIM']) for (const faceB of ['ST', 'RU', 'CIM']) {
+      const cfg = { faces, faceA, faceB, estrutura };
+      const fv = velho.paredeGerarFormulas(cfg), fnv = novo.paredeGerarFormulas(cfg);
+      for (const [cod, fn] of Object.entries(fv)) {
+        assert.ok(fnv[cod], `parede ${JSON.stringify(cfg)} ${cod} sumiu`);
+        for (const a of amostras) assert.strictEqual(fnv[cod](a[0]), fn(a[0]), `parede ${cod}`);
+      }
+      assert.deepStrictEqual([...novo.paredeCodigosAtivos(cfg)], [...velho.paredeCodigosAtivos(cfg)]);
+      assert.strictEqual(novo.paredeMoBase(cfg), velho.paredeMoBase(cfg));
+    }
+});
 
-  // Vários kits no mesmo pedido: linhas compartilhadas somam e o rateio divide.
-  c['combo forro + parede + portas'] = [
-    { id: 'estruturado_1', nomeKit: 'estruturado', medidas: { A: 60, P: 32, altPend: 0.6 } },
-    { id: 'parede_1', tipo: 'parede', A: 45, cfg: { faces: 2, faceA: 'ST', faceB: 'ST', estrutura: 'simples' } },
-    { id: 'portas', tipo: 'portas', grupos: [{ qtd: 2, larg: 0.7, alt: 2.1 }] },
-  ];
-  c['combo duas sancas'] = [
-    { id: 'cortineiro_1', nomeKit: 'cortineiro', medidas: { A: 10, cant: 3.15 } },
-    { id: 'cortineiro_2', nomeKit: 'cortineiro', medidas: { A: 30, cant: 3.15 } },
-  ];
-  c['kit sem medida (rateio igual)'] = [
-    { id: 'aramado_1', nomeKit: 'aramado', medidas: { A: 0, P: 0, altPend: 0.6 } },
-    { id: 'aramado_2', nomeKit: 'aramado', medidas: { A: 0, P: 0, altPend: 0.6 } },
-  ];
-  return c;
-}
+test('documento inválido não troca nada (fica a versão anterior)', () => {
+  const kit = carregarKit();
+  const doc = docPadrao();
+  doc.kits.aramado.itens[0].formula = 'A / (1,2';
+  assert.throws(() => kit.__hiperKits.aplicarDoc(doc), /aramado.*93974519/);
+  assert.strictEqual(kit.__hiperKits.config.origem, 'embutida');
+  assert.strictEqual(kit.FORMULAS_GESSO.aramado['93974519'](12, 0, 0, 0), 10);
+});
+
+test('compilarFormulaKit: vírgula decimal, funções com ";", erros', () => {
+  const kit = carregarKit();
+  const c = (f, v = {}) => kit.compilarFormulaKit(f, Object.keys(v))(v);
+  assert.strictEqual(c('A * 0,45', { A: 10 }), 10 * 0.45);
+  assert.strictEqual(c('ceil(1 + ml / 0.6) * h / 3', { ml: 2, h: 3 }), Math.ceil(1 + 2 / 0.6) * 3 / 3);
+  assert.strictEqual(c('max(A; 2) - -1', { A: 1 }), 3);
+  assert.strictEqual(c('(A / 2.88) * 35 + (P / 3) * 11', { A: 7, P: 9 }), (7 / 2.88) * 35 + (9 / 3) * 11);
+  for (const ruim of ['', 'A +', 'B * 2', 'alert(1)', 'A; 2', '2 ** 3', 'A.b', 'min(1)']) {
+    assert.throws(() => c(ruim, { A: 1 }), (e) => typeof e.message === "string" && e.message.length > 0, ruim);
+  }
+});
 
 test('kit.js: fórmulas, tiers, arredondamento e rateio iguais ao snapshot', () => {
   const kit = carregarKit();
-  const atual = {};
-  for (const [nome, kits] of Object.entries(cenarios())) atual[nome] = rodarCenario(kit, kits);
+  const atual = rodarTodos(kit);
 
   if (process.env.ATUALIZAR || !fs.existsSync(SNAPSHOT)) {
     fs.writeFileSync(SNAPSHOT, JSON.stringify(atual, null, 1) + '\n');

@@ -172,6 +172,23 @@ package codes Hiper sells it in, keyed by a quantity threshold (e.g. avulso up t
 box-of-1000 SKU past that). Given a wall/ceiling area or an item count, it picks the right SKU tier
 automatically instead of the user doing that math by hand.
 
+**Since 1.24 the source of the kits is the database, not these tables.** The tables in `kit.js` are
+the fallback. On load, `_carregarKits()` applies the last document saved in localStorage
+(`hiperCache:kits:v1`), then fetches `GET https://api.sistema.santin.tec.br/kits?hash=<current>`
+(direct `fetch` from the page world, as `hiper-orcamento.js` does; CORS allows the Hiper origin) and
+applies a newer one. `_aplicarDocKits(doc)` builds every table from the document first and only then
+replaces the existing objects **in place** (same consts, so the rest of the file is untouched); any
+error keeps what was there. A formula applies to its product and to the product's equivalents
+(other package tier, montante/guia size, tabica color), which reproduces the old repeated entries.
+Formulas are compiled by `compilarFormulaKit` (`hiper-num-utils.js`, no `eval`). The same algorithm
+lives in `hiper-database/core/kits.py` — change both together. Kits are edited at
+`sistema.santin.tec.br/kits`; a formula change reaches the counter on the next Hiper reload, with
+no Web Store review. A new kit created in the editor works if it is "measures → quantities"
+(any extra input fields are stored in `kit.medidas`); kits with their own panel logic (portas
+groups, wall faces) still need code. `scripts/exportar-kits.js` generated the seed document from
+these tables (`hiper-database/assets/kits_padrao.json`); the tests check that applying it gives the
+exact same snapshot.
+
 Every formula table in this file (`GRUPOS_VARIACAO`, `KITS_GESSO`, `FORMULAS_GESSO`, all `PAREDE_*`
 constants) is keyed by the real `idProduto` — migrated 2026-07-31 from the legacy 4-digit product
 code (cod4). The ~190 cod4 literals across this file were mechanically substituted for their

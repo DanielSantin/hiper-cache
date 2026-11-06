@@ -300,23 +300,21 @@ function paredeLabelCfg(cfg) {
 // Modificadores:
 //   Estrutura dupla: +R$25 sobre o valor base de 2 faces
 //
+// Valores em PAREDE_MO (vem do documento de kits; estes são a reserva).
+const PAREDE_MO = { uma_face: { ST: 20, RU: 20, CIM: 35 }, duas_faces: [25, 35, 40], dupla: 25 };
+
 function paredeMoBase(cfg) {
   const { faceA, faceB, faces, estrutura } = cfg;
 
   // 1 face: CIM = R$35, demais (ST, RU) = R$20
-  if (faces === 1) return faceA === 'CIM' ? 35 : 20;
+  if (faces === 1) return PAREDE_MO.uma_face[faceA] ?? PAREDE_MO.uma_face.ST;
 
-  const facesAtivas = [faceA, faceB];
-  const qtdCim = facesAtivas.filter(f => f === 'CIM').length;
-
-  // Valor base para estrutura simples 2 faces
-  let base;
-  if      (qtdCim === 2) base = 40; // CIM/CIM
-  else if (qtdCim === 1) base = 35; // ST/CIM ou RU/CIM
-  else                   base = 25; // ST/ST ou RU/RU
+  // 2 faces, estrutura simples: pelo nº de faces cimentícias (0, 1 ou 2)
+  const qtdCim = [faceA, faceB].filter(f => f === 'CIM').length;
+  let base = PAREDE_MO.duas_faces[qtdCim];
 
   // Estrutura dupla adiciona R$25
-  if (estrutura === 'dupla') base += 25;
+  if (estrutura === 'dupla') base += PAREDE_MO.dupla;
 
   return base;
 }
@@ -397,6 +395,175 @@ const KIT_LABELS = {
 
 // MO base referência: R$100/m² de fechamento de porta
 const PORTAS_MO_POR_M2 = 100;
+
+// Valor inicial de um campo do card quando o kit é criado.
+const _PADRAO_ENTRADA = { altPend: 0.6, cant: 3.15 };
+
+// ── 6. KITS VINDOS DO BANCO ────────────────────────────────────────────
+// As tabelas acima são a RESERVA. A fonte é o documento de kits do banco
+// (GET /kits, editado em sistema.santin.tec.br/kits): ao carregar, aplica o
+// último documento guardado no localStorage e pede a versão atual à API.
+// _aplicarDocKits monta todas as tabelas novas ANTES de mexer nas atuais;
+// qualquer erro (fórmula inválida, campo faltando) mantém o que já estava.
+// As tabelas são substituídas no lugar (mesmos objetos), então o resto do
+// arquivo não muda: recalcularTudo, painel, rateio leem as mesmas consts.
+//
+// Fórmulas valem para o produto do item E para os equivalentes dele (outra
+// embalagem do mesmo grupo, montante/guia de outro tamanho, outra cor de
+// tabica) — é o que as tabelas antigas faziam repetindo a linha.
+const KITS_CACHE_CHAVE = 'hiperCache:kits:v1';
+const KITS_API = 'https://api.sistema.santin.tec.br/kits';
+const KITS_CONFIG = { rev: null, hash: null, origem: 'embutida' };
+
+function _montarTabelasKits(doc) {
+  if (!doc || doc.versao !== 1) throw new Error('documento de kits sem versao 1');
+  const str = (v, onde) => { if (typeof v !== 'string' || !v) throw new Error(`produto inválido em ${onde}`); return v; };
+
+  const grupos = {};
+  for (const [g, niveis] of Object.entries(doc.embalagens || {})) {
+    if (!Array.isArray(niveis) || !niveis.length) throw new Error(`embalagem ${g} vazia`);
+    grupos[g] = niveis.map(n => ({
+      codigo: str(n.produto, `embalagem ${g}`), tamanho: Number(n.tamanho),
+      limite: n.limite == null ? Infinity : Number(n.limite),
+    }));
+  }
+  const codigoParaGrupo = {};
+  for (const [g, niveis] of Object.entries(grupos)) niveis.forEach(n => { codigoParaGrupo[n.codigo] = g; });
+
+  const montante = { ...doc.estrutura?.montante }, guia = { ...doc.estrutura?.guia }, tabica = { ...doc.tabica };
+  const familias = [
+    ...Object.values(grupos).map(niveis => niveis.map(n => n.codigo)),
+    Object.values(montante), Object.values(guia), Object.values(tabica),
+  ];
+  const equivalentes = (c) => familias.find(f => f.includes(c)) ?? [c];
+
+  const arredondar = {};
+  for (const [c, passo] of Object.entries(doc.arredondar || {})) {
+    const p = Number(passo);
+    if (!(p > 0)) throw new Error(`arredondamento inválido para ${c}`);
+    arredondar[c] = (v) => Math.ceil(v / p) * p;
+  }
+
+  // Lista de itens → { produto: fn } com os equivalentes. `embrulhar` recebe a
+  // fórmula compilada e devolve a função na assinatura que o resto usa.
+  const mapear = (itens, vars, embrulhar, onde) => {
+    const mapa = {};
+    const fns = (itens || []).map(it => {
+      const cod = str(it.produto, onde);
+      try { return [cod, embrulhar(compilarFormulaKit(it.formula, vars))]; }
+      catch (e) { throw new Error(`${onde}, produto ${cod}: ${e.message}`); }
+    });
+    fns.forEach(([cod, fn]) => { mapa[cod] = fn; });
+    fns.forEach(([cod, fn]) => equivalentes(cod).forEach(e => { if (!(e in mapa)) mapa[e] = fn; }));
+    return mapa;
+  };
+
+  const kits = {}, formulas = {}, entradas = {}, rotulos = {};
+  for (const [nome, k] of Object.entries(doc.kits || {})) {
+    const ent = (k.entradas || []).map(e => ({
+      key: String(e.chave), label: String(e.rotulo ?? e.chave),
+      ...(e.dica ? { title: String(e.dica) } : {}), padrao: Number(e.padrao ?? 0),
+    }));
+    const extras = ent.map(e => e.key).filter(c => !['A', 'P', 'cant', 'altPend'].includes(c));
+    const vars = ['A', 'P', 'cant', 'altPend', ...extras];
+    const padroes = Object.fromEntries(ent.map(e => [e.key, e.padrao]));
+    kits[nome] = (k.itens || []).map(it => str(it.produto, `kit ${nome}`));
+    if (!kits[nome].length) throw new Error(`kit ${nome} sem itens`);
+    formulas[nome] = mapear(k.itens, vars, f => (A, P, cant, altPend, estado) => {
+      const v = { A, P, cant, altPend };
+      extras.forEach(c => { v[c] = num(estado?.[c] ?? padroes[c]); });
+      return f(v);
+    }, `kit ${nome}`);
+    if (ent.length) entradas[nome] = ent;
+    rotulos[nome] = String(k.rotulo || nome);
+  }
+
+  const p = doc.parede || {};
+  const faces = {};
+  for (const tipo of ['ST', 'RU', 'CIM']) {
+    const itens = p.faces?.[tipo]?.itens || [];
+    faces[tipo] = {
+      inserir: itens.map(it => str(it.produto, `parede ${tipo}`)),
+      formulas: mapear(itens, ['A'], f => (A) => f({ A }), `parede face ${tipo}`),
+    };
+  }
+  const estrutura = mapear(p.estrutura?.itens, ['A', 'fe'], f => (A, fe) => f({ A, fe }), 'estrutura da parede');
+  const mo = p.mo || {};
+  if (!mo.uma_face || !Array.isArray(mo.duas_faces) || mo.duas_faces.length !== 3) throw new Error('parede.mo incompleto');
+
+  return {
+    grupos, codigoParaGrupo, montante, guia, tabica, familias, arredondar,
+    soSugestao: (doc.so_sugestao || []).map(String), kits, formulas, entradas, rotulos,
+    faces, estrutura, estruturaInserir: (p.estrutura?.itens || []).map(it => it.produto),
+    ordem: (p.ordem || []).map(String),
+    mo: { uma_face: { ...mo.uma_face }, duas_faces: mo.duas_faces.map(Number), dupla: Number(mo.dupla || 0) },
+  };
+}
+
+function _repor(obj, novo) { Object.keys(obj).forEach(k => delete obj[k]); Object.assign(obj, novo); }
+function _reporLista(arr, nova) { arr.length = 0; arr.push(...nova); }
+function _reporSet(set, nova) { set.clear(); nova.forEach(v => set.add(v)); }
+
+function _aplicarDocKits(doc, meta = {}) {
+  const t = _montarTabelasKits(doc);   // lança antes de tocar em qualquer tabela
+  _repor(GRUPOS_VARIACAO, t.grupos);
+  _repor(CODIGO_PARA_GRUPO, t.codigoParaGrupo);
+  _repor(COD_MONTANTE, t.montante);
+  _repor(COD_GUIA, t.guia);
+  _repor(COD_TABICA, t.tabica);
+  _reporSet(TODOS_MONTANTES, Object.values(t.montante));
+  _reporSet(TODOS_GUIAS, Object.values(t.guia));
+  _reporLista(FAMILIAS_TROCAVEIS, t.familias);
+  _repor(ARREDONDAMENTO_CODIGOS, t.arredondar);
+  _reporSet(BLACKLIST_SETAR, t.soSugestao);
+  _repor(KITS_GESSO, t.kits);
+  _repor(FORMULAS_GESSO, t.formulas);
+  _repor(KIT_INPUTS, t.entradas);
+  _repor(KIT_LABELS, t.rotulos);
+  _reporLista(PAREDE_COD_INSERIR_ST, t.faces.ST.inserir);
+  _reporLista(PAREDE_COD_INSERIR_RU, t.faces.RU.inserir);
+  _reporLista(PAREDE_COD_INSERIR_CIM, t.faces.CIM.inserir);
+  _reporLista(PAREDE_COD_CHAPA_ST, Object.keys(t.faces.ST.formulas));
+  _reporLista(PAREDE_COD_CHAPA_RU, Object.keys(t.faces.RU.formulas));
+  _reporLista(PAREDE_COD_CHAPA_CIM, Object.keys(t.faces.CIM.formulas));
+  _repor(PAREDE_FORMULAS_FACE_ST, t.faces.ST.formulas);
+  _repor(PAREDE_FORMULAS_FACE_RU, t.faces.RU.formulas);
+  _repor(PAREDE_FORMULAS_FACE_CIM, t.faces.CIM.formulas);
+  _repor(PAREDE_FORMULAS_ESTRUTURA, t.estrutura);
+  _reporLista(PAREDE_COD_ESTRUTURA, t.estruturaInserir);
+  _reporLista(PAREDE_ORDEM_PRODUTOS, t.ordem);
+  _repor(PAREDE_MO, t.mo);
+  Object.assign(KITS_CONFIG, { rev: meta.rev ?? null, hash: meta.hash ?? null, origem: meta.origem ?? 'banco' });
+  window.__hiperKitsDoc = doc;   // o resumido/orçamento podem ler daqui
+}
+
+// O kit usa tabica (botões B/N no card) se algum item dele for uma tabica.
+function _kitTemTabica(nomeKit) {
+  const tabicas = Object.values(COD_TABICA);
+  return (KITS_GESSO[nomeKit] || []).some(c => tabicas.includes(c));
+}
+
+(function _carregarKits() {
+  try {
+    const salvo = JSON.parse(localStorage.getItem(KITS_CACHE_CHAVE) || 'null');
+    if (salvo?.doc) _aplicarDocKits(salvo.doc, { ...salvo, origem: 'cache' });
+  } catch (e) {
+    console.warn('[HiperKit] Kits guardados inválidos — usando os embutidos.', e.message);
+  }
+  if (typeof fetch !== 'function') return;
+  fetch(`${KITS_API}?hash=${encodeURIComponent(KITS_CONFIG.hash || '')}`, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(r => {
+      if (!r || r.igual || !r.doc) return;
+      _aplicarDocKits(r.doc, { rev: r.rev, hash: r.hash, origem: 'banco' });
+      try { localStorage.setItem(KITS_CACHE_CHAVE, JSON.stringify({ rev: r.rev, hash: r.hash, doc: r.doc })); } catch (_) {}
+      console.info(`[HiperKit] Kits do banco aplicados (rev ${r.rev}).`);
+      // Só redesenha (rótulos/botões). Não recalcula: kits recuperados têm
+      // quantidades congeladas; a fórmula nova vale na próxima edição.
+      if (document.getElementById('hiper-painel-kits')) renderizarPainel();
+    })
+    .catch(e => console.warn('[HiperKit] Não deu pra buscar os kits do banco:', e.message || e));
+})();
 
 // ── ESTADO ─────────────────────────────────────────────────────────────
 // kitsAtivos: Map<id, estado>
@@ -861,7 +1028,7 @@ function calcularDemanda() {
       if (!_linhaExiste(linhaId)) return;
 
       const fn       = formulas[codigo];
-      const qtdBruta = fn ? fn(A, P, cant, altPend) * fatorMargem : 0;
+      const qtdBruta = fn ? fn(A, P, cant, altPend, estado) * fatorMargem : 0;
 
       // Chave = linha da store: dois kits que compartilham a mesma linha
       // (mesmo código base resolvido para o mesmo produto) acumulam na
@@ -974,11 +1141,15 @@ async function aplicarKitGesso(nomeKit) {
   const linhasDoKit = await _abrirLinhas(codigos, _linhasAbertas());
   if (!linhasDoKit) return;
 
+  // Campos além de A/P começam no padrão do campo (altPend 0,6, cant 3,15...).
+  const padroes = {};
+  (KIT_INPUTS[nomeKit] || []).forEach(f => {
+    if (f.key !== 'A' && f.key !== 'P') padroes[f.key] = f.padrao ?? _PADRAO_ENTRADA[f.key] ?? 0;
+  });
   const estadoInicial = nomeKit === 'portas'
     ? { tipo: 'portas', nomeKit, A: 0, grupos: [{ id: Date.now(), qtd: 1, larg: 0.70, alt: 2.10 }], linhas: linhasDoKit }
-    : { tipo: 'kit', nomeKit, A: 0, P: 0,
-        ...(nomeKit === 'cortineiro'  ? { cant: 3.15 } : {}),
-        ...((nomeKit === 'aramado' || nomeKit === 'estruturado') ? { altPend: 0.6, tabica: 'branca' } : {}),
+    : { tipo: 'kit', nomeKit, A: 0, P: 0, ...padroes,
+        ...(_kitTemTabica(nomeKit) ? { tabica: 'branca' } : {}),
         linhas: linhasDoKit };
 
   kitsAtivos.set(id, estadoInicial);
@@ -1312,7 +1483,7 @@ function renderizarPainel(painelRef) {
       const item = document.createElement('div');
       item.className = 'hp-item' + (ehMemoria ? ' memoria' : '');
 
-      const temTabica   = tipoKit === 'aramado' || tipoKit === 'estruturado';
+      const temTabica   = _kitTemTabica(tipoKit);
       const tabicaAtual = estado.tabica || 'branca';
       const margemKit   = estado.margem != null ? estado.margem : '';
 
@@ -1320,7 +1491,8 @@ function renderizarPainel(painelRef) {
       const splitLU = lbl => { const m = lbl.match(/^(.+?)\s*\(([^)]+)\)$/); return m ? [m[1].trim(), m[2]] : [lbl, '']; };
 
       const campoRows = campos.map(f => {
-        const val = estado[f.key] !== undefined ? estado[f.key] : (f.key === 'altPend' ? 0.6 : f.key === 'cant' ? 3.15 : '');
+        const padrao = f.padrao ?? _PADRAO_ENTRADA[f.key];
+        const val = estado[f.key] !== undefined ? estado[f.key] : (padrao ? padrao : '');
         const [lbl, unit] = splitLU(f.label);
         const tabicaInline = (temTabica && f.key === 'P') ? `
           <button class="hp-btn-tabica${tabicaAtual === 'branca'  ? ' ativo' : ''}" data-id="${id}" data-tabica="branca">B</button>
@@ -1514,7 +1686,7 @@ function _bindPainelEventos(lista) {
         const formulas = FORMULAS_GESSO[estado.nomeKit] || {};
         const fn       = formulas[novoCod];
         const fator    = 1 + (num(estado.margem) / 100);
-        const qtdBruta = fn ? fn(num(estado.A), num(estado.P), 3.15, num(estado.altPend || 0.6)) * fator : 0;
+        const qtdBruta = fn ? fn(num(estado.A), num(estado.P), 3.15, num(estado.altPend || 0.6), estado) * fator : 0;
         const qtdFinal = Math.round(qtdBruta * 100) / 100;
         await trocarProdutoNaLinha(linhaTabica.linhaId, novoCod, qtdFinal, qtdBruta);
         linhaTabica.codigo = novoCod;
@@ -1694,6 +1866,8 @@ window.paredeCodigosAtivos  = paredeCodigosAtivos;
 window.paredeLabelCfg      = paredeLabelCfg;
 window.paredeMoBase        = paredeMoBase;
 window.KITS_GESSO          = KITS_GESSO;
+window.KIT_INPUTS          = KIT_INPUTS;
+window.__hiperKits         = { aplicarDoc: _aplicarDocKits, config: KITS_CONFIG };
 window.CODIGO_PARA_GRUPO   = CODIGO_PARA_GRUPO;
 window.COD_MONTANTE        = COD_MONTANTE;
 window.COD_GUIA            = COD_GUIA;

@@ -105,6 +105,12 @@
         };
         // cant é exclusivo do cortineiro (sanca) — não serializar nos demais
         if (nomeKit === 'cortineiro') entry.cant = estado.cant ?? 3.15;
+        // Campos de kits criados no editor (/kits) além de A/P/cant/altPend.
+        const extras = (window.KIT_INPUTS?.[nomeKit] || [])
+          .map(f => f.key).filter(k => !['A', 'P', 'cant', 'altPend'].includes(k));
+        if (extras.length) {
+          entry.medidas = Object.fromEntries(extras.map(k => [k, Number(parseNumeroBR(estado[k] ?? 0)) || 0]));
+        }
         resultado.push(entry);
       }
     });
@@ -395,6 +401,7 @@
         };
         // cant é exclusivo do cortineiro (sanca)
         if (kit.nomeKit === 'cortineiro') estadoKit.cant = kit.cant ?? 3.15;
+        if (kit.medidas && typeof kit.medidas === 'object') Object.assign(estadoKit, kit.medidas);
         kitsAtivos.set(kit.id, estadoKit);
       }
     }
