@@ -183,17 +183,15 @@
   function _estoqueNosso(guid) {
     const memo = _estoques.get(guid);
     if (memo && Date.now() - memo.ts < ESTOQUE_TTL) return memo.p;
-    const ctrl = new AbortController();
-    const timer = _setTimeoutOriginal(() => ctrl.abort(), ESTOQUE_TIMEOUT);
-    const p = fetch(`${API_NOSSA}/produtos/dados/${encodeURIComponent(guid)}`, { signal: ctrl.signal })
+    // Pelo interceptor (hiper-api.js, leva a chave); o timeout é dele.
+    const p = window.__hiperApi(`/produtos/dados/${encodeURIComponent(guid)}`, { timeout: ESTOQUE_TIMEOUT })
       .then(r => (r.ok ? r.json() : null))
       .then(j => {
         const q = j?.dados?.[0]?.quantidadeEmEstoqueDisponivel;
         if (typeof q !== 'number') { _estoques.delete(guid); return null; }
         return q;
       })
-      .catch(() => { _estoques.delete(guid); return null; })
-      .finally(() => clearTimeout(timer));
+      .catch(() => { _estoques.delete(guid); return null; });
     _estoques.set(guid, { ts: Date.now(), p });
     return p;
   }

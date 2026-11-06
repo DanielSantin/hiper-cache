@@ -11,15 +11,6 @@ if (typeof chrome === 'undefined' || !chrome.storage?.local) {
   throw new Error('chrome.storage indisponível');
 }
 
-async function updateCount() {
-  const all = await chrome.storage.local.get(null);
-  const ignorar = new Set(['hiper_ativo', 'otim_select', 'otim_preco', 'hiper_orc_letra']);
-  const cacheKeys = Object.keys(all).filter(k => !k.startsWith('custo:') && !ignorar.has(k));
-  const custoKeys = Object.keys(all).filter(k => k.startsWith('custo:'));
-  document.getElementById('count').textContent = cacheKeys.length;
-  document.getElementById('custoCount').textContent = custoKeys.length;
-}
-
 // ── Toggle ────────────────────────────────────────────────────────────────────
 const toggleAtivo  = document.getElementById('toggleAtivo');
 const toggleSlider = document.getElementById('toggleSlider');
@@ -90,13 +81,49 @@ orcLetraInput.addEventListener('change', () => {
 
 // ── Botões ────────────────────────────────────────────────────────────────────
 document.getElementById('clearBtn').addEventListener('click', async () => {
-  // Preserva as configs (toggles + letra) ao limpar o cache
+  // Preserva as configs (toggles, letra) e a CHAVE ao limpar o cache: a partir
+  // do estágio 2 a extensão não traz mais a chave, então perder aqui seria
+  // ter que digitar de novo.
   const preserve = await chrome.storage.local.get(
-    ['hiper_ativo', 'otim_select', 'otim_preco', 'hiper_orc_letra']);
+    ['hiper_ativo', 'otim_select', 'otim_preco', 'hiper_orc_letra', 'hiper_api_key', 'vendedor']);
   await chrome.storage.local.clear();
   await chrome.storage.local.set(preserve);
   feedback('✓ Cache limpo!');
-  updateCount();
 });
 
-updateCount();
+// ── Chave de acesso da API ────────────────────────────────────────────────────
+// Guardada em chrome.storage.local (hiper_api_key); o interceptor manda em toda
+// chamada e entrega ao site. Ver background.js e hiper-database/core/chave.py.
+const chaveInp    = document.getElementById('chaveApi');
+const chaveStatus = document.getElementById('chaveStatus');
+
+chrome.storage.local.get('hiper_api_key', (r) => {
+  chaveInp.value = r.hiper_api_key || '';
+  chaveStatus.textContent = r.hiper_api_key ? 'guardada' : 'nenhuma';
+});
+
+document.getElementById('chaveVer').addEventListener('click', () => {
+  chaveInp.type = chaveInp.type === 'password' ? 'text' : 'password';
+});
+
+document.getElementById('chaveSalvar').addEventListener('click', async () => {
+  const v = chaveInp.value.trim();
+  if (v) await chrome.storage.local.set({ hiper_api_key: v });
+  else await chrome.storage.local.remove('hiper_api_key');
+  chaveStatus.textContent = v ? 'guardada' : 'nenhuma';
+  feedback(v ? '✅ Chave salva — recarregue a página' : 'Chave apagada');
+});
+
+document.getElementById('chaveTestar').addEventListener('click', async () => {
+  chaveStatus.textContent = 'testando…';
+  try {
+    const r = await fetch('https://api.sistema.santin.tec.br/chave/verificar', {
+      headers: { 'X-Chave': chaveInp.value.trim(), 'X-Hiper-Ext': chrome.runtime.getManifest().version },
+      cache: 'no-store',
+    });
+    const j = await r.json();
+    chaveStatus.textContent = j.valida ? '✅ válida' : '❌ inválida';
+  } catch (e) {
+    chaveStatus.textContent = 'sem conexão';
+  }
+});

@@ -68,8 +68,8 @@
   }
 
   async function _consultarCpf(cpf) {
-    const url = `${API_BASE}/${encodeURIComponent(cpf)}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    // Pelo interceptor (hiper-api.js): leva a chave de acesso.
+    const resp = await window.__hiperApi(`/consulta-pessoa/${encodeURIComponent(cpf)}`, { timeout: 8000 });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return resp.json();
   }

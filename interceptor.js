@@ -1,4 +1,4 @@
-﻿// Content script — ponte entre os módulos de página e chrome.storage
+// Content script — ponte entre os módulos de página e chrome.storage
 // Roda no contexto privilegiado da extensão (tem acesso ao chrome.*)
 
 async function safeStorage(fn) {
@@ -8,9 +8,51 @@ async function safeStorage(fn) {
   }
 }
 
+// ── Chave de acesso da API ────────────────────────────────────────────────────
+// Fica no chrome.storage.local (`hiper_api_key`; posta pelo background.js na
+// instalação ou digitada no popup) e vai em TODA chamada à nossa API, mais a
+// versão da extensão (a API conta quem já manda a chave — GET /chave/uso).
+// Os módulos da página nunca veem a chave: chamam a API por este content
+// script (HIPER_API_REQ, abaixo).
+const API_NOSSA = 'https://api.sistema.santin.tec.br';
+const VERSAO_EXT = chrome.runtime.getManifest().version;
+let _chaveApi = '';
+chrome.storage.local.get('hiper_api_key', (r) => { _chaveApi = r.hiper_api_key || ''; });
+chrome.storage.onChanged.addListener((mud, area) => {
+  if (area === 'local' && mud.hiper_api_key) _chaveApi = mud.hiper_api_key.newValue || '';
+});
+
+async function _lerChave() {
+  if (_chaveApi) return _chaveApi;
+  try { _chaveApi = (await chrome.storage.local.get('hiper_api_key')).hiper_api_key || ''; } catch (_) {}
+  return _chaveApi;
+}
+
+async function apiFetch(url, init = {}) {
+  const headers = new Headers(init.headers || {});
+  const chave = await _lerChave();
+  if (chave) headers.set('X-Chave', chave);
+  headers.set('X-Hiper-Ext', VERSAO_EXT);
+  return fetch(url, { ...init, headers });
+}
+
+// Caminhos que os módulos da página podem chamar com a chave (método + regex).
+// Só o que a extensão usa: um script qualquer da página do Hiper não consegue
+// usar a chave para apagar ou zerar nada.
+const API_PERMITIDOS = [
+  ['GET',  /^\/kits(\?.*)?$/],
+  ['GET',  /^\/produtos\/dados\/[\w-]+$/],
+  ['GET',  /^\/consulta-pessoa\/\d{11}$/],
+  ['GET',  /^\/pedido\/[\w-]+$/],
+  ['POST', /^\/pedido$/],
+  ['POST', /^\/pedido\/proximo-numero(\?letra=[A-Za-z]{1,3})?$/],
+  ['POST', /^\/pedido\/[\w-]+\/(faturar|vincular)$/],
+];
+
 // ── Carrega os módulos da página em sequência ─────────────────────────────────
 const MODULES = [
   { src: 'hiper-num-utils.js' },
+  { src: 'hiper-api.js' },
   { src: 'hiper-pedido-store.js' },
   { src: 'hiper-cache.js' },
   { src: 'hiper-sync.js' },
@@ -118,13 +160,13 @@ window.addEventListener('message', async (event) => {
         // Botão "Atualizar": força o servidor a puxar do Hiper (/produtos/sync)
         // ANTES de responder — por isso é mais lento.
         if (force) {
-          const syncRes = await fetch(`${API}/produtos/sync`, {
+          const syncRes = await apiFetch(`${API}/produtos/sync`, {
             method: 'POST', cache: 'no-store', signal: AbortSignal.timeout(80000),
           });
           if (!syncRes.ok) throw new Error(`sync status ${syncRes.status}`);
         }
 
-        const metaRes = await fetch(`${API}/custos/metadata`, {
+        const metaRes = await apiFetch(`${API}/custos/metadata`, {
           cache: 'no-store',
           signal: AbortSignal.timeout(8000),
         });
@@ -141,7 +183,7 @@ window.addEventListener('message', async (event) => {
 
         // Custos: baixa quando mudou (ou no force).
         if (force || forceUpdate || hashRemoto !== hashLocal) {
-          const dataRes = await fetch(`${API}/custos/data`, {
+          const dataRes = await apiFetch(`${API}/custos/data`, {
             cache: 'no-store', signal: AbortSignal.timeout(15000),
           });
           if (!dataRes.ok) throw new Error(`data status ${dataRes.status}`);
@@ -153,7 +195,7 @@ window.addEventListener('message', async (event) => {
 
         // Nomes/lista de produtos: baixa quando o produtos_hash mudou (ou no force).
         if (force || produtosRemoto !== produtosHashLocal) {
-          const mRes = await fetch(`${API}/produtos/master`, {
+          const mRes = await apiFetch(`${API}/produtos/master`, {
             cache: 'no-store', signal: AbortSignal.timeout(15000),
           });
           if (mRes.ok) result.produtos = (await mRes.json()).produtos || [];
@@ -170,7 +212,7 @@ window.addEventListener('message', async (event) => {
   if (msg.type === 'HIPER_DADOS_PRODUTO_LOAD') {
     (async () => {
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           'https://api.sistema.santin.tec.br/produtos/dados/' + encodeURIComponent(msg.produtoId),
           { cache: 'no-store', signal: AbortSignal.timeout(8000) }
         );
@@ -188,7 +230,7 @@ window.addEventListener('message', async (event) => {
   if (msg.type === 'HIPER_MASTER_LOAD') {
     (async () => {
       try {
-        const res = await fetch('https://api.sistema.santin.tec.br/produtos/master', {
+        const res = await apiFetch('https://api.sistema.santin.tec.br/produtos/master', {
           cache: 'no-store',
           signal: AbortSignal.timeout(15000),
         });
@@ -204,7 +246,7 @@ window.addEventListener('message', async (event) => {
 
   if (msg.type === 'HIPER_EVENTO_SEND') {
     try {
-      const res = await fetch(`https://api.sistema.santin.tec.br/hiper-evento`, {
+      const res = await apiFetch(`https://api.sistema.santin.tec.br/hiper-evento`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(msg.payload),
@@ -225,7 +267,7 @@ window.addEventListener('message', async (event) => {
 
   if (msg.type === 'HIPER_MOV_GET') {
     try {
-      const res  = await fetch(`https://api.sistema.santin.tec.br/pedido-venda/${msg.pedidoId}`);
+      const res  = await apiFetch(`https://api.sistema.santin.tec.br/pedido-venda/${msg.pedidoId}`);
       const data = res.ok ? await res.json() : null;
       window.postMessage({ type: 'HIPER_MOV_GET_RESULT', seq: msg.seq, ok: res.ok, data }, '*');
     } catch (e) {
@@ -238,7 +280,7 @@ window.addEventListener('message', async (event) => {
     // de NF-e (lê a nota no Hiper, com check periódico) está desligado. Com o
     // sync ligado, hiper-sync.js só manda o aviso /hiper-nfe-mudou.
     try {
-      const res = await fetch(`https://api.sistema.santin.tec.br/entrada-estoque`, {
+      const res = await apiFetch(`https://api.sistema.santin.tec.br/entrada-estoque`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(msg.payload),
@@ -253,9 +295,34 @@ window.addEventListener('message', async (event) => {
     }
   }
 
+  // ── Chamada à nossa API pedida por um módulo da página (hiper-api.js) ────
+  if (msg.type === 'HIPER_API_REQ') {
+    const metodo = String(msg.method || 'GET').toUpperCase();
+    const caminho = String(msg.path || '');
+    const responder = (r) => window.postMessage({ type: 'HIPER_API_RES', seq: msg.seq, ...r }, '*');
+    if (!API_PERMITIDOS.some(([m, re]) => m === metodo && re.test(caminho))) {
+      console.warn('[Interceptor] Chamada não permitida:', metodo, caminho);
+      responder({ ok: false, status: 0, texto: '', erro: 'caminho não permitido' });
+      return;
+    }
+    try {
+      const res = await apiFetch(API_NOSSA + caminho, {
+        method: metodo,
+        cache: 'no-store',
+        headers: msg.body != null ? { 'Content-Type': 'application/json' } : {},
+        body: msg.body ?? undefined,
+        signal: AbortSignal.timeout(Math.min(Number(msg.timeout) || 15000, 60000)),
+      });
+      responder({ ok: res.ok, status: res.status, texto: await res.text() });
+    } catch (e) {
+      responder({ ok: false, status: 0, texto: '', erro: e.name === 'TimeoutError' ? 'timeout' : (e.message || String(e)) });
+    }
+    return;
+  }
+
   if (msg.type === 'HIPER_MOV_PATCH') {
     try {
-      const res  = await fetch(`https://api.sistema.santin.tec.br/pedido-venda/${msg.pedidoId}/movimento`, { method: 'PATCH' });
+      const res  = await apiFetch(`https://api.sistema.santin.tec.br/pedido-venda/${msg.pedidoId}/movimento`, { method: 'PATCH' });
       const data = await res.json();
       window.postMessage({ type: 'HIPER_MOV_PATCH_RESULT', seq: msg.seq, ok: res.ok, data }, '*');
     } catch (e) {

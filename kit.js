@@ -553,8 +553,8 @@ function _kitTemTabica(nomeKit) {
   } catch (e) {
     console.warn('[HiperKit] Kits guardados inválidos — usando os embutidos.', e.message);
   }
-  if (typeof fetch !== 'function') return;
-  fetch(`${KITS_API}?hash=${encodeURIComponent(KITS_CONFIG.hash || '')}`, { cache: 'no-store' })
+  if (typeof window.__hiperApi !== 'function') return;   // hiper-api.js (leva a chave)
+  window.__hiperApi(`/kits?hash=${encodeURIComponent(KITS_CONFIG.hash || '')}`)
     .then(r => (r.ok ? r.json() : null))
     .then(r => {
       if (!r || r.igual || !r.doc) return;

@@ -5,3 +5,6 @@ keys/
 /referencias
 /dist
 
+
+# Chave de acesso da API: entra no zip da Web Store, NUNCA no git (repo público).
+chave-inicial.json

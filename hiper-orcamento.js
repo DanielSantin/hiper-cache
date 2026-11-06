@@ -30,15 +30,14 @@ const URL_ORCAMENTO_SITE = 'https://sistema.santin.tec.br/v2/orcamento';
   });
 })();
 
-// ── Geração do número de orçamento — requisição direta ao backend ────────────
-// O CORS do backend já libera https://tagdrywall.hiper.com.br diretamente
-// (main.py), e a atomicidade do contador é garantida no servidor (BEGIN
-// IMMEDIATE em sync_meta.orc_seq).
+// ── Geração do número de orçamento ───────────────────────────────────────────
+// Pelo interceptor (hiper-api.js, leva a chave de acesso). A atomicidade do
+// contador é garantida no servidor (BEGIN IMMEDIATE em sync_meta.orc_seq).
 async function gerarNumeroOrcamentoAsync() {
   const letra = window.__hiperOrcLetra || 'T';
   let res;
   try {
-    res = await fetch(`https://api.sistema.santin.tec.br/pedido/proximo-numero?letra=${encodeURIComponent(letra)}`, { method: 'POST' });
+    res = await window.__hiperApi(`/pedido/proximo-numero?letra=${encodeURIComponent(letra)}`, { method: 'POST' });
   } catch {
     throw new Error('Não foi possível gerar o número de orçamento. Verifique sua conexão e tente novamente.');
   }

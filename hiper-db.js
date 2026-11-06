@@ -32,7 +32,13 @@
 
   const _nativeFetch = window.__nativeFetch || window.fetch.bind(window);
 
-  function fetchComTimeout(url, opts) {
+  // Chamadas à nossa API passam pelo interceptor (hiper-api.js), que põe a
+  // chave de acesso. O fetch direto fica só de reserva (hiper-api.js ausente).
+  function fetchComTimeout(url, opts = {}) {
+    if (window.__hiperApi && url.startsWith(API_BASE)) {
+      return window.__hiperApi(url.slice(API_BASE.length),
+        { method: opts.method || 'GET', body: opts.body ?? null, timeout: TIMEOUT_MS });
+    }
     const ctrl  = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     return _nativeFetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));

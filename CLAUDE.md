@@ -103,6 +103,18 @@ Kit rateio: `calcularDemanda()` in `kit.js` is the per-line, per-kit raw-quantit
 looked formulas up by the 4-digit code, which never matches the idProduto-keyed tables, so it
 split everything 50/50.)
 
+### API key: `chrome.storage` → `interceptor.js` → API, never the page
+
+Every call to our API carries `X-Chave` (+ `X-Hiper-Ext` = version): `interceptor.js` reads
+`hiper_api_key` from `chrome.storage.local` and its `apiFetch()` adds both. Page modules must NOT
+`fetch` the API directly: they call `window.__hiperApi(path, {method, body, timeout})` (`hiper-api.js`,
+loaded second), which posts `HIPER_API_REQ` to the interceptor; the interceptor only forwards paths
+matching `API_PERMITIDOS` (method + regex), so a random Hiper-page script can't use the key to delete
+anything. A new API call from a page module = add its path there. Exception: `hiper-sync.js` notices
+(`keepalive`, open on the API). `background.js` seeds the key from the git-ignored
+`chave-inicial.json` (the repo is public); `site-chave.js` (content script on sistema.santin.tec.br)
+copies it to the site's `localStorage.hiper_chave`. Stages and release steps: `RELEASE.md`.
+
 ### `hiper-ui.js` — single mount point for injected widgets
 
 Other modules never insert their widgets into the pedido-venda DOM directly; they call

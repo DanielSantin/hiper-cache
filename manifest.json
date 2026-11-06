@@ -14,7 +14,6 @@
   ],
   "host_permissions": [
     "https://tagdrywall.hiper.com.br/*",
-    "https://api.hiper.com.br/*",
     "https://api.sistema.santin.tec.br/*"
   ],
   "background": {
@@ -30,12 +29,22 @@
       ],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "https://sistema.santin.tec.br/*"
+      ],
+      "js": [
+        "site-chave.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
         "hiper-num-utils.js",
+        "hiper-api.js",
         "hiper-pedido-store.js",
         "hiper-sync.js",
         "hiper-cache.js",

@@ -120,6 +120,18 @@
       border-color: #38bdf8;
     }
 
+    .chave-row { display: flex; gap: 6px; align-items: center; }
+    .chave-inp {
+      flex: 1; min-width: 0; padding: 5px 8px; background: #0f1117; border: 1px solid #2d3148;
+      border-radius: 5px; color: #e2e8f0; font-size: 13px; font-family: monospace;
+    }
+    .chave-inp:focus { outline: none; border-color: #38bdf8; }
+    .chave-btn {
+      padding: 4px 10px; background: #1e2235; border: 1px solid #2d3148; border-radius: 5px;
+      color: #cbd5e1; font-size: 12px; cursor: pointer;
+    }
+    .chave-btn:hover { border-color: #38bdf8; }
+
     /* Toggle */
     .toggle-wrap {
       display: flex;
@@ -186,15 +198,16 @@
   </div>
 
   <div class="card">
-    <div class="label">Entradas em cache</div>
-    <div class="value" id="count">—</div>
-    <div class="sub">TTL: 1 hora por entrada</div>
-  </div>
-
-  <div class="card">
-    <div class="label">Custos salvos</div>
-    <div class="value-sm" id="custoCount">—</div>
-    <div class="sub">Persistem entre sessões</div>
+    <div class="label">Chave de acesso</div>
+    <div class="chave-row">
+      <input id="chaveApi" class="chave-inp" type="password" autocomplete="off" spellcheck="false" placeholder="sem chave">
+      <button id="chaveVer" class="chave-btn" title="Mostrar / esconder">👁</button>
+    </div>
+    <div class="chave-row" style="margin-top:6px">
+      <button id="chaveSalvar" class="chave-btn">Salvar</button>
+      <button id="chaveTestar" class="chave-btn">Testar</button>
+      <span class="sub" id="chaveStatus"></span>
+    </div>
   </div>
 
   <div class="card">

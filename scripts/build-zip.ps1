@@ -27,4 +27,11 @@ $itens = Get-ChildItem -Path $root -Force | Where-Object { $excluir -notcontains
 Compress-Archive -Path $itens.FullName -DestinationPath $saida -CompressionLevel Optimal
 
 Write-Host "OK: $saida"
+# chave-inicial.json (fora do git): estágio 1 da proteção da API vai COM ela;
+# a partir do estágio 2, apague o arquivo antes de gerar o zip.
+if (Test-Path (Join-Path $root "chave-inicial.json")) {
+  Write-Host "ATENCAO: o zip leva chave-inicial.json (a chave da API vai para todos os PCs)." -ForegroundColor Yellow
+} else {
+  Write-Host "Sem chave-inicial.json: o zip nao distribui a chave." -ForegroundColor Green
+}
 Write-Host "Suba esse arquivo em https://chrome.google.com/webstore/devconsole"

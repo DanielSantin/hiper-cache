@@ -32,6 +32,22 @@ descartar, não afeta nada no fluxo atual).
    atualiza os clientes sozinho depois que a nova versão fica pública (checagem
    periódica nativa, igual qualquer extensão da Web Store).
 
+## Chave de acesso da API (3 estágios)
+
+A API aceita a chave em `X-Chave` (hiper-database/core/chave.py, `API_PROTECAO` no .env da VM). A
+extensão guarda a chave em `chrome.storage.local` (`hiper_api_key`), manda em toda chamada e entrega
+ao site; o popup tem o campo "Chave de acesso" (salvar/testar).
+
+- **Estágio 1 (1.24, 06/11/2026):** o zip leva `chave-inicial.json` (`{"chave": "..."}`), que **não
+  está no git** (repositório público). O `background.js` copia para o storage na instalação/atualização
+  se o PC ainda não tem chave. API em `desligada`: nada bloqueado, só conta (`GET /chave/uso`).
+- **Estágio 2:** quando `/chave/uso` não mostrar mais `sem` vindo de `tagdrywall.hiper.com.br`,
+  apagar `chave-inicial.json`, subir uma versão nova (o `build-zip.ps1` avisa se o arquivo ainda está
+  lá) e mudar a API para `escrita`.
+- **Estágio 3:** API em `total` — o site pede a chave a quem não tem a extensão.
+
+"Limpar cache" no popup preserva a chave.
+
 ## Primeiro upload (setup único)
 
 1. Crie uma conta de desenvolvedor em https://chrome.google.com/webstore/devconsole
