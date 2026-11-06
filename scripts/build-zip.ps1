@@ -15,7 +15,7 @@ $version = $manifestJson.version
 
 # referencias/ tem fetches capturados com token Bearer — nunca vai no pacote.
 # dist/ e onde os zips ficam (no .gitignore); fora do pacote, senao cada zip levaria os anteriores.
-$excluir = @('scripts', 'RELEASE.md', 'CLAUDE.md', 'referencias', '.gitignore', '.git', 'dist')
+$excluir = @('scripts', 'tests', 'RELEASE.md', 'CLAUDE.md', 'referencias', '.gitignore', '.git', 'dist')
 $dist    = Join-Path $root "dist"
 New-Item -ItemType Directory -Force $dist | Out-Null
 $saida   = Join-Path $dist "hiper-cache-v$version.zip"

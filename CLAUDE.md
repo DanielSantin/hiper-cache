@@ -12,8 +12,12 @@ users, not just dev machines) — see `RELEASE.md` before touching anything depl
 
 ## Running / developing
 
-No build step, no bundler, no test suite (`npm`/`node_modules` don't exist here — this is plain
-`<script>`-tag JS). To iterate:
+No build step, no bundler (`npm`/`node_modules` don't exist here — this is plain
+`<script>`-tag JS). One test, no dependencies: `node --test` runs `tests/kit.caracterizacao.test.js`,
+which loads the real `kit.js` in a `vm` sandbox and compares 49 kit/wall scenarios (final product
+tier, rounded qty, raw qty, rateio) against `tests/kit.snapshot.json`. Run it after touching any
+formula, tier or rounding; re-record with `ATUALIZAR=1 node --test` only when the change is
+intended, and review the snapshot diff. `tests/` is excluded from the Web Store zip. To iterate:
 
 1. `chrome://extensions` → enable Developer mode → "Load unpacked" → select this folder.
 2. After any change, click the reload icon on the extension card, then reload the Hiper tab.
