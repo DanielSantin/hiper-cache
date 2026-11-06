@@ -428,7 +428,10 @@ function _montarTabelasKits(doc) {
     }));
   }
   const codigoParaGrupo = {};
-  for (const [g, niveis] of Object.entries(grupos)) niveis.forEach(n => { codigoParaGrupo[n.codigo] = g; });
+  for (const [g, niveis] of Object.entries(grupos)) niveis.forEach(n => {
+    if (codigoParaGrupo[n.codigo]) throw new Error(`produto ${n.codigo} em dois grupos de embalagem`);
+    codigoParaGrupo[n.codigo] = g;
+  });
 
   const montante = { ...doc.estrutura?.montante }, guia = { ...doc.estrutura?.guia }, tabica = { ...doc.tabica };
   const familias = [
