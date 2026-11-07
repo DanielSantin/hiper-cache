@@ -126,10 +126,12 @@
       border-radius: 5px; color: #e2e8f0; font-size: 13px; font-family: monospace;
     }
     .chave-inp:focus { outline: none; border-color: #38bdf8; }
+    /* width:auto — o `button` geral do popup tem width:100% (botão Limpar cache) */
     .chave-btn {
-      padding: 4px 10px; background: #1e2235; border: 1px solid #2d3148; border-radius: 5px;
-      color: #cbd5e1; font-size: 12px; cursor: pointer;
+      width: auto; flex: none; padding: 5px 10px; background: #1e2235; border: 1px solid #2d3148;
+      border-radius: 5px; color: #cbd5e1; font-size: 12px; cursor: pointer;
     }
+    #chaveStatus { white-space: nowrap; margin-left: auto; }
     .chave-btn:hover { border-color: #38bdf8; }
 
     /* Toggle */
