@@ -105,7 +105,7 @@
     // ── 2. Master (carregado do servidor) ─────────────────────────────────────
     // Antes: ~50 fetches paralelos ao GetSelect2ParaPedido do Hiper — travava e
     // podia perder produto novo com nome fora dos termos de busca.
-    // Agora: 1 fetch ao /produtos/master da dbApi (montado server-side via
+    // Agora: 1 fetch ao /produtos/master do hiper-database (montado server-side via
     // hiper_client, fonte = bff completo). O fetch cross-origin passa pelo
     // interceptor (contexto privilegiado, sem restrição de CSP).
     function carregarMasterDoServidor() {

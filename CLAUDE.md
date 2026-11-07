@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Chrome Extension (Manifest V3, vanilla JS, no bundler/framework) that augments the Hiper ERP's own
 web app (`tagdrywall.hiper.com.br`) for a construction-materials store: quote/orçamento generation,
 inventory sync, profit-margin widgets, kit formulas, CPF autofill. Talks to the FastAPI backend in
-`../dbApi` (`api.sistema.santin.tec.br`). Distributed as an **unlisted** Chrome Web Store item (real
+`../hiper-database` (`api.sistema.santin.tec.br`). Distributed as an **unlisted** Chrome Web Store item (real
 users, not just dev machines) — see `RELEASE.md` before touching anything deploy-related.
 
 ## Running / developing
